@@ -244,6 +244,7 @@ local Window = Fluent:CreateWindow({
 local Tabs = {
 	Author = Window:AddTab({Title = "Author", Icon = ""}),
     Main = Window:AddTab({ Title = "Main", Icon = "" }),
+	ESP = Window:AddTab({ Title = "ESP", Icon = "" }),
     Misc = Window:AddTab({ Title = "Misc", Icon = "" }),
 }
 local Options = Fluent.Options
