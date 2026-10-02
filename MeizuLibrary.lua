@@ -1,17 +1,17 @@
 --[[
     ╔══════════════════════════════════════════════╗
-       AURORA UI LIBRARY — v2.0
+       MEIZU UI LIBRARY — v2.1
        Hiện đại · Mượt mà · Dễ dùng (chuẩn Fluent)
     ╚══════════════════════════════════════════════╝
-    Hiệu ứng: splash, pop-open, morph window <-> orb 50x50,
-    ripple, stagger tab, indicator trượt, drag snap-back,
-    dropdown expand, notification slide, prompt scale...
+    Fix v2.1: cửa sổ không mở lúc load (state minimized sai),
+    fallback CanvasGroup, tự unlock animation kẹt.
+    Orb thu gọn 50x50 (UDim2.new(0,50,0,50)) góc trái dưới.
 ]]
 
-local Aurora = {}
-Aurora.Version      = "2.0"
-Aurora.Flags        = {}
-Aurora.CurrentTheme = "Aurora"
+local Meizu = {}
+Meizu.Version      = "2.1"
+Meizu.Flags        = {}
+Meizu.CurrentTheme = "Meizu"
 
 -- // Services
 local RunService       = game:GetService("RunService")
@@ -24,13 +24,13 @@ local LocalPlayer      = game:GetService("Players").LocalPlayer
 
 -- // Themes ------------------------------------------------------
 local Themes = {
-    Aurora   = {Background=Color3.fromRGB(11,12,17),  Sidebar=Color3.fromRGB(15,17,23),  Card=Color3.fromRGB(20,23,31),  Element=Color3.fromRGB(27,31,41),  Stroke=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(235,238,245), Secondary=Color3.fromRGB(140,146,165), Accent=Color3.fromRGB(124,92,255),  Accent2=Color3.fromRGB(62,199,255)},
+    Meizu    = {Background=Color3.fromRGB(11,12,17),  Sidebar=Color3.fromRGB(15,17,23),  Card=Color3.fromRGB(20,23,31),  Element=Color3.fromRGB(27,31,41),  Stroke=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(235,238,245), Secondary=Color3.fromRGB(140,146,165), Accent=Color3.fromRGB(124,92,255),  Accent2=Color3.fromRGB(62,199,255)},
     Midnight = {Background=Color3.fromRGB(8,12,20),   Sidebar=Color3.fromRGB(11,16,26),  Card=Color3.fromRGB(15,22,35),  Element=Color3.fromRGB(20,29,46),  Stroke=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(224,236,248), Secondary=Color3.fromRGB(120,140,168), Accent=Color3.fromRGB(41,199,255),  Accent2=Color3.fromRGB(99,102,241)},
     Rose     = {Background=Color3.fromRGB(15,11,14),  Sidebar=Color3.fromRGB(19,14,18),  Card=Color3.fromRGB(25,18,24),  Element=Color3.fromRGB(33,24,32),  Stroke=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(245,235,240), Secondary=Color3.fromRGB(165,140,150), Accent=Color3.fromRGB(255,92,128),  Accent2=Color3.fromRGB(255,159,122)},
     Amethyst = {Background=Color3.fromRGB(13,11,18),  Sidebar=Color3.fromRGB(17,14,24),  Card=Color3.fromRGB(23,19,33),  Element=Color3.fromRGB(31,25,44),  Stroke=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(240,236,248), Secondary=Color3.fromRGB(150,145,172), Accent=Color3.fromRGB(168,85,247),  Accent2=Color3.fromRGB(99,102,241)},
     Light    = {Background=Color3.fromRGB(236,239,246),Sidebar=Color3.fromRGB(243,245,250),Card=Color3.fromRGB(255,255,255),Element=Color3.fromRGB(232,236,244),Stroke=Color3.fromRGB(25,28,36),   Text=Color3.fromRGB(22,25,33),  Secondary=Color3.fromRGB(105,112,130), Accent=Color3.fromRGB(91,76,224),  Accent2=Color3.fromRGB(42,166,255)},
 }
-Aurora.Themes = Themes
+Meizu.Themes = Themes
 
 -- // Utilities ---------------------------------------------------
 local ThemeRegistry = {}
@@ -60,6 +60,30 @@ local function Tween(obj, time, props, style, direction, delayTime)
     return tween
 end
 
+-- CanvasGroup nhưng tự fallback về Frame nếu executor không hỗ trợ
+local function NewGroup(props)
+    local g
+    local ok = pcall(function() g = Instance.new("CanvasGroup") end)
+    if not ok or not g then g = Instance.new("Frame") end
+    if props then
+        for k, v in pairs(props) do
+            if k ~= "Parent" and k ~= "GroupTransparency" then
+                pcall(function() g[k] = v end)
+            end
+        end
+        if props.GroupTransparency then pcall(function() g.GroupTransparency = props.GroupTransparency end) end
+    end
+    if props and props.Parent then g.Parent = props.Parent end
+    return g
+end
+
+local function FadeGroup(obj, time, target, style, direction)
+    pcall(function()
+        TweenService:Create(obj, TweenInfo.new(time, style or Enum.EasingStyle.Quint,
+            direction or Enum.EasingDirection.Out), {GroupTransparency = target}):Play()
+    end)
+end
+
 local function Connect(signal, fn)
     local c = signal:Connect(fn)
     table.insert(Connections, c)
@@ -67,7 +91,7 @@ local function Connect(signal, fn)
 end
 
 local function RegisterTheme(obj, prop, key)
-    local th = Themes[Aurora.CurrentTheme]
+    local th = Themes[Meizu.CurrentTheme]
     if th and th[key] then obj[prop] = th[key] end
     ThemeRegistry[key] = ThemeRegistry[key] or {}
     table.insert(ThemeRegistry[key], {obj = obj, prop = prop})
@@ -75,7 +99,7 @@ end
 
 local function MakeGradient(parent, rotation)
     local g = Instance.new("UIGradient")
-    local th = Themes[Aurora.CurrentTheme]
+    local th = Themes[Meizu.CurrentTheme]
     g.Color = ColorSequence.new(th.Accent, th.Accent2)
     g.Rotation = rotation or 0
     g.Parent = parent
@@ -131,7 +155,6 @@ local function OnHover(obj, inProps, outProps, time)
     obj.MouseLeave:Connect(function() Tween(obj, time or 0.16, outProps) end)
 end
 
--- Theo dõi chuột khi kéo (hỗ trợ cả touch)
 local function TrackMouse(onUpdate, onEnd)
     local moveConn, endConn
     moveConn = UserInputService.InputChanged:Connect(function(input)
@@ -153,28 +176,47 @@ local function GetViewport()
     return cam and cam.ViewportSize or Vector2.new(1920, 1080)
 end
 
-local function GetGuiParent()
-    local ok, hidden = pcall(function() return gethui and gethui() end)
-    if ok and hidden then return hidden end
-    local ok2, core = pcall(function()
-        return cloneref and cloneref(game:GetService("CoreGui")) or game:GetService("CoreGui")
-    end)
-    if ok2 and core then return core end
-    return LocalPlayer and LocalPlayer:WaitForChild("PlayerGui") or game:GetService("CoreGui")
-end
-
 local function EnsureRoot()
     if Root and Root.Parent then return Root end
+    -- hủy gui cũ nếu load lại
     pcall(function()
-        for _, v in ipairs(GetGuiParent():GetChildren()) do
-            if v.Name == "AURORA_GUI" then v:Destroy() end
+        local candidates = {}
+        local okH, hidden = pcall(function() return gethui and gethui() end)
+        if okH and hidden then table.insert(candidates, hidden) end
+        table.insert(candidates, game:GetService("CoreGui"))
+        if LocalPlayer then
+            local pg = LocalPlayer:FindFirstChild("PlayerGui")
+            if pg then table.insert(candidates, pg) end
+        end
+        for _, parent in ipairs(candidates) do
+            for _, v in ipairs(parent:GetChildren()) do
+                if v.Name == "MEIZU_GUI" then v:Destroy() end
+            end
         end
     end)
-    Root = Create("ScreenGui", {
-        Name = "AURORA_GUI", ResetOnSpawn = false, IgnoreGuiInset = true,
-        DisplayOrder = 999, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        Parent = GetGuiParent(),
-    })
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "MEIZU_GUI"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 999
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    -- thử lần lượt: gethui() -> CoreGui -> PlayerGui (không bao giờ crash)
+    local placed = false
+    local okH, hidden = pcall(function() return gethui and gethui() end)
+    if okH and hidden then pcall(function() gui.Parent = hidden end) end
+    if not gui.Parent then
+        pcall(function() gui.Parent = cloneref and cloneref(game:GetService("CoreGui")) or game:GetService("CoreGui") end)
+    end
+    if not gui.Parent and LocalPlayer then
+        pcall(function()
+            local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 3)
+            if pg then gui.Parent = pg end
+        end)
+    end
+
+    Root = gui
     Connect(Root.Destroying, function()
         for _, c in ipairs(Connections) do pcall(function() c:Disconnect() end) end
         table.clear(Connections)
@@ -209,10 +251,10 @@ local function MakeIcon(kind, color)
 end
 
 -- // Theme switching --------------------------------------------
-function Aurora.SetTheme(name)
+function Meizu.SetTheme(name)
     local theme = Themes[name]
     if not theme then return false end
-    Aurora.CurrentTheme = name
+    Meizu.CurrentTheme = name
     for key, list in pairs(ThemeRegistry) do
         local color = theme[key]
         if color then
@@ -229,7 +271,7 @@ function Aurora.SetTheme(name)
     return true
 end
 
-function Aurora.ThemeList()
+function Meizu.ThemeList()
     local out = {}
     for k in pairs(Themes) do table.insert(out, k) end
     table.sort(out)
@@ -255,11 +297,11 @@ local function EnsureNotifyContainer()
     return NotifyContainer
 end
 
-function Aurora.Notify(info)
+function Meizu.Notify(info)
     if type(info) == "string" then info = {Title = info} end
     info = info or {}
     local container = EnsureNotifyContainer()
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local nType = info.Type or "Info"
     local nColor = NotifyColors[nType] or NotifyColors.Info
     local duration = info.Duration or 4
@@ -272,7 +314,7 @@ function Aurora.Notify(info)
 
     local wrap = Create("Frame", {Parent = container, BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, ZIndex = 201})
-    local toast = Create("CanvasGroup", {
+    local toast = NewGroup({
         Parent = wrap, BackgroundColor3 = theme.Card, BorderSizePixel = 0,
         Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
         Position = UDim2.new(1, 40, 0, 0), GroupTransparency = 1, ZIndex = 202,
@@ -283,7 +325,7 @@ function Aurora.Notify(info)
     RegisterTheme(stroke, "Color", "Stroke")
     Create("UIPadding", {Parent = toast, PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 14),
         PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12)})
-    local layout = Create("UIListLayout", {Parent = toast, FillDirection = Enum.FillDirection.Horizontal,
+    Create("UIListLayout", {Parent = toast, FillDirection = Enum.FillDirection.Horizontal,
         Padding = UDim.new(0, 10), VerticalAlignment = Enum.VerticalAlignment.Center})
 
     local iconBg = Create("Frame", {Parent = toast, BackgroundColor3 = nColor, BackgroundTransparency = 0.85,
@@ -316,29 +358,32 @@ function Aurora.Notify(info)
     local function dismiss()
         if dismissed then return end
         dismissed = true
-        local out = Tween(toast, 0.3, {GroupTransparency = 1, Position = UDim2.new(1, 40, 0, 0)},
-            Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        out.Completed:Connect(function() wrap:Destroy() end)
+        Tween(toast, 0.3, {Position = UDim2.new(1, 40, 0, 0)}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        FadeGroup(toast, 0.3, 1, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        task.delay(0.32, function() wrap:Destroy() end)
     end
     toast.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dismiss()
         end
     end)
-    Tween(toast, 0.45, {Position = UDim2.new(0, 0, 0, 0), GroupTransparency = 0}, Enum.EasingStyle.Quint)
-    Tween(progress, duration, {Size = UDim2.new(0, 0, 0, 3)}, Enum.EasingStyle.Linear).Completed:Connect(dismiss)
+    Tween(toast, 0.45, {Position = UDim2.new(0, 0, 0, 0)}, Enum.EasingStyle.Quint)
+    FadeGroup(toast, 0.45, 0)
+    Tween(progress, duration, {Size = UDim2.new(0, 0, 0, 3)}, Enum.EasingStyle.Linear)
+    task.delay(duration, dismiss)
 end
 
 -- // Prompt (hộp thoại xác nhận) ---------------------------------
-function Aurora.Prompt(info)
+function Meizu.Prompt(info)
     info = info or {}
     EnsureRoot()
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local overlay = Create("Frame", {Parent = Root, BackgroundColor3 = Color3.new(0, 0, 0),
         BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 300})
-    local card = Create("CanvasGroup", {Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5),
+    local card = NewGroup({Parent = overlay, AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, 0, 0.5, 16), BackgroundColor3 = theme.Card, BorderSizePixel = 0,
-        Size = UDim2.new(0, 320, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, GroupTransparency = 1, ZIndex = 301})
+        Size = UDim2.new(0, 320, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+        GroupTransparency = 1, ZIndex = 301})
     Create("UICorner", {Parent = card, CornerRadius = UDim.new(0, 12)})
     local cstroke = Create("UIStroke", {Parent = card, Thickness = 1, Transparency = 0.88})
     RegisterTheme(card, "BackgroundColor3", "Card")
@@ -367,9 +412,9 @@ function Aurora.Prompt(info)
         if closed then return end
         closed = true
         Tween(overlay, 0.25, {BackgroundTransparency = 1})
-        local t = Tween(card, 0.25, {GroupTransparency = 1, Position = UDim2.new(0.5, 0, 0.5, 10)},
-            Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        t.Completed:Connect(function()
+        Tween(card, 0.25, {Position = UDim2.new(0.5, 0, 0.5, 10)}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        FadeGroup(card, 0.25, 1, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        task.delay(0.28, function()
             overlay:Destroy()
             if info.Callback then info.Callback(ok == true) end
         end)
@@ -398,35 +443,34 @@ function Aurora.Prompt(info)
     end)
 
     Tween(overlay, 0.25, {BackgroundTransparency = 0.45})
-    Tween(card, 0.35, {GroupTransparency = 0, Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 340, 0, 0)},
-        Enum.EasingStyle.Back)
+    Tween(card, 0.35, {Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 340, 0, 0)}, Enum.EasingStyle.Back)
+    FadeGroup(card, 0.35, 0)
 end
 
 -- // Splash ------------------------------------------------------
 local function ShowSplash()
     EnsureRoot()
-    local splash = Create("CanvasGroup", {Parent = Root, Size = UDim2.fromScale(1, 1),
+    local splash = NewGroup({Parent = Root, Size = UDim2.fromScale(1, 1),
         BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.15,
         GroupTransparency = 1, ZIndex = 400, BorderSizePixel = 0})
     local title = Create("TextLabel", {Parent = splash, AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.44), BackgroundTransparency = 1, Font = Enum.Font.GothamBlack,
-        Text = "AURORA", TextSize = 46, TextColor3 = Color3.new(1, 1, 1), Size = UDim2.fromOffset(500, 52)})
+        Text = "MEIZU", TextSize = 46, TextColor3 = Color3.new(1, 1, 1), Size = UDim2.fromOffset(500, 52)})
     MakeGradient(title)
-    local sub = Create("TextLabel", {Parent = splash, AnchorPoint = Vector2.new(0.5, 0.5),
+    Create("TextLabel", {Parent = splash, AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.52), BackgroundTransparency = 1, Font = Enum.Font.Gotham,
-        Text = "UI LIBRARY  ·  v2.0", TextSize = 12, TextColor3 = Color3.fromRGB(150, 155, 170),
-        Size = UDim2.fromOffset(400, 14)})
+        Text = "UI LIBRARY  ·  v" .. Meizu.Version, TextSize = 12,
+        TextColor3 = Color3.fromRGB(150, 155, 170), Size = UDim2.fromOffset(400, 14)})
     local line = Create("Frame", {Parent = splash, AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.585), BackgroundColor3 = Color3.new(1, 1, 1),
         Size = UDim2.fromOffset(0, 2), BorderSizePixel = 0})
     MakeGradient(line)
-    Tween(splash, 0.4, {GroupTransparency = 0})
+    FadeGroup(splash, 0.4, 0)
     Tween(line, 0.7, {Size = UDim2.fromOffset(240, 2)})
     task.delay(1.25, function()
         if not splash.Parent then return end
-        local t = Tween(splash, 0.4, {GroupTransparency = 1})
-        t.Completed:Wait()
-        splash:Destroy()
+        FadeGroup(splash, 0.4, 1)
+        task.delay(0.42, function() splash:Destroy() end)
     end)
 end
 
@@ -434,12 +478,12 @@ end
 local ElementBuilders = {}
 local function RegisterFlag(info, element)
     local key = (info and (info.ConfigKey or info.Flag))
-    if key then Aurora.Flags[key] = element end
+    if key then Meizu.Flags[key] = element end
 end
 
 local function BuildCard(tab, info, controlHeight, rightSlot)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local innerW = tab._innerWidth or 480
     local descH = info.Description and MeasureText(info.Description, 12, innerW) or 0
     local h = 12
@@ -492,7 +536,7 @@ end
 -- Button ---------------------------------------------------------
 ElementBuilders.AddButton = function(tab, info)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local parts = BuildCard(tab, {Description = info.Description}, 34)
     local button = Create("TextButton", {Parent = parts.frame, Size = UDim2.new(1, 0, 0, 34),
         BackgroundColor3 = theme.Element, Text = info.Title or "Button", Font = Enum.Font.GothamMedium,
@@ -509,8 +553,8 @@ ElementBuilders.AddButton = function(tab, info)
         RegisterTheme(button, "BackgroundColor3", "Element")
         RegisterTheme(button, "TextColor3", "Text")
         OnHover(button,
-            {BackgroundColor3 = Themes[Aurora.CurrentTheme].Accent, BackgroundTransparency = 0.82},
-            {BackgroundColor3 = Themes[Aurora.CurrentTheme].Element, BackgroundTransparency = 0})
+            {BackgroundColor3 = Themes[Meizu.CurrentTheme].Accent, BackgroundTransparency = 0.82},
+            {BackgroundColor3 = Themes[Meizu.CurrentTheme].Element, BackgroundTransparency = 0})
     end
 
     OnClick(button, function()
@@ -522,7 +566,7 @@ end
 -- Toggle ---------------------------------------------------------
 ElementBuilders.AddToggle = function(tab, info)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local parts = BuildCard(tab, info, 0, true)
     local card = parts.frame
 
@@ -580,7 +624,7 @@ end
 -- Slider ---------------------------------------------------------
 ElementBuilders.AddSlider = function(tab, info)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local min, max = info.Min or 0, info.Max or 100
     local decimals = info.Decimals or info.Rounding or 0
     local suffix = info.Suffix or ""
@@ -679,7 +723,7 @@ end
 -- Dropdown -------------------------------------------------------
 ElementBuilders.AddDropdown = function(tab, info)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local values = info.Values or {}
     local multi = info.Multi == true
     local allowSearch = info.AllowSearch
@@ -736,6 +780,8 @@ ElementBuilders.AddDropdown = function(tab, info)
 
     local items = {}
     local element = {}
+    -- FIX: khai báo local trước (tránh ghi đè global khi có nhiều dropdown)
+    local renderStates, updateLabel
 
     local function applyFilter(q)
         q = (q or ""):lower()
@@ -797,7 +843,7 @@ ElementBuilders.AddDropdown = function(tab, info)
     function renderStates()
         for _, item in ipairs(items) do
             local selected = multi and (state[item.value] == true) or (not multi and state == item.value)
-            local th = Themes[Aurora.CurrentTheme]
+            local th = Themes[Meizu.CurrentTheme]
             Tween(item.back, 0.18, {BackgroundColor3 = selected and th.Accent or th.Element,
                 BackgroundTransparency = selected and 0.75 or 1})
             Tween(item.dot, 0.18, {BackgroundTransparency = selected and 0 or 1})
@@ -826,8 +872,8 @@ ElementBuilders.AddDropdown = function(tab, info)
             Tween(holder, 0.28, {Size = UDim2.new(1, 0, 0, (allowSearch and searchH or 0) + count * 28 + 4)})
         else
             parts.setHeight(baseH)
-            local t = Tween(holder, 0.22, {Size = UDim2.new(1, 0, 0, 0)})
-            t.Completed:Connect(function()
+            Tween(holder, 0.22, {Size = UDim2.new(1, 0, 0, 0)})
+            task.delay(0.24, function()
                 if not open then holder.CanvasSize = UDim2.new(0, 0, 0, 0) end
             end)
         end
@@ -867,7 +913,7 @@ end
 -- Input ----------------------------------------------------------
 ElementBuilders.AddInput = function(tab, info)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local parts = BuildCard(tab, info, 34)
     local box = Create("TextBox", {Parent = parts.frame, Size = UDim2.new(1, 0, 0, 34),
         BackgroundColor3 = theme.Element, Text = tostring(info.Default or ""),
@@ -910,7 +956,7 @@ end
 -- Keybind --------------------------------------------------------
 ElementBuilders.AddKeybind = function(tab, info)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local parts = BuildCard(tab, info, 0, true)
     local mode = info.Mode or "Toggle" -- Toggle / Hold / Always
     local key = info.Default
@@ -982,7 +1028,7 @@ end
 -- ColorPicker ----------------------------------------------------
 ElementBuilders.AddColorPicker = function(tab, info)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local parts = BuildCard(tab, info, 0, true)
     local color = info.Default or Color3.fromRGB(124, 92, 255)
     local h, s, v = Color3.toHSV(color)
@@ -1011,7 +1057,7 @@ ElementBuilders.AddColorPicker = function(tab, info)
 
     local function buildPopup()
         EnsureRoot()
-        popup = Create("CanvasGroup", {Parent = Root, Size = UDim2.fromOffset(228, 236),
+        popup = NewGroup({Parent = Root, Size = UDim2.fromOffset(228, 236),
             BackgroundColor3 = theme.Card, BorderSizePixel = 0, ZIndex = 250, Visible = false, GroupTransparency = 1})
         Create("UICorner", {Parent = popup, CornerRadius = UDim.new(0, 12)})
         local pstroke = Create("UIStroke", {Parent = popup, Thickness = 1, Transparency = 0.88})
@@ -1107,14 +1153,13 @@ ElementBuilders.AddColorPicker = function(tab, info)
 
     local function closePopup()
         if popup and popup.Visible then
-            local t = Tween(popup, 0.2, {GroupTransparency = 1})
-            t.Completed:Connect(function() if popup then popup.Visible = false end end)
+            FadeGroup(popup, 0.2, 1)
+            task.delay(0.22, function() if popup and popup.Parent then popup.Visible = false end end)
         end
         if blocker then blocker:Destroy() blocker = nil end
     end
     local function openPopup()
         if not popup then buildPopup() end
-        closePopup()
         if popup.Visible then return end
         popup.Visible = true
         local pos = swatch.AbsolutePosition
@@ -1124,7 +1169,8 @@ ElementBuilders.AddColorPicker = function(tab, info)
         if targetX + 228 > vs.X then targetX = vs.X - 236 end
         if targetY + 236 > vs.Y then targetY = pos.Y - 244 end
         popup.Position = UDim2.fromOffset(targetX, targetY + 8)
-        Tween(popup, 0.25, {GroupTransparency = 0, Position = UDim2.fromOffset(targetX, targetY)}, Enum.EasingStyle.Quint)
+        Tween(popup, 0.25, {Position = UDim2.fromOffset(targetX, targetY)}, Enum.EasingStyle.Quint)
+        FadeGroup(popup, 0.25, 0)
         blocker = Create("TextButton", {Parent = Root, Size = UDim2.fromScale(1, 1),
             BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 240})
         blocker.InputBegan:Connect(function(input)
@@ -1153,7 +1199,7 @@ end
 -- Label / Paragraph / Section / Divider / ProgressBar ------------
 ElementBuilders.AddLabel = function(tab, info)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local w = tab._innerWidth or 480
     local th = MeasureText(info.Title or "", 13, w)
     local dh = info.Description and (MeasureText(info.Description, 12, w) + 2) or 0
@@ -1181,7 +1227,7 @@ end
 
 ElementBuilders.AddSection = function(tab, info)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     tab._order = (tab._order or 0) + 1
     local holder = Create("Frame", {Parent = tab.list, Size = UDim2.new(1, 0, 0, 30),
         BackgroundTransparency = 1, LayoutOrder = tab._order, ZIndex = 101})
@@ -1198,8 +1244,8 @@ ElementBuilders.AddSection = function(tab, info)
     return holder
 end
 
-ElementBuilders.AddDivider = function(tab, info)
-    local theme = Themes[Aurora.CurrentTheme]
+ElementBuilders.AddDivider = function(tab)
+    local theme = Themes[Meizu.CurrentTheme]
     tab._order = (tab._order or 0) + 1
     local holder = Create("Frame", {Parent = tab.list, Size = UDim2.new(1, 0, 0, 10),
         BackgroundTransparency = 1, LayoutOrder = tab._order, ZIndex = 101})
@@ -1213,7 +1259,7 @@ end
 
 ElementBuilders.AddProgressBar = function(tab, info)
     info = info or {}
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
     local parts = BuildCard(tab, {Title = info.Title, Description = info.Description}, 18, true)
     local pctLabel = Create("TextLabel", {Parent = parts.titleRow, AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(64, 24), BackgroundTransparency = 1,
@@ -1252,7 +1298,7 @@ ElementBuilders.AddProgressBar = function(tab, info)
 end
 
 -- // Config system -----------------------------------------------
-local ConfigFolder = "AuroraConfigs"
+local ConfigFolder = "MeizuConfigs"
 local function SerializeValue(v)
     local t = typeof(v)
     if t == "Color3" then
@@ -1273,23 +1319,23 @@ local function DeserializeValue(v)
 end
 local function ConfigPath(name) return ConfigFolder .. "/" .. tostring(name) .. ".json" end
 
-function Aurora.SaveConfig(name)
+function Meizu.SaveConfig(name)
     if not writefile then return false, "Executor không hỗ trợ file" end
     if isfolder and not isfolder(ConfigFolder) and makefolder then makefolder(ConfigFolder) end
     local data = {}
-    for key, element in pairs(Aurora.Flags) do
+    for key, element in pairs(Meizu.Flags) do
         data[key] = SerializeValue(element:Get())
     end
     pcall(function() writefile(ConfigPath(name), HttpService:JSONEncode(data)) end)
     return true
 end
 
-function Aurora.LoadConfig(name)
+function Meizu.LoadConfig(name)
     if not (readfile and isfile) or not isfile(ConfigPath(name)) then return false end
     local ok, decoded = pcall(function() return HttpService:JSONDecode(readfile(ConfigPath(name))) end)
     if not ok or type(decoded) ~= "table" then return false end
     for key, value in pairs(decoded) do
-        local element = Aurora.Flags[key]
+        local element = Meizu.Flags[key]
         if element and element.Set then
             local v = DeserializeValue(value)
             if v ~= nil then element:Set(v) end
@@ -1298,7 +1344,7 @@ function Aurora.LoadConfig(name)
     return true
 end
 
-function Aurora.GetConfigs()
+function Meizu.GetConfigs()
     if not (listfiles and isfolder and isfolder(ConfigFolder)) then return {} end
     local out = {}
     for _, path in ipairs(listfiles(ConfigFolder)) do
@@ -1309,7 +1355,7 @@ function Aurora.GetConfigs()
     return out
 end
 
-function Aurora.DeleteConfig(name)
+function Meizu.DeleteConfig(name)
     if isfile and isfile(ConfigPath(name)) and delfile then
         pcall(function() delfile(ConfigPath(name)) end)
         return true
@@ -1318,11 +1364,11 @@ function Aurora.DeleteConfig(name)
 end
 
 -- // Window ------------------------------------------------------
-function Aurora.CreateWindow(options)
+function Meizu.CreateWindow(options)
     options = options or {}
-    if options.Theme and Themes[options.Theme] then Aurora.CurrentTheme = options.Theme end
+    if options.Theme and Themes[options.Theme] then Meizu.CurrentTheme = options.Theme end
     EnsureRoot()
-    local theme = Themes[Aurora.CurrentTheme]
+    local theme = Themes[Meizu.CurrentTheme]
 
     local windowSize = options.Size or UDim2.fromOffset(600, 430)
     local tabWidth = options.TabWidth or 160
@@ -1346,10 +1392,9 @@ function Aurora.CreateWindow(options)
     Create("UICorner", {Parent = circle, CornerRadius = UDim.new(1, 0)})
     local letter = Create("TextLabel", {Parent = circle, AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5), BackgroundTransparency = 1, Font = Enum.Font.GothamBlack,
-        Text = "A", TextSize = 20, TextColor3 = theme.Background, Size = UDim2.fromOffset(30, 30)})
+        Text = "M", TextSize = 20, TextColor3 = theme.Background, Size = UDim2.fromOffset(30, 30)})
     RegisterTheme(letter, "TextColor3", "Background")
 
-    -- hiệu ứng "thở"
     task.spawn(function()
         while orb.Parent do
             local up = Tween(circle, 1.1, {Size = UDim2.fromOffset(48, 48)}, Enum.EasingStyle.Sine)
@@ -1390,11 +1435,11 @@ function Aurora.CreateWindow(options)
     Create("UICorner", {Parent = logo, CornerRadius = UDim.new(1, 0)})
     local logoText = Create("TextLabel", {Parent = logo, AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5), BackgroundTransparency = 1, Font = Enum.Font.GothamBlack,
-        Text = "A", TextSize = 13, TextColor3 = theme.Background, Size = UDim2.fromOffset(20, 20)})
+        Text = "M", TextSize = 13, TextColor3 = theme.Background, Size = UDim2.fromOffset(20, 20)})
     RegisterTheme(logoText, "TextColor3", "Background")
     local titleLabel = Create("TextLabel", {Parent = titleBar, Position = UDim2.fromOffset(48, 6),
         Size = UDim2.new(1, -190, 0, 20), BackgroundTransparency = 1, Font = Enum.Font.GothamSemibold,
-        Text = options.Title or "Aurora", TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left,
+        Text = options.Title or "Meizu", TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left,
         TextColor3 = theme.Text, ZIndex = 103, TextTruncate = Enum.TextTruncate.AtEnd})
     RegisterTheme(titleLabel, "TextColor3", "Text")
     local subLabel = Create("TextLabel", {Parent = titleBar, Position = UDim2.fromOffset(48, 25),
@@ -1403,7 +1448,8 @@ function Aurora.CreateWindow(options)
         TextColor3 = theme.Secondary, ZIndex = 103, TextTruncate = Enum.TextTruncate.AtEnd})
     RegisterTheme(subLabel, "TextColor3", "Secondary")
 
-    local minimized = false
+    -- FIX CHÍNH: khởi tạo đúng trạng thái — cửa sổ đang ẩn = đang minimized
+    local minimized = true
     local animBusy = false
 
     local function titleButton(icon, xPos, isClose)
@@ -1417,7 +1463,7 @@ function Aurora.CreateWindow(options)
             Tween(btn, 0.15, {BackgroundTransparency = 0.86, TextColor3 = hoverColor})
         end)
         btn.MouseLeave:Connect(function()
-            Tween(btn, 0.2, {BackgroundTransparency = 1, TextColor3 = Themes[Aurora.CurrentTheme].Text})
+            Tween(btn, 0.2, {BackgroundTransparency = 1, TextColor3 = Themes[Meizu.CurrentTheme].Text})
         end)
         return btn
     end
@@ -1479,13 +1525,15 @@ function Aurora.CreateWindow(options)
         Window.ActiveTab = tab
         for _, t in ipairs(tabs) do
             if t ~= tab and t.canvas.Visible then
-                local fade = Tween(t.canvas, 0.18, {GroupTransparency = 1})
-                fade.Completed:Connect(function() t.canvas.Visible = false end)
+                FadeGroup(t.canvas, 0.18, 1)
+                task.delay(0.2, function()
+                    if t.canvas ~= tab.canvas then t.canvas.Visible = false end
+                end)
             end
         end
         tab.canvas.Visible = true
-        Tween(tab.canvas, 0.24, {GroupTransparency = 0})
-        local th = Themes[Aurora.CurrentTheme]
+        FadeGroup(tab.canvas, 0.24, 0)
+        local th = Themes[Meizu.CurrentTheme]
         for _, t in ipairs(tabs) do
             local active = (t == tab)
             Tween(t.button.back, 0.2, {BackgroundTransparency = active and 0.65 or 1})
@@ -1496,7 +1544,6 @@ function Aurora.CreateWindow(options)
         if btnAbs.Y > 0 or listAbs.Y > 0 then
             Tween(indicator, 0.35, {Position = UDim2.fromOffset(4, btnAbs.Y - listAbs.Y + 8)}, Enum.EasingStyle.Back)
         end
-        -- stagger lần đầu mở tab
         if not tab._staggered then
             tab._staggered = true
             task.spawn(function()
@@ -1529,7 +1576,7 @@ function Aurora.CreateWindow(options)
             BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 103})
         local labelX = 14
         if info.Icon then
-            local iconImg = Create("ImageLabel", {Parent = btn, Position = UDim2.fromOffset(14, 8),
+            Create("ImageLabel", {Parent = btn, Position = UDim2.fromOffset(14, 8),
                 Size = UDim2.fromOffset(16, 16), BackgroundTransparency = 1, Image = info.Icon, ZIndex = 103})
             labelX = 38
         end
@@ -1540,7 +1587,7 @@ function Aurora.CreateWindow(options)
             TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 103})
         RegisterTheme(label, "TextColor3", "Secondary")
 
-        local canvas = Create("CanvasGroup", {Parent = content, Size = UDim2.fromScale(1, 1),
+        local canvas = NewGroup({Parent = content, Size = UDim2.fromScale(1, 1),
             BackgroundTransparency = 1, GroupTransparency = 1, Visible = false,
             BorderSizePixel = 0, ZIndex = 101})
         local scroll = Create("ScrollingFrame", {Parent = canvas, Size = UDim2.fromScale(1, 1),
@@ -1590,6 +1637,8 @@ function Aurora.CreateWindow(options)
     local function setMinimized(state)
         if animBusy or state == minimized then return end
         animBusy = true
+        -- khóa an toàn: nếu animation bị lỗi/kẹt thì tự mở khóa
+        task.delay(1.3, function() animBusy = false end)
         minimized = state
         if state then
             lastWindowPos = winFrame.Position
@@ -1601,19 +1650,18 @@ function Aurora.CreateWindow(options)
                 Size = UDim2.fromOffset(50, 50),
                 Position = UDim2.fromOffset(orbCenter.X, orbCenter.Y),
             }, Enum.EasingStyle.Back, Enum.EasingDirection.In)
-            shrink.Completed:Wait()
+            pcall(function() shrink.Completed:Wait() end)
             if not winFrame.Parent then animBusy = false return end
             winFrame.Visible = false
             orb.Visible = true
             circle.Size = UDim2.fromOffset(26, 26)
             Tween(circle, 0.45, {Size = UDim2.fromOffset(44, 44)}, Enum.EasingStyle.Back)
-            animBusy = false
         else
             if orb.Visible then
                 local orbCenter = orb.AbsolutePosition + orb.AbsoluteSize / 2
                 local shrinkOrb = Tween(circle, 0.28, {Size = UDim2.fromOffset(26, 26)},
                     Enum.EasingStyle.Back, Enum.EasingDirection.In)
-                shrinkOrb.Completed:Wait()
+                pcall(function() shrinkOrb.Completed:Wait() end)
                 if not orb.Parent then animBusy = false return end
                 orb.Visible = false
                 winFrame.Visible = true
@@ -1626,6 +1674,7 @@ function Aurora.CreateWindow(options)
                 Tween(winFrame, 0.5, {Size = windowSize, Position = lastWindowPos or UDim2.fromOffset(vs.X / 2, vs.Y / 2)},
                     Enum.EasingStyle.Back)
             else
+                -- mở lần đầu từ giữa màn hình
                 winFrame.Visible = true
                 winFrame.Position = lastWindowPos or UDim2.fromOffset(vs.X / 2, vs.Y / 2)
                 winFrame.Size = windowSize
@@ -1634,8 +1683,8 @@ function Aurora.CreateWindow(options)
                 Tween(shadow, 0.5, {ImageTransparency = 0.35})
                 Tween(scaler, 0.55, {Size = UDim2.fromScale(1, 1)}, Enum.EasingStyle.Back)
             end
-            animBusy = false
         end
+        animBusy = false
     end
 
     function Window:Toggle() setMinimized(not minimized) end
@@ -1647,10 +1696,10 @@ function Aurora.CreateWindow(options)
         Tween(shadow, 0.3, {ImageTransparency = 1})
         Tween(bodyStroke, 0.3, {Transparency = 1})
         local t = Tween(scaler, 0.32, {Size = UDim2.fromScale(0, 0)}, Enum.EasingStyle.Back, Enum.EasingDirection.In)
-        t.Completed:Wait()
+        pcall(function() t.Completed:Wait() end)
         if Root then Root:Destroy() end
         Root, NotifyContainer = nil, nil
-        Aurora.Flags = {}
+        Meizu.Flags = {}
         ThemeRegistry, gradients = {}, {}
     end
     function Window:Destroy() task.spawn(destroyGui) end
@@ -1747,32 +1796,32 @@ function Aurora.CreateWindow(options)
         local tab = self:AddTab({Title = "Lưu trữ"})
         tab:AddSection({Title = "Cấu hình"})
         local nameInput = tab:AddInput({Title = "Tên cấu hình", PlaceholderText = "my-config"})
-        local list = tab:AddDropdown({Title = "Danh sách file", Values = Aurora.GetConfigs(), AllowSearch = false})
+        local list = tab:AddDropdown({Title = "Danh sách file", Values = Meizu.GetConfigs(), AllowSearch = false})
         tab:AddButton({Title = "Lưu cấu hình", Primary = true, Description = "Lưu toàn bộ giá trị các phần tử có ConfigKey vào file",
             Callback = function()
                 local name = nameInput:Get()
                 if name == "" then
-                    Aurora.Notify({Title = "Lưu cấu hình", Content = "Vui lòng nhập tên cấu hình", Type = "Warning"})
+                    Meizu.Notify({Title = "Lưu cấu hình", Content = "Vui lòng nhập tên cấu hình", Type = "Warning"})
                     return
                 end
-                local ok = Aurora.SaveConfig(name)
-                Aurora.Notify({Title = "Lưu cấu hình", Content = ok and ("Đã lưu: " .. name) or "Executor không hỗ trợ file",
+                local ok = Meizu.SaveConfig(name)
+                Meizu.Notify({Title = "Lưu cấu hình", Content = ok and ("Đã lưu: " .. name) or "Executor không hỗ trợ file",
                     Type = ok and "Success" or "Error"})
-                list:Set(Aurora.GetConfigs())
+                list:Set(Meizu.GetConfigs())
             end})
         tab:AddButton({Title = "Tải cấu hình", Callback = function()
                 local name = list:Get()
-                if not name then Aurora.Notify({Title = "Tải cấu hình", Content = "Chọn một file trước", Type = "Warning"}) return end
-                local ok = Aurora.LoadConfig(name)
-                Aurora.Notify({Title = "Tải cấu hình", Content = ok and ("Đã tải: " .. name) or "Không tìm thấy file",
+                if not name then Meizu.Notify({Title = "Tải cấu hình", Content = "Chọn một file trước", Type = "Warning"}) return end
+                local ok = Meizu.LoadConfig(name)
+                Meizu.Notify({Title = "Tải cấu hình", Content = ok and ("Đã tải: " .. name) or "Không tìm thấy file",
                     Type = ok and "Success" or "Error"})
             end})
         tab:AddButton({Title = "Xóa cấu hình", Callback = function()
                 local name = list:Get()
                 if not name then return end
-                Aurora.DeleteConfig(name)
-                Aurora.Notify({Title = "Xóa cấu hình", Content = "Đã xóa: " .. name, Type = "Info"})
-                list:Set(Aurora.GetConfigs())
+                Meizu.DeleteConfig(name)
+                Meizu.Notify({Title = "Xóa cấu hình", Content = "Đã xóa: " .. name, Type = "Info"})
+                list:Set(Meizu.GetConfigs())
             end})
         return tab
     end
@@ -1780,12 +1829,21 @@ function Aurora.CreateWindow(options)
     ------------------------------------------------ Khởi động
     task.spawn(function()
         if options.Splash ~= false then
-            ShowSplash()
+            pcall(ShowSplash)
             task.wait(1.15)
         end
-        setMinimized(false)
-        task.wait(0.06)
-        if firstTab then selectTab(firstTab, true) end
+        pcall(function() setMinimized(false) end)
+        task.wait(0.08)
+        if firstTab then pcall(function() selectTab(firstTab, true) end) end
+        -- BẢO HIỂM: vì lý do gì đó cửa sổ chưa hiện thì ép hiện
+        task.delay(0.4, function()
+            if not minimized and winFrame.Parent and not winFrame.Visible then
+                winFrame.Visible = true
+                winFrame.Size = windowSize
+                scaler.Size = UDim2.fromScale(1, 1)
+                winFrame.Position = winFrame.Position == UDim2.new() and UDim2.fromOffset(vs.X / 2, vs.Y / 2) or winFrame.Position
+            end
+        end)
     end)
 
     Window.Gui = Root
@@ -1793,42 +1851,36 @@ function Aurora.CreateWindow(options)
     return Window
 end
 
-Aurora.CreateGui = Aurora.CreateWindow
+Meizu.CreateGui = Meizu.CreateWindow
 
-function Aurora.Destroy()
+function Meizu.Destroy()
     if Root then Root:Destroy() end
     Root, NotifyContainer = nil, nil
 end
 
-return Aurora
+return Meizu
 
 --[[
 ==================== VÍ DỤ SỬ DỤNG ====================
-local Aurora = loadstring(game:HttpGet("URL_CỦA_BẠN/Aurora.lua"))()
+local Meizu = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/Meizu.lua"))()
 
-local Window = Aurora.CreateWindow({
-    Title = "Aurora Hub",
-    SubTitle = "v2.0 · by Nttp1721",
-    Size = UDim2.fromOffset(600, 430),
-    TabWidth = 160,
-    Theme = "Aurora",          -- Aurora / Midnight / Rose / Amethyst / Light
+local Window = Meizu.CreateWindow({
+    Title = "Meizu Hub",
+    SubTitle = "v2.1 · by Nttp1721",
+    Theme = "Meizu",
     ToggleKey = Enum.KeyCode.RightShift,
-    Splash = true,
 })
 
 local Main = Window:AddTab({Title = "Trang chính"})
 Main:AddSection({Title = "Tính năng"})
-Main:AddToggle({Title = "Auto Farm", ConfigKey = "autofarm", Callback = function(v) print(v) end})
-Main:AddSlider({Title = "Tốc độ", Min = 16, Max = 200, Default = 60, Suffix = " spd", ConfigKey = "speed"})
-Main:AddDropdown({Title = "Vũ khí", Values = {"Kiếm", "Súng", "Cung"}, ConfigKey = "weapon"})
-Main:AddColorPicker({Title = "Màu trail", ConfigKey = "trailcolor"})
-Main:AddKeybind({Title = "Phím farm", Default = Enum.KeyCode.F, Mode = "Toggle"})
-Main:AddProgressBar({Title = "Tiến độ"})
+Main:AddToggle({Title = "Auto Farm", ConfigKey = "autofarm", Callback = print})
+Main:AddSlider({Title = "Tốc độ", Min = 16, Max = 200, Default = 16, Suffix = " ws", ConfigKey = "walkspeed"})
+Main:AddDropdown({Title = "Vũ khí", Values = {"Kiếm","Súng","Cung"}, ConfigKey = "weapon"})
 Main:AddButton({Title = "Bắt đầu", Primary = true, Callback = function() end})
 
-local Th = Window:AddTab({Title = "Giao diện"})
-Th:AddDropdown({Title = "Theme", Values = Aurora.ThemeList(),
-    Callback = function(name) Aurora.SetTheme(name) end})
+local Set = Window:AddTab({Title = "Cài đặt"})
+Set:AddDropdown({Title = "Theme", Values = Meizu.ThemeList(),
+    Callback = function(name) Meizu.SetTheme(name) end})
 
 Window:AddConfigTab()
 ========================================================
