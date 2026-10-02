@@ -1,14 +1,14 @@
---// Aurora Demo — script ví dụ đầy đủ tính năng cơ bản
---// Nhớ upload bản Aurora.lua v2 lên repo trước rồi chạy (link bên dưới)
+--// Meizu Demo — script ví dụ đầy đủ tính năng cơ bản
+--// Nhớ upload bản Meizu.lua v2 lên repo trước rồi chạy (link bên dưới)
 
-local Aurora = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"))()
+local Meizu = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"))()
 
-local Window = Aurora.CreateWindow({
-    Title = "Aurora Demo",
+local Window = Meizu.CreateWindow({
+    Title = "Meizu Demo",
     SubTitle = "v2.0 · by Nttp1721",
     Size = UDim2.fromOffset(600, 430),
     TabWidth = 160,
-    Theme = "Aurora",                       -- Aurora / Midnight / Rose / Amethyst / Light
+    Theme = "Meizu",                       -- Meizu / Midnight / Rose / Amethyst / Light
     ToggleKey = Enum.KeyCode.RightShift,    -- phím ẩn/hiện (orb 50x50 góc trái dưới, kéo được)
     Splash = true,
 })
@@ -26,7 +26,7 @@ local Auto = Main:AddToggle({
     ConfigKey = "autofarm",
     Callback = function(v)
         farming = v
-        Aurora.Notify({Title = "Auto Farm", Content = v and "Đã bật" or "Đã tắt", Type = v and "Success" or "Info"})
+        Meizu.Notify({Title = "Auto Farm", Content = v and "Đã bật" or "Đã tắt", Type = v and "Success" or "Info"})
     end,
 })
 
@@ -59,12 +59,12 @@ Main:AddButton({
     Title = "Bắt đầu ngay", Primary = true,
     Description = "Mở hộp thoại xác nhận (Prompt)",
     Callback = function()
-        Aurora.Prompt({
+        Meizu.Prompt({
             Title = "Xác nhận",
             Content = "Bạn có chắc muốn bắt đầu farm không?",
             ConfirmText = "Bắt đầu", CancelText = "Thôi",
             Callback = function(ok)
-                if ok then Auto:Set(true) else Aurora.Notify({Title = "Đã hủy", Type = "Warning"}) end
+                if ok then Auto:Set(true) else Meizu.Notify({Title = "Đã hủy", Type = "Warning"}) end
             end,
         })
     end,
@@ -119,8 +119,8 @@ local Settings = Window:AddTab({Title = "Cài đặt"})
 
 Settings:AddDropdown({
     Title = "Theme",
-    Values = Aurora.ThemeList(), Default = Aurora.CurrentTheme,
-    Callback = function(name) Aurora.SetTheme(name) end,
+    Values = Meizu.ThemeList(), Default = Meizu.CurrentTheme,
+    Callback = function(name) Meizu.SetTheme(name) end,
 })
 
 Settings:AddDivider()
@@ -129,10 +129,10 @@ Settings:AddButton({
     Title = "Test thông báo",
     Description = "Xem đủ 4 loại: Success / Error / Warning / Info",
     Callback = function()
-        Aurora.Notify({Title = "Thành công", Content = "Đã test Success", Type = "Success"})
-        task.delay(0.3, function() Aurora.Notify({Title = "Cảnh báo", Content = "Đã test Warning", Type = "Warning"}) end)
-        task.delay(0.6, function() Aurora.Notify({Title = "Lỗi", Content = "Đã test Error", Type = "Error"}) end)
-        task.delay(0.9, function() Aurora.Notify({Title = "Thông tin", Content = "Đã test Info", Type = "Info", Duration = 2}) end)
+        Meizu.Notify({Title = "Thành công", Content = "Đã test Success", Type = "Success"})
+        task.delay(0.3, function() Meizu.Notify({Title = "Cảnh báo", Content = "Đã test Warning", Type = "Warning"}) end)
+        task.delay(0.6, function() Meizu.Notify({Title = "Lỗi", Content = "Đã test Error", Type = "Error"}) end)
+        task.delay(0.9, function() Meizu.Notify({Title = "Thông tin", Content = "Đã test Info", Type = "Info", Duration = 2}) end)
     end,
 })
 
@@ -141,5 +141,5 @@ Window:AddConfigTab()
 
 -- Thông báo chào sau khi splash chạy xong
 task.delay(1.8, function()
-    Aurora.Notify({Title = "Aurora Demo", Content = "Loaded thành công! RightShift để ẩn/hiện.", Type = "Success"})
+    Meizu.Notify({Title = "Meizu Demo", Content = "Loaded thành công! RightShift để ẩn/hiện.", Type = "Success"})
 end)
