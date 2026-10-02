@@ -16,7 +16,7 @@ pcall(function()
     end
 end)
 
-local DISCORD_LINK = "https://discord.gg/sylphins"
+local DISCORD_LINK = "https://discord.gg/5GynHCJZXr"
 
 -- Auto-copy Discord link to clipboard
 if setclipboard then
