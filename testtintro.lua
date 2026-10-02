@@ -1,25 +1,4 @@
---[[
-    Meizu Hub - Steal An Eggs
-    Script by: Nttphu1721
-    Phiên bản: 1.2 (khung sườn / skeleton)
 
-    THAY ĐỔI v1.2:
-      - Bỏ toàn bộ rbxassetid://, dùng ảnh PNG tải từ link (getcustomasset)
-      - Bấm dấu X trong menu = ẨN menu (không huỷ), mở lại bằng nút tròn bên trái
-      - Muốn tắt hẳn script: Misc -> Unload Script
-
-    CẤU TRÚC FILE:
-      1. Cấu hình + Services
-      2. Kiểm tra PlaceId (sai game -> shutdown ngay)
-      3. Chống chạy trùng + tải ảnh PNG
-      4. Loader
-      5. Tải thư viện Fluent
-      6. Window + Tabs
-      7. UI từng tab (có TODO)
-      8. SaveManager / InterfaceManager
-      9. Chặn nút X + nút tròn bên trái (không bao giờ mất)
-     10. Fluent Notify báo đã tải xong
-]]
 
 ----------------------------------------------------------------------
 -- 1. CẤU HÌNH + SERVICES
