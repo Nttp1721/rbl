@@ -247,7 +247,7 @@ local Tabs = {
 	ESP = Window:AddTab({ Title = "ESP", Icon = "" }),
     Misc = Window:AddTab({ Title = "Misc", Icon = "" }),
 }
-local Options = Fluent.Options
+
 
 
 Fluent:Notify({
