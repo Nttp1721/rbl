@@ -1,6 +1,6 @@
 --[[
     ╔══════════════════════════════════════════════╗
-       MEIZU UI LIBRARY — v3.0.1
+       MEIZU UI LIBRARY — v2.1
        Hiện đại · Mượt mà · Dễ dùng (chuẩn Fluent)
     ╚══════════════════════════════════════════════╝
     Fix v2.1: cửa sổ không mở lúc load (state minimized sai),
@@ -9,7 +9,7 @@
 ]]
 
 local Meizu = {}
-Meizu.Version      = "3.0.1"
+Meizu.Version      = "2.1"
 Meizu.Flags        = {}
 Meizu.CurrentTheme = "Meizu"
 
@@ -27,7 +27,7 @@ local Themes = {
     Meizu    = {Background=Color3.fromRGB(11,12,17),  Sidebar=Color3.fromRGB(15,17,23),  Card=Color3.fromRGB(20,23,31),  Element=Color3.fromRGB(27,31,41),  Stroke=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(235,238,245), Secondary=Color3.fromRGB(140,146,165), Accent=Color3.fromRGB(124,92,255),  Accent2=Color3.fromRGB(62,199,255)},
     Midnight = {Background=Color3.fromRGB(8,12,20),   Sidebar=Color3.fromRGB(11,16,26),  Card=Color3.fromRGB(15,22,35),  Element=Color3.fromRGB(20,29,46),  Stroke=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(224,236,248), Secondary=Color3.fromRGB(120,140,168), Accent=Color3.fromRGB(41,199,255),  Accent2=Color3.fromRGB(99,102,241)},
     Rose     = {Background=Color3.fromRGB(15,11,14),  Sidebar=Color3.fromRGB(19,14,18),  Card=Color3.fromRGB(25,18,24),  Element=Color3.fromRGB(33,24,32),  Stroke=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(245,235,240), Secondary=Color3.fromRGB(165,140,150), Accent=Color3.fromRGB(255,92,128),  Accent2=Color3.fromRGB(255,159,122)},
-    Amethyst = {Background=Color3.fromRGB(13,11,18),  Sidebar=Color3.fromRGB(17,14,24),  Card=Color3.fromRGB(23,19,33),  Element=Color3.fromRGB(31,25,44),  Stroke=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(240,236,248), Secondary=Color3.fromRGB(150,145,172), Accent=Color3.fromRGB(168,85,247), Accent2=Color3.fromRGB(99,102,241)},
+    Amethyst = {Background=Color3.fromRGB(13,11,18),  Sidebar=Color3.fromRGB(17,14,24),  Card=Color3.fromRGB(23,19,33),  Element=Color3.fromRGB(31,25,44),  Stroke=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(240,236,248), Secondary=Color3.fromRGB(150,145,172), Accent=Color3.fromRGB(168,85,247),  Accent2=Color3.fromRGB(99,102,241)},
     Light    = {Background=Color3.fromRGB(236,239,246),Sidebar=Color3.fromRGB(243,245,250),Card=Color3.fromRGB(255,255,255),Element=Color3.fromRGB(232,236,244),Stroke=Color3.fromRGB(25,28,36),   Text=Color3.fromRGB(22,25,33),  Secondary=Color3.fromRGB(105,112,130), Accent=Color3.fromRGB(91,76,224),  Accent2=Color3.fromRGB(42,166,255)},
 }
 Meizu.Themes = Themes
@@ -59,34 +59,6 @@ local function Tween(obj, time, props, style, direction, delayTime)
     tween:Play()
     return tween
 end
-
--- // Animation / layout constants
-local ORB_SIZE = UDim2.new(0, 50, 0, 50)
-local ORB_POSITION = UDim2.new(0.120833337 - 0.1, 0, 0.0952890813 + 0.01, 0)
-local CLICK_SCALE = 0.965
-
-local function GetOrCreateScale(obj, name)
-    local scale = obj:FindFirstChild(name)
-    if scale and scale:IsA("UIScale") then return scale end
-    scale = Instance.new("UIScale")
-    scale.Name = name
-    scale.Scale = 1
-    scale.Parent = obj
-    return scale
-end
-
-local function PressFeedback(button)
-    if not button or not button.Parent then return end
-    local scale = GetOrCreateScale(button, "__MeizuPressScale")
-    Tween(scale, 0.08, {Scale = CLICK_SCALE}, Enum.EasingStyle.Quad)
-end
-
-local function ReleaseFeedback(button)
-    if not button or not button.Parent then return end
-    local scale = GetOrCreateScale(button, "__MeizuPressScale")
-    Tween(scale, 0.16, {Scale = 1}, Enum.EasingStyle.Back)
-end
-
 
 -- CanvasGroup nhưng tự fallback về Frame nếu executor không hỗ trợ
 local function NewGroup(props)
@@ -167,20 +139,12 @@ end
 
 local function OnClick(button, fn)
     local clickPos
-    pcall(function() button.ClipsDescendants = true end)
     button.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             clickPos = Vector2.new(input.Position.X, input.Position.Y)
-            PressFeedback(button)
-        end
-    end)
-    button.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            ReleaseFeedback(button)
         end
     end)
     button.Activated:Connect(function()
-        ReleaseFeedback(button)
         Ripple(button, clickPos)
         fn()
     end)
@@ -578,23 +542,19 @@ ElementBuilders.AddButton = function(tab, info)
         BackgroundColor3 = theme.Element, Text = info.Title or "Button", Font = Enum.Font.GothamMedium,
         TextSize = 13, TextColor3 = theme.Text, AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 102})
     Create("UICorner", {Parent = button, CornerRadius = UDim.new(0, 8)})
-    local buttonStroke = Create("UIStroke", {Parent = button, Thickness = 1, Transparency = 1})
-    RegisterTheme(buttonStroke, "Color", "Accent")
 
     if info.Primary then
         MakeGradient(button)
         RegisterTheme(button, "TextColor3", "Background")
-        OnHover(button, {BackgroundTransparency = 0.35}, {BackgroundTransparency = 0}, 0.2)
-        button.MouseEnter:Connect(function() Tween(buttonStroke, 0.18, {Transparency = 0.25}) end)
-        button.MouseLeave:Connect(function() Tween(buttonStroke, 0.22, {Transparency = 1}) end)
+        local stroke = Create("UIStroke", {Parent = button, Thickness = 1, Transparency = 1})
+        RegisterTheme(stroke, "Color", "Accent")
+        OnHover(button, {Transparency = 0.35}, {Transparency = 1}, 0.2)
     else
         RegisterTheme(button, "BackgroundColor3", "Element")
         RegisterTheme(button, "TextColor3", "Text")
         OnHover(button,
             {BackgroundColor3 = Themes[Meizu.CurrentTheme].Accent, BackgroundTransparency = 0.82},
             {BackgroundColor3 = Themes[Meizu.CurrentTheme].Element, BackgroundTransparency = 0})
-        button.MouseEnter:Connect(function() Tween(buttonStroke, 0.18, {Transparency = 0.72}) end)
-        button.MouseLeave:Connect(function() Tween(buttonStroke, 0.22, {Transparency = 1}) end)
     end
 
     OnClick(button, function()
@@ -1415,72 +1375,35 @@ function Meizu.CreateWindow(options)
     local toggleKey = options.ToggleKey or Enum.KeyCode.RightShift
     local vs = GetViewport()
 
-    ------------------------------------------------ ORB 50x50
+    ------------------------------------------------ ORB 50x50 (góc trái dưới)
     local orb = Create("ImageButton", {Parent = Root, Name = "ToggleOrb",
-        Position = ORB_POSITION, AnchorPoint = Vector2.new(0, 0),
-        Size = ORB_SIZE, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 18, 1, -18), AnchorPoint = Vector2.new(0, 1),
+        Size = UDim2.new(0, 50, 0, 50), BackgroundTransparency = 1,
         AutoButtonColor = false, ZIndex = 150, Visible = false})
     local glow = Create("ImageLabel", {Parent = orb, AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(74, 74),
+        Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(72, 72),
         BackgroundTransparency = 1, Image = "rbxassetid://6014261993",
-        ImageColor3 = theme.Accent, ImageTransparency = 0.62, ZIndex = 149})
+        ImageColor3 = theme.Accent, ImageTransparency = 0.6, ZIndex = 149})
     RegisterTheme(glow, "ImageColor3", "Accent")
-
-    local orbRing = Create("Frame", {Parent = orb, AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(48, 48),
-        BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 150})
-    Create("UICorner", {Parent = orbRing, CornerRadius = UDim.new(1, 0)})
-    local orbStroke = Create("UIStroke", {Parent = orbRing, Thickness = 1.2, Transparency = 0.28})
-    RegisterTheme(orbStroke, "Color", "Accent")
-
     local circle = Create("Frame", {Parent = orb, AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(44, 44),
-        BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 151})
-    local circleGradient = MakeGradient(circle)
-    circleGradient.Rotation = 25
+        BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 150})
+    MakeGradient(circle)
     Create("UICorner", {Parent = circle, CornerRadius = UDim.new(1, 0)})
     local letter = Create("TextLabel", {Parent = circle, AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5), BackgroundTransparency = 1, Font = Enum.Font.GothamBlack,
-        Text = "M", TextSize = 20, TextColor3 = theme.Background, Size = UDim2.fromOffset(30, 30), ZIndex = 153})
+        Text = "M", TextSize = 20, TextColor3 = theme.Background, Size = UDim2.fromOffset(30, 30)})
     RegisterTheme(letter, "TextColor3", "Background")
 
-    local orbHoverScale = GetOrCreateScale(orb, "__MeizuOrbScale")
-    orb.MouseEnter:Connect(function()
-        Tween(orbHoverScale, 0.2, {Scale = 1.06}, Enum.EasingStyle.Back)
-        Tween(glow, 0.2, {ImageTransparency = 0.3})
-        Tween(orbStroke, 0.2, {Transparency = 0.05, Thickness = 1.8})
-    end)
-    orb.MouseLeave:Connect(function()
-        Tween(orbHoverScale, 0.22, {Scale = 1}, Enum.EasingStyle.Quint)
-        Tween(glow, 0.22, {ImageTransparency = 0.62})
-        Tween(orbStroke, 0.22, {Transparency = 0.28, Thickness = 1.2})
-    end)
-
     task.spawn(function()
         while orb.Parent do
-            if orb.Visible then
-                local up = Tween(circle, 1.05, {Size = UDim2.fromOffset(47, 47)}, Enum.EasingStyle.Sine)
-                Tween(glow, 1.05, {ImageTransparency = 0.38})
-                Tween(orbRing, 1.05, {Size = UDim2.fromOffset(49, 49)}, Enum.EasingStyle.Sine)
-                pcall(function() up.Completed:Wait() end)
-                if not orb.Parent then break end
-                local down = Tween(circle, 1.05, {Size = UDim2.fromOffset(44, 44)}, Enum.EasingStyle.Sine)
-                Tween(glow, 1.05, {ImageTransparency = 0.62})
-                Tween(orbRing, 1.05, {Size = UDim2.fromOffset(48, 48)}, Enum.EasingStyle.Sine)
-                pcall(function() down.Completed:Wait() end)
-            else
-                task.wait(0.35)
-            end
-        end
-    end)
-
-    task.spawn(function()
-        while orb.Parent do
-            if orb.Visible and circleGradient.Parent then
-                Tween(circleGradient, 1.8, {Rotation = circleGradient.Rotation + 180}, Enum.EasingStyle.Linear)
-            else
-                task.wait(0.5)
-            end
+            local up = Tween(circle, 1.1, {Size = UDim2.fromOffset(48, 48)}, Enum.EasingStyle.Sine)
+            Tween(glow, 1.1, {ImageTransparency = 0.35})
+            up.Completed:Wait()
+            if not orb.Parent then break end
+            local down = Tween(circle, 1.1, {Size = UDim2.fromOffset(44, 44)}, Enum.EasingStyle.Sine)
+            Tween(glow, 1.1, {ImageTransparency = 0.6})
+            down.Completed:Wait()
         end
     end)
 
@@ -1528,7 +1451,6 @@ function Meizu.CreateWindow(options)
     -- FIX CHÍNH: khởi tạo đúng trạng thái — cửa sổ đang ẩn = đang minimized
     local minimized = true
     local animBusy = false
-    local setMinimized
 
     local function titleButton(icon, xPos, isClose)
         local btn = Create("TextButton", {Parent = titleBar, AnchorPoint = Vector2.new(1, 0.5),
@@ -1536,20 +1458,12 @@ function Meizu.CreateWindow(options)
             BackgroundTransparency = 1, Text = icon, Font = Enum.Font.GothamBold, TextSize = 14,
             TextColor3 = theme.Text, AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 103})
         Create("UICorner", {Parent = btn, CornerRadius = UDim.new(1, 0)})
-        local stroke = Create("UIStroke", {Parent = btn, Thickness = 1, Transparency = 1})
-        RegisterTheme(stroke, "Color", isClose and "Stroke" or "Accent")
         local hoverColor = isClose and Color3.fromRGB(255, 92, 92) or theme.Text
         btn.MouseEnter:Connect(function()
-            Tween(btn, 0.16, {BackgroundTransparency = 0.84, TextColor3 = hoverColor}, Enum.EasingStyle.Quint)
-            Tween(stroke, 0.16, {Transparency = 0.72})
-            local scale = GetOrCreateScale(btn, "__MeizuHoverScale")
-            Tween(scale, 0.18, {Scale = 1.04}, Enum.EasingStyle.Back)
+            Tween(btn, 0.15, {BackgroundTransparency = 0.86, TextColor3 = hoverColor})
         end)
         btn.MouseLeave:Connect(function()
             Tween(btn, 0.2, {BackgroundTransparency = 1, TextColor3 = Themes[Meizu.CurrentTheme].Text})
-            Tween(stroke, 0.2, {Transparency = 1})
-            local scale = GetOrCreateScale(btn, "__MeizuHoverScale")
-            Tween(scale, 0.18, {Scale = 1}, Enum.EasingStyle.Quint)
         end)
         return btn
     end
@@ -1623,7 +1537,6 @@ function Meizu.CreateWindow(options)
         for _, t in ipairs(tabs) do
             local active = (t == tab)
             Tween(t.button.back, 0.2, {BackgroundTransparency = active and 0.65 or 1})
-            Tween(t.button.stroke, 0.2, {Transparency = active and 0.68 or 1})
             Tween(t.button.label, 0.2, {TextColor3 = active and th.Text or th.Secondary})
         end
         local btnAbs = tab.button.holder.AbsolutePosition
@@ -1659,8 +1572,6 @@ function Meizu.CreateWindow(options)
             BackgroundColor3 = theme.Element, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 102})
         Create("UICorner", {Parent = back, CornerRadius = UDim.new(0, 8)})
         RegisterTheme(back, "BackgroundColor3", "Element")
-        local tabStroke = Create("UIStroke", {Parent = back, Thickness = 1, Transparency = 1})
-        RegisterTheme(tabStroke, "Color", "Accent")
         local btn = Create("TextButton", {Parent = holder, Size = UDim2.fromScale(1, 1),
             BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 103})
         local labelX = 14
@@ -1697,24 +1608,17 @@ function Meizu.CreateWindow(options)
         local tab = {
             Title = title, canvas = canvas, list = list, _staggered = false,
             _innerWidth = windowSize.X.Offset - tabWidth - 1 - 22 - 3 - 24,
-            button = {holder = holder, back = back, stroke = tabStroke, label = label, btn = btn},
+            button = {holder = holder, back = back, label = label, btn = btn},
         }
         for name, builder in pairs(ElementBuilders) do
             tab[name] = function(_, info2) return builder(tab, info2) end
         end
         table.insert(tabs, tab)
-        local tabScale = GetOrCreateScale(btn, "__MeizuTabScale")
-        btn.Activated:Connect(function()
-            PressFeedback(btn)
-            task.defer(function() ReleaseFeedback(btn) end)
-            selectTab(tab)
-        end)
+        btn.Activated:Connect(function() selectTab(tab) end)
         btn.MouseEnter:Connect(function()
-            Tween(tabScale, 0.18, {Scale = 1.015}, Enum.EasingStyle.Back)
             if Window.ActiveTab ~= tab then Tween(back, 0.15, {BackgroundTransparency = 0.75}) end
         end)
         btn.MouseLeave:Connect(function()
-            Tween(tabScale, 0.18, {Scale = 1}, Enum.EasingStyle.Quint)
             if Window.ActiveTab ~= tab then Tween(back, 0.2, {BackgroundTransparency = 1}) end
         end)
         if not firstTab then firstTab = tab end
@@ -1725,50 +1629,12 @@ function Meizu.CreateWindow(options)
         local tab = (type(target) == "number") and tabs[target] or target
         if tab then selectTab(tab) end
     end
-    function Window:SetTitle(t) titleLabel.Text = tostring(t or "") end
-    function Window:SetSubTitle(t) subLabel.Text = tostring(t or "") end
-    function Window:IsMinimized() return minimized end
-    function Window:Restore() setMinimized(false) end
-    function Window:SetPosition(position, animated)
-        if typeof(position) ~= "UDim2" then return false end
-        lastWindowPos = position
-        if animated and not minimized then
-            Tween(winFrame, 0.38, {Position = position}, Enum.EasingStyle.Quint)
-        else
-            winFrame.Position = position
-        end
-        return true
-    end
-    function Window:GetPosition() return winFrame.Position end
-    function Window:SetSize(size, animated)
-        if typeof(size) ~= "UDim2" then return false end
-        windowSize = size
-        if animated and not minimized then
-            Tween(winFrame, 0.4, {Size = size}, Enum.EasingStyle.Back)
-        else
-            winFrame.Size = size
-        end
-        return true
-    end
-    function Window:GetSize() return windowSize end
-    function Window:Center(animated)
-        local current = GetViewport()
-        return self:SetPosition(UDim2.fromOffset(current.X / 2, current.Y / 2), animated ~= false)
-    end
-    function Window:Notify(info) return Meizu.Notify(info) end
-    function Window:Dialog(info) return Meizu.Prompt(info) end
-    function Window:SetTheme(name) return Meizu.SetTheme(name) end
-    function Window:GetTheme() return Meizu.CurrentTheme end
-    function Window:SetToggleKey(key)
-        if typeof(key) ~= "EnumItem" then return false end
-        toggleKey = key
-        return true
-    end
-    function Window:GetToggleKey() return toggleKey end
+    function Window:SetTitle(t) titleLabel.Text = t end
+    function Window:SetSubTitle(t) subLabel.Text = t end
 
     ------------------------------------------------ Minimize / morph orb
     local lastWindowPos = nil
-    setMinimized = function(state)
+    local function setMinimized(state)
         if animBusy or state == minimized then return end
         animBusy = true
         -- khóa an toàn: nếu animation bị lỗi/kẹt thì tự mở khóa
@@ -1801,24 +1667,21 @@ function Meizu.CreateWindow(options)
                 winFrame.Visible = true
                 winFrame.Size = UDim2.fromOffset(50, 50)
                 winFrame.Position = UDim2.fromOffset(orbCenter.X, orbCenter.Y)
-                scaler.Rotation = -1.2
                 bodyCorner.CornerRadius = UDim.new(0, 25)
                 Tween(bodyStroke, 0.35, {Transparency = 0.92})
                 Tween(shadow, 0.45, {ImageTransparency = 0.35})
                 Tween(bodyCorner, 0.5, {CornerRadius = UDim.new(0, 14)})
                 Tween(winFrame, 0.5, {Size = windowSize, Position = lastWindowPos or UDim2.fromOffset(vs.X / 2, vs.Y / 2)},
                     Enum.EasingStyle.Back)
-                Tween(scaler, 0.5, {Rotation = 0}, Enum.EasingStyle.Quint)
             else
                 -- mở lần đầu từ giữa màn hình
                 winFrame.Visible = true
                 winFrame.Position = lastWindowPos or UDim2.fromOffset(vs.X / 2, vs.Y / 2)
                 winFrame.Size = windowSize
                 scaler.Size = UDim2.fromScale(0.6, 0.6)
-                scaler.Rotation = -1.5
                 Tween(bodyStroke, 0.3, {Transparency = 0.92})
                 Tween(shadow, 0.5, {ImageTransparency = 0.35})
-                Tween(scaler, 0.55, {Size = UDim2.fromScale(1, 1), Rotation = 0}, Enum.EasingStyle.Back)
+                Tween(scaler, 0.55, {Size = UDim2.fromScale(1, 1)}, Enum.EasingStyle.Back)
             end
         end
         animBusy = false
@@ -1883,30 +1746,30 @@ function Meizu.CreateWindow(options)
                     winFrame.Position = newCenter
                 end
             end
-        end
+        end)
     end)
 
-    -- kéo orb + click mở (giữ AnchorPoint cố định để không lệch tọa độ)
+    -- kéo orb + click mở
     local orbMoved = false
     orb.InputBegan:Connect(function(input)
         if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
         orbMoved = false
-        PressFeedback(orb)
         local start = Vector2.new(input.Position.X, input.Position.Y)
-        local startAbs = orb.AbsolutePosition
+        orb.AnchorPoint = Vector2.new(0, 0)
+        orb.Position = UDim2.fromOffset(orb.AbsolutePosition.X, orb.AbsolutePosition.Y)
+        local startPos = orb.Position
         TrackMouse(function(mouse)
             local dx, dy = mouse.X - start.X, mouse.Y - start.Y
             if math.abs(dx) + math.abs(dy) > 6 then orbMoved = true end
             if orbMoved and orb.Parent then
-                orb.Position = UDim2.fromOffset(startAbs.X + dx, startAbs.Y + dy)
+                orb.Position = UDim2.fromOffset(startPos.X.Offset + dx, startPos.Y.Offset + dy)
             end
         end, function()
-            ReleaseFeedback(orb)
             if orbMoved and orb.Parent then
                 local vs = GetViewport()
-                local newX = math.clamp(orb.AbsolutePosition.X, 8, vs.X - orb.AbsoluteSize.X - 8)
-                local newY = math.clamp(orb.AbsolutePosition.Y, 8, vs.Y - orb.AbsoluteSize.Y - 8)
-                Tween(orb, 0.42, {Position = UDim2.fromOffset(newX, newY)}, Enum.EasingStyle.Back)
+                local newX = math.clamp(orb.AbsolutePosition.X, 8, vs.X - 58)
+                local newY = math.clamp(orb.AbsolutePosition.Y, 8, vs.Y - 58)
+                Tween(orb, 0.4, {Position = UDim2.fromOffset(newX, newY)}, Enum.EasingStyle.Back)
             end
         end)
     end)
@@ -1989,7 +1852,6 @@ function Meizu.CreateWindow(options)
 end
 
 Meizu.CreateGui = Meizu.CreateWindow
-Meizu.Dialog = Meizu.Prompt
 
 function Meizu.Destroy()
     if Root then Root:Destroy() end
@@ -1997,3 +1859,4 @@ function Meizu.Destroy()
 end
 
 return Meizu
+
