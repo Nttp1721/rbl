@@ -1,125 +1,154 @@
--- MEIZU UI LIBRARY v3.0.1 — TEST EXAMPLE
---
--- Local test: đặt MeizuLibrary_v3.0.1.lua cùng thư mục executor rồi chạy file này.
--- GitHub: sau khi ông upload/replace MeizuLibrary.lua bằng v3.0.1, có thể đổi LOCAL_TEST = false.
+--[[
+    MEIZU LIBRARY — EXAMPLE / TEST SCRIPT
+]]
 
-local LOCAL_TEST = true
-local Library
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"))()
 
-if LOCAL_TEST and readfile and isfile and isfile("MeizuLibrary_v3.0.1.lua") then
-    Library = loadstring(readfile("MeizuLibrary_v3.0.1.lua"))()
-else
-    local url = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"
-    Library = loadstring(game:HttpGet(url))()
-end
-
-local Window = Library.CreateWindow({
+local Window = Library:CreateWindow({
     Title = "Meizu Hub",
-    SubTitle = "v3.0.1 · Animation Test",
-    Theme = "Meizu",
-    ToggleKey = Enum.KeyCode.RightShift,
-    Size = UDim2.fromOffset(620, 450),
-    TabWidth = 165,
+    SubTitle = "v2.0 • by Nttp1721",
+    Theme = "Dark",
+    Accent = Color3.fromRGB(88, 101, 242),
+    ToggleKeybind = Enum.KeyCode.RightControl,
+    ToggleUIButton = true, -- nút tròn nổi 50x50 góc trái
+    Size = UDim2.fromOffset(600, 430),
 })
 
-local Main = Window:AddTab({Title = "Trang chính"})
-Main:AddSection({Title = "Controls"})
-Main:AddParagraph({
-    Title = "Meizu v3.0.1",
-    Content = "Test animation, orb, tabs, controls và API Window mới.",
+Library:Notify({
+    Title = "Meizu Library",
+    Content = "Load thành công! Nhấn <b>RightControl</b> để ẩn/hiện UI.",
+    Duration = 6,
 })
 
-local enabled = Main:AddToggle({
-    Title = "Auto Farm",
+--// ================= TAB: MAIN =================
+local Main = Window:CreateTab("Main", "rbxassetid://10723407389")
+
+local Combat = Main:CreateSection("Combat")
+Combat:CreateToggle({
+    Title = "Kill Aura",
+    Description = "Tự động tấn công kẻ địch xung quanh",
     Default = false,
-    ConfigKey = "autofarm",
-    Callback = function(v) print("Auto Farm:", v) end,
+    Flag = "KillAura",
+    Callback = function(v) print("[Main] Kill Aura =", v) end,
+})
+Combat:CreateSlider({
+    Title = "Kill Aura Range",
+    Description = "Phạm vi sát thương",
+    Min = 10, Max = 500, Default = 120, Rounding = 0,
+    Flag = "AuraRange",
+    Callback = function(v) print("[Main] Range =", v) end,
+})
+Combat:CreateDropdown({
+    Title = "Target Mode",
+    Options = {"Closest", "Lowest HP", "Random", "All"},
+    Default = "Closest",
+    Flag = "TargetMode",
+    Callback = function(v) print("[Main] Target =", v) end,
+})
+Combat:CreateMultiDropdown({
+    Title = "Auto Collect",
+    Options = {"Coins", "Gems", "Chests", "Orbs", "Keys"},
+    Default = {"Coins", "Gems"},
+    Flag = "AutoCollect",
+    Callback = function(list) print("[Main] Collect:", table.concat(list, ", ")) end,
 })
 
-Main:AddSlider({
-    Title = "Speed", Min = 16, Max = 200, Default = 50, Suffix = " ws",
-    ConfigKey = "speed", Callback = function(v) print("Speed:", v) end,
-})
-
-Main:AddDropdown({
-    Title = "Weapon",
-    Values = {"Sword", "Gun", "Bow"},
-    Default = "Gun",
-    ConfigKey = "weapon",
-    Callback = function(v) print("Weapon:", v) end,
-})
-
-Main:AddDropdown({
-    Title = "Features",
-    Values = {"ESP", "Speed", "Fly", "NoClip"},
-    Multi = true,
-    Default = {"ESP", "Speed"},
-    ConfigKey = "features",
-    Callback = function(v) print("Features:", table.concat(v, ", ")) end,
-})
-
-Main:AddInput({
-    Title = "Player Name", PlaceholderText = "Enter name...",
-    ConfigKey = "player_name", Callback = print,
-})
-
-Main:AddKeybind({
-    Title = "Hotkey", Default = Enum.KeyCode.F, Mode = "Toggle",
-    ConfigKey = "hotkey", Callback = function(v) print("Hotkey:", v) end,
-})
-
-Main:AddColorPicker({
-    Title = "Color", Default = Color3.fromRGB(124, 92, 255),
-    ConfigKey = "color", Callback = function(v) print("Color:", v) end,
-})
-
-Main:AddProgressBar({Title = "Progress", Default = 0.65, ConfigKey = "progress"})
-
-Main:AddButton({
-    Title = "Success Notify", Primary = true,
+local Misc = Main:CreateSection("Misc")
+Misc:CreateButton({
+    Title = "Send Notification",
+    Description = "Thử hệ thống thông báo",
     Callback = function()
-        Library.Notify({Title = "Success", Content = "Animation + Notify OK", Type = "Success"})
+        Library:Notify({Title = "Hello!", Content = "Đây là notification test!", Duration = 4})
     end,
 })
-
-Main:AddButton({
-    Title = "Prompt",
+Misc:CreateButton({
+    Title = "Open Dialog",
     Callback = function()
-        Library.Prompt({
-            Title = "Confirm",
-            Content = "Test prompt của Meizu.",
-            Callback = function(ok) print("Prompt:", ok) end,
+        Window:Dialog({
+            Title = "Teleport",
+            Content = "Bạn có muốn teleport đến Boss không?",
+            Buttons = {
+                {Title = "Cancel"},
+                {Title = "Teleport", Variant = "Primary", Callback = function()
+                    Library:Notify({Title = "Teleported!", Content = "Đã dịch chuyển thành công!"})
+                end},
+            },
         })
     end,
 })
-
-local UI = Window:AddTab({Title = "Animation"})
-UI:AddSection({Title = "Window API"})
-
-UI:AddButton({Title = "Center", Primary = true, Callback = function() Window:Center(true) end})
-UI:AddButton({Title = "Minimize", Callback = function() Window:Minimize() end})
-UI:AddButton({Title = "Restore", Callback = function() Window:Restore() end})
-UI:AddButton({
-    Title = "Resize", Callback = function()
-        local size = Window:GetSize()
-        Window:SetSize(size.X.Offset < 680 and UDim2.fromOffset(720, 500) or UDim2.fromOffset(620, 450), true)
+Misc:CreateKeybind({
+    Title = "Toggle Kill Aura",
+    Default = Enum.KeyCode.E,
+    Flag = "AuraKey",
+    Callback = function(key)
+        Library.Flags.KillAura = not Library.Flags.KillAura
+        print("[Main] Kill Aura toggled:", Library.Flags.KillAura)
     end,
 })
-UI:AddButton({
-    Title = "Change Theme", Callback = function()
-        local themes = Library.ThemeList()
-        local current = Window:GetTheme()
-        local i = table.find(themes, current) or 1
-        i = (i % #themes) + 1
-        Window:SetTheme(themes[i])
+Misc:CreateInput({
+    Title = "Webhook",
+    Placeholder = "Nhập URL...",
+    Flag = "Webhook",
+    Callback = function(text) print("[Main] Webhook:", text) end,
+})
+
+--// ================= TAB: PLAYER =================
+local Player = Window:CreateTab("Player")
+
+local Movement = Player:CreateSection("Movement")
+Movement:CreateToggle({Title = "Enable Character Mods", Flag = "CharMods", Default = false})
+Movement:CreateSlider({
+    Title = "WalkSpeed", Min = 16, Max = 300, Default = 16, Flag = "WalkSpeed",
+    Callback = function(v)
+        local char = game.Players.LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum and Library.Flags.CharMods then hum.WalkSpeed = v end
+    end,
+})
+Movement:CreateSlider({
+    Title = "JumpPower", Min = 50, Max = 300, Default = 50, Flag = "JumpPower",
+    Callback = function(v)
+        local char = game.Players.LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum and Library.Flags.CharMods then
+            hum.UseJumpPower = true
+            hum.JumpPower = v
+        end
     end,
 })
 
-Window:AddConfigTab()
-
-Library.Notify({
-    Title = "Meizu v3.0.1",
-    Content = "Library loaded successfully.",
-    Type = "Success",
-    Duration = 3,
+local CharSec = Player:CreateSection("Character")
+CharSec:CreateToggle({
+    Title = "Noclip",
+    Flag = "Noclip",
+    Callback = function(v) _G.MeizuNoclip = v end,
 })
+task.spawn(function()
+    local RunService = game:GetService("RunService")
+    RunService.Stepped:Connect(function()
+        if _G.MeizuNoclip then
+            local char = game.Players.LocalPlayer.Character
+            if char then
+                for _, p in ipairs(char:GetDescendants()) do
+                    if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
+                end
+            end
+        end
+    end)
+end)
+
+--// ================= TAB: VISUALS =================
+local Visuals = Window:CreateTab("Visuals")
+Visuals:CreateColorPicker({
+    Title = "ESP Color",
+    Default = Color3.fromRGB(88, 101, 242),
+    Flag = "ESPColor",
+    Callback = function(c) print("[Visuals] Color:", c) end,
+})
+Visuals:CreateParagraph({
+    Title = "Thông tin",
+    Content = "Paragraph hỗ trợ RichText: <b>in đậm</b>, <i>in nghiêng</i>, <font color='rgb(88,101,242)'>màu accent</font>.",
+})
+
+Window:SelectTab(1)
+print("✅ Meizu Library test loaded!")
