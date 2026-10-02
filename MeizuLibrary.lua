@@ -5,14 +5,14 @@
     ██║╚██╔╝██║██╔══╝  ██║╚════██║  ╚██╔╝
     ██║ ╚═╝ ██║███████╗██║███████║   ██║
     ╚═╝     ╚═╝╚══════╝╚═╝╚══════╝   ╚═╝
-    MEIZU LIBRARY v2.1 — Modern UI Library (Fluent-inspired)
+    MEIZU LIBRARY v2.2 — Modern UI Library (Fluent-inspired)
     =========================================================
     API:
       Library:CreateWindow{Title, SubTitle, Theme, Accent, ToggleKeybind,
                            ToggleUIButton, ToggleImage, ToggleText, Size}
       Window:CreateTab(name, iconId, order) / Window:SelectTab(1)
       Window:Toggle(state) / Window:Dialog{Title, Content, Buttons}
-      Window:SetToggleImage(assetIdHoặcUrl | nil)  -- đổi hình nút tròn nổi
+      Window:SetToggleImage(assetIdHoặcUrl | nil)  -- đổi hình nút nổi
       Tab/Section:CreateButton / CreateToggle / CreateSlider / CreateDropdown
                   CreateMultiDropdown / CreateKeybind / CreateInput
                   CreateColorPicker / CreateParagraph / CreateSection
@@ -23,12 +23,18 @@
 ]]
 
 --// ================== CẤU HÌNH NHANH ==================
-local TOGGLE_BUTTON_SIZE     = UDim2.new(0, 50, 0, 50)                                  -- Nút tròn nổi
-local TOGGLE_BUTTON_POSITION = UDim2.new(0.120833337 - 0.1, 0, 0.0952890813 + 0.01, 0)  -- Vị trí theo yêu cầu
+local TOGGLE_BUTTON_SIZE     = UDim2.new(0, 50, 0, 50)                                  -- Nút nổi
+local TOGGLE_BUTTON_POSITION = UDim2.new(0.120833337 - 0.1, 0, 0.0952890813 + 0.01, 0)  -- Vị trí
+
+-- Hình mặc định của nút nổi (URL PNG hoặc rbxassetid://ID)
+local TOGGLE_BUTTON_IMAGE    = "https://i.ibb.co/S7rpHJJN/meizuxp.png"
+
+-- Bo góc nút nổi theo kiểu testtintro.lua (KHÔNG tròn hoàn hảo)
+local TOGGLE_BUTTON_RADIUS   = 12
 --// ====================================================
 
 local MeizuLibrary = {
-    Version       = "2.1",
+    Version       = "2.2",
     Flags         = {},
     Theme         = "Dark",
     Accent        = Color3.fromRGB(88, 101, 242),
@@ -275,7 +281,6 @@ local function CreateScreenGui()
 end
 
 --// ==================== DRAG PIPELINE (fix kéo trên mobile) ====================
--- Khi kéo slider/colorpicker: khoá ScrollingFrame để gesture không bị nuốt
 local function FindScrollAncestor(obj)
     local p = obj and obj.Parent
     while p and p ~= game do
@@ -328,7 +333,6 @@ local function ResolveImageAsset(id)
     if tonumber(id) then return "rbxassetid://" .. id end
     if id:sub(1, 8) == "rbxasset" then return id end
     if id:sub(1, 4) == "http" then
-        -- URL ngoài: tải về + load bằng getcustomasset (executoronly)
         local ok, content = pcall(function() return game:HttpGet(id, true) end)
         if not ok or not content then return nil end
         if writefile and getcustomasset then
@@ -348,7 +352,7 @@ local function ResolveImageAsset(id)
     return nil
 end
 
---// ============================ NOTIFICATIONS (v2.1 — fix) ============================
+--// ============================ NOTIFICATIONS (fix — không dùng AutomaticSize) ============================
 MeizuLibrary.Notify = function(a, b)
     local cfg = (a == MeizuLibrary) and b or a
     if type(cfg) == "string" then cfg = {Content = cfg, Duration = tonumber(b)} end
@@ -378,7 +382,7 @@ MeizuLibrary.Notify = function(a, b)
 
     MeizuLibrary._NotifCount = MeizuLibrary._NotifCount + 1
 
-    -- Tính kích thước thủ công (không dùng AutomaticSize — fix lỗi không hiện)
+    -- Tính kích thước thủ công
     local WIDTH = 300
     local PAD_T, PAD_B, PAD_L, PAD_R = 12, 14, 14, 10
     local textW = WIDTH - PAD_L - 6 - PAD_R
@@ -617,7 +621,7 @@ MeizuLibrary.CreateWindow = function(a, b)
     local SIDEBAR_W = 185
 
     local isOpen = false
-    local IconWrap, PulseRing
+    local IconWrap
 
     local Main = New("CanvasGroup", {
         Name = "Main",
@@ -951,7 +955,7 @@ MeizuLibrary.CreateWindow = function(a, b)
 
             local state = (cfg.Default == true)
             local function Render(v)
-                if not Card.Parent then return end
+                if not Track.Parent then return end
                 Tween(Track, 0.25, {BackgroundColor3 = v and MeizuLibrary.Accent or T("ToggleOff")})
                 Tween(Knob, 0.3, {Position = UDim2.new(0, v and 23 or 3, 0.5, 0)}, Enum.EasingStyle.Back)
             end
@@ -964,7 +968,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             end
             Card.Activated:Connect(function() Set(not state, true) end)
             Render(state)
-            OnThemeChange(function() Render(state) end) -- fix: toggle đổi màu theo theme
+            OnThemeChange(function() Render(state) end)
 
             local el = {Frame = Card, Get = function() return state end, Set = function(v) Set(v, false) end}
             BindFlag(el, cfg.Flag, state)
@@ -972,7 +976,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             return el
         end
 
-        --// SLIDER (fix kéo trên mobile: khoá scroll khi kéo)
+        --// SLIDER (kéo mượt trên mobile)
         function target:CreateSlider(cfg)
             cfg = cfg or {}
             local min, max = cfg.Min or 0, cfg.Max or 100
@@ -1079,7 +1083,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             return el
         end
 
-        --// DROPDOWN / MULTI (v2.1 fix: Callback giờ chạy thật)
+        --// DROPDOWN / MULTI DROPDOWN
         local function MakeDropdown(cfg, multi)
             cfg = cfg or {}
             local options = cfg.Options or {}
@@ -1247,7 +1251,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                         else
                             selected = optName
                         end
-                        Refresh(true) -- FIX: gọi Callback
+                        Refresh(true)
                         if not multi then SetOpen(false) end
                     end)
                     table.insert(OptionBtns, Opt)
@@ -1409,7 +1413,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             return el
         end
 
-        --// COLOR PICKER (v2.1 fix: kéo được ô SV trên mọi thiết bị)
+        --// COLOR PICKER (kéo được cả ô đậm/nhạt trên mọi thiết bị)
         function target:CreateColorPicker(cfg)
             cfg = cfg or {}
             local hasDesc = cfg.Description ~= nil
@@ -1418,7 +1422,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             local PANEL_H = 130
             local Card = MakeCard(headH, false)
 
-            -- Vùng header bấm để mở/đóng (KHÔNG đè lên panel màu)
+            -- Header bấm mở/đóng (không đè panel màu)
             local Header = New("TextButton", {
                 Text = "", AutoButtonColor = false, BackgroundTransparency = 1,
                 BackgroundColor3 = Color3.fromRGB(255, 255, 255),
@@ -1517,8 +1521,6 @@ MeizuLibrary.CreateWindow = function(a, b)
                 if fire then SafeCall(cfg.Callback, color) end
             end
 
-            -- FIX: bắt input trên TẤT CẢ các lớp (SV + 2 frame gradient)
-            -- và khoá scroll của trang khi đang kéo
             local draggingSV, draggingHue = false, false
             local releaseGuard = nil
 
@@ -1713,7 +1715,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             TextTruncate = Enum.TextTruncate.AtEnd,
             Parent = Btn,
         })
-        Register(Label, {TextColor3 = "SubText"}) -- fix: label đổi màu theo theme
+        Register(Label, {TextColor3 = "SubText"})
 
         Btn.MouseEnter:Connect(function()
             if Window._CurrentTab ~= Tab then Tween(Btn, 0.15, {BackgroundTransparency = 0.55}) end
@@ -1841,7 +1843,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         })
     end)
 
-    --// ==================== KEYBIND TOẦN CỤC (v2.1 fix) ====================
+    --// ==================== KEYBIND TOẦN CỤC ====================
     table.insert(MeizuLibrary._Connections, UserInputService.InputBegan:Connect(function(input, gp)
         if gp then return end
         if UserInputService:GetFocusedTextBox() then return end
@@ -1851,7 +1853,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         end
     end))
 
-    --// ==================== DIALOG (v2.1 — fix kích thước thủ công) ====================
+    --// ==================== DIALOG (kích thước thủ công — fix) ====================
     function Window:Dialog(cfg)
         cfg = cfg or {}
         local DW = 340
@@ -1950,29 +1952,31 @@ MeizuLibrary.CreateWindow = function(a, b)
         Tween(Card, 0.25, {GroupTransparency = 0})
     end
 
-    --// ==================== NÚT TRÒN NỔI (v2.1 — style mới + custom image) ====================
+    --// ==================== NÚT NỔI (v2.2 — bo góc kiểu testintro + PNG mặc định) ====================
     if config.ToggleUIButton ~= false then
+        local RADIUS = TOGGLE_BUTTON_RADIUS or 12
+
         local ToggleBtn = New("Frame", {
             Name = "ToggleButton",
             Size = TOGGLE_BUTTON_SIZE,
             Position = TOGGLE_BUTTON_POSITION,
-            BackgroundColor3 = MeizuLibrary.Accent,
+            BackgroundColor3 = T("Sidebar"),
             BorderSizePixel = 0,
             Active = true,
             ZIndex = 150,
             Parent = ScreenGui,
         })
-        RegisterAccent(ToggleBtn, "BackgroundColor3")
-        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = ToggleBtn}) -- tròn hoàn hảo
-        local BtnStroke = New("UIStroke", {Color = MeizuLibrary.Accent, Thickness = 2, Transparency = 0.15, Parent = ToggleBtn})
-        RegisterAccent(BtnStroke, "Color", 0.7)
+        Register(ToggleBtn, {BackgroundColor3 = "Sidebar"})
+        New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = ToggleBtn}) -- BO GÓC KIỂU TESTINTRO
+        local BtnStroke = New("UIStroke", {Color = MeizuLibrary.Accent, Thickness = 1.5, Transparency = 0.25, Parent = ToggleBtn})
+        RegisterAccent(BtnStroke, "Color")
 
         -- Bóng đổ mềm
         New("ImageLabel", {
             Name = "Shadow", BackgroundTransparency = 1,
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.new(1, 36, 1, 36),
+            Size = UDim2.new(1, 40, 1, 40),
             Image = "rbxassetid://6014261993",
             ImageColor3 = Color3.fromRGB(0, 0, 0),
             ImageTransparency = 0.45,
@@ -1981,50 +1985,42 @@ MeizuLibrary.CreateWindow = function(a, b)
             ZIndex = 148, Parent = ToggleBtn,
         })
 
-        -- Lớp bóng ánh (gloss) như icon mẫu
-        local Gloss = New("Frame", {
-            Size = UDim2.fromScale(1, 1),
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BorderSizePixel = 0, ZIndex = 152, Parent = ToggleBtn,
-        })
-        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Gloss})
-        New("UIGradient", {
-            Rotation = 90,
-            Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.55),
-                NumberSequenceKeypoint.new(0.5, 1),
-                NumberSequenceKeypoint.new(1, 1),
-            }),
-            Parent = Gloss,
-        })
-
+        -- Khung chứa hình (bo góc để PNG vuông tự bo theo khung)
         IconWrap = New("Frame", {
+            Name = "IconWrap",
             BackgroundTransparency = 1,
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.new(1, -16, 1, -16),
+            Size = UDim2.new(1, -10, 1, -10),
+            ClipsDescendants = true,
             ZIndex = 153, Parent = ToggleBtn,
         })
-
-        local ToggleLetter = New("TextLabel", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromScale(1, 1),
-            Font = Enum.Font.GothamBlack, TextSize = 20,
-            Text = config.ToggleText or "M",
-            TextColor3 = Color3.fromRGB(255, 255, 255),
-            ZIndex = 153, Parent = IconWrap,
-        })
+        New("UICorner", {CornerRadius = UDim.new(0, math.max(RADIUS - 4, 4)), Parent = IconWrap})
 
         local ToggleImageL = New("ImageLabel", {
+            Name = "ToggleImage",
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
             Visible = false,
             ScaleType = Enum.ScaleType.Fit,
+            ImageTransparency = 0,
             ZIndex = 153, Parent = IconWrap,
         })
-        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = ToggleImageL})
+        New("UICorner", {CornerRadius = UDim.new(0, math.max(RADIUS - 4, 4)), Parent = ToggleImageL})
 
-        -- Đổi hình nút tròn nổi (ID hoặc URL .png)
+        local ToggleLetter = New("TextLabel", {
+            Name = "ToggleLetter",
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            Font = Enum.Font.GothamBlack, TextSize = 20,
+            Text = config.ToggleText or "M",
+            TextColor3 = MeizuLibrary.Accent,
+            Visible = true,
+            ZIndex = 153, Parent = IconWrap,
+        })
+        RegisterAccent(ToggleLetter, "TextColor3")
+
+        -- Đổi hình nút nổi (ID hoặc URL .png tùy ý)
         function Window:SetToggleImage(id)
             if not id or id == "" then
                 MeizuLibrary._ToggleImage = nil
@@ -2039,19 +2035,20 @@ MeizuLibrary.CreateWindow = function(a, b)
                     ToggleImageL.Image = asset
                     ToggleImageL.Visible = true
                     ToggleLetter.Visible = false
-                    MeizuLibrary:Notify({Title = "Toggle Image", Content = "Đã đổi hình nút nổi thành công!", Duration = 3})
                 else
                     MeizuLibrary:Notify({
                         Title = "Toggle Image",
-                        Content = "Không tải được hình! Dùng <b>rbxassetid://ID</b> (khuyên dùng) hoặc URL .png nếu executor hỗ trợ getcustomasset.",
+                        Content = "Không tải được hình! Thử <b>rbxassetid://ID</b> (luôn hoạt động) hoặc URL .png nếu executor hỗ trợ getcustomasset.",
                         Duration = 6,
                     })
                 end
             end)
         end
 
-        if config.ToggleImage then
-            task.spawn(function() Window:SetToggleImage(config.ToggleImage) end)
+        -- Mặc định: dùng ảnh từ config hoặc ảnh Meizu mặc định
+        local defaultImg = config.ToggleImage or TOGGLE_BUTTON_IMAGE
+        if defaultImg then
+            task.spawn(function() Window:SetToggleImage(defaultImg) end)
         end
 
         -- Click vs Drag
@@ -2076,23 +2073,8 @@ MeizuLibrary.CreateWindow = function(a, b)
         ToggleBtn.MouseEnter:Connect(function() Tween(BtnScale, 0.2, {Scale = 1.08}) end)
         ToggleBtn.MouseLeave:Connect(function() Tween(BtnScale, 0.25, {Scale = 1}) end)
 
-        -- Pulse sóng lan khi UI đang ẩn
-        task.spawn(function()
-            while ToggleBtn.Parent and not MeizuLibrary.Destroyed do
-                if not isOpen then
-                    PulseRing = PulseRing
-                    local ring = ToggleBtn:FindFirstChild("PulseRing")
-                    if ring then
-                        ring.Size = UDim2.fromOffset(50, 50)
-                        ring.BackgroundTransparency = 0.65
-                        Tween(ring, 1.1, {Size = UDim2.fromOffset(88, 88), BackgroundTransparency = 1}, Enum.EasingStyle.Quad)
-                    end
-                end
-                task.wait(1.6)
-            end
-        end)
-
-        PulseRing = New("Frame", {
+        -- Pulse sóng lan khi UI ẩn
+        local PulseRing = New("Frame", {
             Name = "PulseRing",
             BackgroundColor3 = MeizuLibrary.Accent,
             BackgroundTransparency = 1,
@@ -2102,7 +2084,20 @@ MeizuLibrary.CreateWindow = function(a, b)
             ZIndex = 149, BorderSizePixel = 0, Parent = ToggleBtn,
         })
         RegisterAccent(PulseRing, "BackgroundColor3")
-        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = PulseRing})
+        New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = PulseRing})
+
+        task.spawn(function()
+            while ToggleBtn.Parent and not MeizuLibrary.Destroyed do
+                if not isOpen then
+                    if PulseRing.Parent then
+                        PulseRing.Size = UDim2.fromOffset(50, 50)
+                        PulseRing.BackgroundTransparency = 0.65
+                        Tween(PulseRing, 1.1, {Size = UDim2.fromOffset(88, 88), BackgroundTransparency = 1}, Enum.EasingStyle.Quad)
+                    end
+                end
+                task.wait(1.6)
+            end
+        end)
     end
 
     --// ==================== SEARCH FILTER ====================
@@ -2158,18 +2153,19 @@ MeizuLibrary.CreateWindow = function(a, b)
         Callback = function(v) MeizuLibrary.SoundEnabled = v end,
     })
 
-    -- Đổi hình nút tròn nổi
+    -- Đổi hình nút nổi
     local imgInput = SettingsTab:CreateInput({
         Title = "Toggle Image",
-        Placeholder = "rbxassetid://ID hoặc URL .png",
+        Placeholder = "URL .png hoặc rbxassetid://ID",
     })
     SettingsTab:CreateButton({
         Title = "Apply Toggle Image",
-        Description = "Đổi hình nút tròn nổi",
+        Description = "Đổi hình nút nổi bằng URL/ID bên trên",
         Callback = function() Window:SetToggleImage(imgInput.Get()) end,
     })
     SettingsTab:CreateButton({
         Title = "Reset Toggle Image",
+        Description = "Về chữ M mặc định",
         Callback = function() Window:SetToggleImage(nil) end,
     })
 
