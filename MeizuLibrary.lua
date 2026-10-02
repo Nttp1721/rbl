@@ -2156,7 +2156,7 @@ MeizuLibrary.CreateWindow = function(a, b)
     -- Đổi hình nút nổi
     local imgInput = SettingsTab:CreateInput({
         Title = "Toggle Image",
-        Placeholder = "URL .png hoặc rbxassetid://ID",
+        Placeholder = "PNG Hoặc ASSETID",
     })
     SettingsTab:CreateButton({
         Title = "Apply Toggle Image",
