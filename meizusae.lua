@@ -30,7 +30,7 @@ do
       3. Chống chạy trùng + tải ảnh PNG
       4. Loader
       5. Tải thư viện Fluent
-      6. Window (chưa tạo tab - tab do bộ não Chilli tự tạo qua adapter)
+      6. Window + tab adapter (Farm / Steal / Event / các tab Chilli còn lại)
       [PHẦN A] ChilliCompat - lớp cầu nối Chilli API -> Fluent
       [PHẦN B] ChilliCompat - engine Canvas (khung vẽ tùy biến cho Predictor...)
       [PHẦN C] BỘ NÃO CHILLI (logic gốc, chuyển từ chilli.lua)
@@ -1573,6 +1573,8 @@ end
 -- ===================== TAB + WINDOW =====================
 local TabIcons = {
     ["Farm"]      = "home",
+    ["Steal"]     = "hand",
+    ["Event"]     = "calendar",
     ["Player"]    = "user",
     ["Predictor"] = "search",
     ["Progress"]  = "activity",
@@ -2239,9 +2241,22 @@ do
 			end)
 		end
 
-		v6 = defaultTab:CreateSection({ Name = "Dr Scramble Mech (New)", Expanded = false })
+		-- ================================================================
+		-- UI ORGANIZATION
+		-- Giữ nguyên toàn bộ handle/logic bên dưới, chỉ đổi nơi hiển thị:
+		--   Farm  -> Place Egg / Treadmill / Hatch / Sell / Fuse / Favorite
+		--   Steal -> Auto Steal
+		--   Event -> Dr Scramble Mech
+		--
+		-- defaultTab vẫn là tab Farm để SaveManager/Finalize và thứ tự tab
+		-- cũ không bị phá. Các tab Steal/Event chỉ là "vỏ" mới cho section.
+		-- ================================================================
+		local stealTab = v2:CreateTab({ Name = "Steal", SectionsExpanded = true })
+		local eventTab = v2:CreateTab({ Name = "Event", SectionsExpanded = true })
+
+		v6 = eventTab:CreateSection({ Name = "Dr Scramble Mech (New)", Expanded = false })
 		local v8
-		v8 = defaultTab:CreateSection({ Name = "Auto Steal", Expanded = true })
+		v8 = stealTab:CreateSection({ Name = "Auto Steal", Expanded = true })
 		local v9
 		v9 = defaultTab:CreateSection({ Name = "Auto Place Egg", Expanded = false })
 		local v10
