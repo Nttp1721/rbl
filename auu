@@ -1,389 +1,125 @@
---[[
-    MEIZU UI LIBRARY — EXAMPLE
-    Demo đầy đủ các control + animation API của MeizuLibrary v3.0
+-- MEIZU UI LIBRARY v3.0.1 — TEST EXAMPLE
+--
+-- Local test: đặt MeizuLibrary_v3.0.1.lua cùng thư mục executor rồi chạy file này.
+-- GitHub: sau khi ông upload/replace MeizuLibrary.lua bằng v3.0.1, có thể đổi LOCAL_TEST = false.
 
-    Cách dùng:
-    1. Đổi LibraryURL nếu ông đang host ở URL khác.
-    2. Chạy file này sau khi load vào executor.
-]]
+local LOCAL_TEST = true
+local Library
 
-local LibraryURL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"
-local Meizu = loadstring(game:HttpGet(LibraryURL))()
+if LOCAL_TEST and readfile and isfile and isfile("MeizuLibrary_v3.0.1.lua") then
+    Library = loadstring(readfile("MeizuLibrary_v3.0.1.lua"))()
+else
+    local url = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"
+    Library = loadstring(game:HttpGet(url))()
+end
 
-local Window = Meizu.CreateWindow({
+local Window = Library.CreateWindow({
     Title = "Meizu Hub",
-    SubTitle = "UI Library v3.0",
+    SubTitle = "v3.0.1 · Animation Test",
     Theme = "Meizu",
     ToggleKey = Enum.KeyCode.RightShift,
     Size = UDim2.fromOffset(620, 450),
     TabWidth = 165,
-    Splash = true,
 })
 
--- =========================================================
--- TRANG CHÍNH
--- =========================================================
-local Main = Window:AddTab({
-    Title = "Trang chính",
-})
-
-Main:AddSection({
-    Title = "Tổng quan",
-})
-
+local Main = Window:AddTab({Title = "Trang chính"})
+Main:AddSection({Title = "Controls"})
 Main:AddParagraph({
-    Title = "Chào mừng đến với Meizu",
-    Content = "Demo library với animation, ripple, hover, tab transition, orb morph và hệ thống config.",
+    Title = "Meizu v3.0.1",
+    Content = "Test animation, orb, tabs, controls và API Window mới.",
 })
 
-Main:AddButton({
-    Title = "Thông báo thành công",
-    Description = "Test hệ thống Notify.",
-    Primary = true,
-    Callback = function()
-        Meizu.Notify({
-            Title = "Thành công",
-            Content = "Meizu Notify đang hoạt động.",
-            Type = "Success",
-            Duration = 3,
-        })
-    end,
-})
-
-Main:AddButton({
-    Title = "Mở hộp thoại",
-    Description = "Test Prompt / Dialog.",
-    Callback = function()
-        Meizu.Prompt({
-            Title = "Xác nhận",
-            Content = "Ông có muốn tiếp tục không?",
-            CancelText = "Hủy",
-            ConfirmText = "Tiếp tục",
-            Callback = function(confirmed)
-                Meizu.Notify({
-                    Title = "Prompt",
-                    Content = confirmed and "Đã xác nhận." or "Đã hủy.",
-                    Type = confirmed and "Success" or "Info",
-                })
-            end,
-        })
-    end,
-})
-
--- =========================================================
--- CONTROLS
--- =========================================================
-Main:AddSection({
-    Title = "Controls",
-})
-
-local autoFarm = Main:AddToggle({
+local enabled = Main:AddToggle({
     Title = "Auto Farm",
-    Description = "Ví dụ Toggle.",
     Default = false,
     ConfigKey = "autofarm",
-    Callback = function(state)
-        print("Auto Farm:", state)
-    end,
+    Callback = function(v) print("Auto Farm:", v) end,
 })
 
-local speed = Main:AddSlider({
-    Title = "WalkSpeed",
-    Description = "Ví dụ Slider có suffix.",
-    Min = 16,
-    Max = 200,
-    Default = 16,
-    Suffix = " ws",
-    ConfigKey = "walkspeed",
-    Callback = function(value)
-        print("WalkSpeed:", value)
-    end,
+Main:AddSlider({
+    Title = "Speed", Min = 16, Max = 200, Default = 50, Suffix = " ws",
+    ConfigKey = "speed", Callback = function(v) print("Speed:", v) end,
 })
 
-local weapon = Main:AddDropdown({
-    Title = "Vũ khí",
-    Description = "Ví dụ Dropdown.",
-    Values = {
-        "Kiếm",
-        "Súng",
-        "Cung",
-        "Dao",
-        "Lựu đạn",
-    },
-    Default = "Súng",
+Main:AddDropdown({
+    Title = "Weapon",
+    Values = {"Sword", "Gun", "Bow"},
+    Default = "Gun",
     ConfigKey = "weapon",
-    Callback = function(value)
-        print("Weapon:", value)
-    end,
+    Callback = function(v) print("Weapon:", v) end,
 })
 
-local features = Main:AddDropdown({
-    Title = "Tính năng",
-    Description = "Ví dụ Multi Dropdown.",
-    Values = {
-        "ESP",
-        "Aimbot",
-        "Speed",
-        "Fly",
-        "NoClip",
-        "Silent Aim",
-    },
+Main:AddDropdown({
+    Title = "Features",
+    Values = {"ESP", "Speed", "Fly", "NoClip"},
     Multi = true,
-    Default = {
-        "ESP",
-        "Speed",
-    },
+    Default = {"ESP", "Speed"},
     ConfigKey = "features",
-    Callback = function(values)
-        print("Selected features:", table.concat(values, ", "))
-    end,
+    Callback = function(v) print("Features:", table.concat(v, ", ")) end,
 })
 
-local playerName = Main:AddInput({
-    Title = "Tên người chơi",
-    Description = "Ví dụ TextBox.",
-    PlaceholderText = "Nhập tên...",
-    Default = "",
-    ConfigKey = "player_name",
-    Callback = function(value)
-        print("Player:", value)
-    end,
+Main:AddInput({
+    Title = "Player Name", PlaceholderText = "Enter name...",
+    ConfigKey = "player_name", Callback = print,
 })
 
-local amount = Main:AddInput({
-    Title = "Số lượng",
-    Description = "Ví dụ Numeric Input.",
-    PlaceholderText = "Nhập số...",
-    Numeric = true,
-    Default = 10,
-    ConfigKey = "amount",
-    Callback = function(value)
-        print("Amount:", value)
-    end,
+Main:AddKeybind({
+    Title = "Hotkey", Default = Enum.KeyCode.F, Mode = "Toggle",
+    ConfigKey = "hotkey", Callback = function(v) print("Hotkey:", v) end,
 })
 
-local keybind = Main:AddKeybind({
-    Title = "Hotkey",
-    Description = "Ví dụ Keybind.",
-    Default = Enum.KeyCode.F,
-    Mode = "Toggle",
-    ConfigKey = "hotkey",
-    Callback = function(state)
-        print("Hotkey state:", state)
-    end,
+Main:AddColorPicker({
+    Title = "Color", Default = Color3.fromRGB(124, 92, 255),
+    ConfigKey = "color", Callback = function(v) print("Color:", v) end,
 })
 
-local color = Main:AddColorPicker({
-    Title = "Accent Color",
-    Description = "Ví dụ ColorPicker.",
-    Default = Color3.fromRGB(124, 92, 255),
-    ConfigKey = "accent_color",
-    Callback = function(value)
-        print("Color:", value)
-    end,
-})
-
-local progress = Main:AddProgressBar({
-    Title = "Tiến trình",
-    Description = "Ví dụ ProgressBar.",
-    Default = 0.65,
-    ConfigKey = "progress",
-})
+Main:AddProgressBar({Title = "Progress", Default = 0.65, ConfigKey = "progress"})
 
 Main:AddButton({
-    Title = "Tăng tiến trình",
+    Title = "Success Notify", Primary = true,
     Callback = function()
-        local current = progress:Get()
-        progress:Set(math.clamp(current + 0.10, 0, 1))
+        Library.Notify({Title = "Success", Content = "Animation + Notify OK", Type = "Success"})
     end,
 })
 
 Main:AddButton({
-    Title = "Reset controls",
+    Title = "Prompt",
     Callback = function()
-        autoFarm:Set(false)
-        speed:Set(16)
-        weapon:Set("Súng")
-        features:Set({"ESP"})
-        playerName:Set("")
-        amount:Set(10)
-        color:Set(Color3.fromRGB(124, 92, 255))
-        progress:Set(0)
+        Library.Prompt({
+            Title = "Confirm",
+            Content = "Test prompt của Meizu.",
+            Callback = function(ok) print("Prompt:", ok) end,
+        })
     end,
 })
 
--- =========================================================
--- UI / ANIMATION TEST
--- =========================================================
-local UI = Window:AddTab({
-    Title = "Giao diện",
-})
+local UI = Window:AddTab({Title = "Animation"})
+UI:AddSection({Title = "Window API"})
 
-UI:AddSection({
-    Title = "Animation Test",
-})
-
-UI:AddParagraph({
-    Title = "Meizu v3.0",
-    Content = "Dùng các nút bên dưới để test morph, position, size, theme và title.",
-})
-
+UI:AddButton({Title = "Center", Primary = true, Callback = function() Window:Center(true) end})
+UI:AddButton({Title = "Minimize", Callback = function() Window:Minimize() end})
+UI:AddButton({Title = "Restore", Callback = function() Window:Restore() end})
 UI:AddButton({
-    Title = "Center Window",
-    Primary = true,
-    Callback = function()
-        Window:Center(true)
+    Title = "Resize", Callback = function()
+        local size = Window:GetSize()
+        Window:SetSize(size.X.Offset < 680 and UDim2.fromOffset(720, 500) or UDim2.fromOffset(620, 450), true)
     end,
 })
-
 UI:AddButton({
-    Title = "Đổi Theme",
-    Callback = function()
+    Title = "Change Theme", Callback = function()
+        local themes = Library.ThemeList()
         local current = Window:GetTheme()
-        local list = Meizu.ThemeList()
-
-        local index = table.find(list, current) or 1
-        index = index % #list + 1
-
-        Window:SetTheme(list[index])
-
-        Meizu.Notify({
-            Title = "Theme",
-            Content = "Đã chuyển sang: " .. list[index],
-            Type = "Info",
-            Duration = 2,
-        })
+        local i = table.find(themes, current) or 1
+        i = (i % #themes) + 1
+        Window:SetTheme(themes[i])
     end,
 })
 
-UI:AddButton({
-    Title = "Minimize",
-    Callback = function()
-        Window:Minimize()
-    end,
-})
-
-UI:AddButton({
-    Title = "Restore",
-    Callback = function()
-        Window:Restore()
-    end,
-})
-
-UI:AddButton({
-    Title = "Random Position",
-    Callback = function()
-        local camera = workspace.CurrentCamera
-        if not camera then return end
-
-        local vp = camera.ViewportSize
-        local size = Window:GetSize()
-
-        local x = math.random(80, math.max(80, vp.X - size.X.Offset - 80))
-        local y = math.random(50, math.max(50, vp.Y - size.Y.Offset - 50))
-
-        Window:SetPosition(
-            UDim2.fromOffset(x + size.X.Offset / 2, y + size.Y.Offset / 2),
-            true
-        )
-    end,
-})
-
-UI:AddButton({
-    Title = "Phóng to / Thu nhỏ",
-    Callback = function()
-        local size = Window:GetSize()
-
-        if size.X.Offset < 680 then
-            Window:SetSize(UDim2.fromOffset(720, 500), true)
-        else
-            Window:SetSize(UDim2.fromOffset(620, 450), true)
-        end
-    end,
-})
-
--- =========================================================
--- SETTINGS
--- =========================================================
-local Settings = Window:AddTab({
-    Title = "Cài đặt",
-})
-
-Settings:AddSection({
-    Title = "Giao diện",
-})
-
-Settings:AddDropdown({
-    Title = "Theme",
-    Values = Meizu.ThemeList(),
-    Default = Meizu.CurrentTheme,
-    AllowSearch = false,
-    ConfigKey = "theme",
-    Callback = function(name)
-        Window:SetTheme(name)
-    end,
-})
-
-Settings:AddKeybind({
-    Title = "Toggle Key",
-    Default = Enum.KeyCode.RightShift,
-    Mode = "Toggle",
-    Callback = function()
-        -- Toggle key đã được Window xử lý.
-    end,
-})
-
-Settings:AddLabel({
-    Title = "Phím hiện tại: RightShift",
-    Description = "Có thể đổi bằng Window:SetToggleKey(Enum.KeyCode.X) trong code.",
-})
-
-Settings:AddButton({
-    Title = "Test Notify",
-    Primary = true,
-    Callback = function()
-        Window:Notify({
-            Title = "Meizu Window Notify",
-            Content = "Notification được gọi trực tiếp từ Window.",
-            Type = "Success",
-            Duration = 3,
-        })
-    end,
-})
-
--- =========================================================
--- CONFIG TAB
--- =========================================================
 Window:AddConfigTab()
 
--- =========================================================
--- VÍ DỤ PROGRAMMATIC API
--- =========================================================
-task.delay(2, function()
-    Window:SetTitle("Meizu Hub")
-    Window:SetSubTitle("Ready · v3.0")
-
-    Meizu.Notify({
-        Title = "Meizu đã sẵn sàng",
-        Content = "Example loaded thành công.",
-        Type = "Success",
-        Duration = 3,
-    })
-end)
-
--- API có thể dùng thêm:
--- Window:IsMinimized()
--- Window:Restore()
--- Window:Minimize()
--- Window:Toggle()
--- Window:SetPosition(UDim2.fromOffset(500, 300), true)
--- Window:GetPosition()
--- Window:SetSize(UDim2.fromOffset(700, 480), true)
--- Window:GetSize()
--- Window:Center(true)
--- Window:SetTheme("Midnight")
--- Window:GetTheme()
--- Window:SetToggleKey(Enum.KeyCode.Insert)
--- Window:GetToggleKey()
--- Window:Notify({...})
--- Window:Dialog({...})
+Library.Notify({
+    Title = "Meizu v3.0.1",
+    Content = "Library loaded successfully.",
+    Type = "Success",
+    Duration = 3,
+})
