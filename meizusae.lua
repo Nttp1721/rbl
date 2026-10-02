@@ -114,7 +114,7 @@ local UserImage = CreateObject("ImageLabel", {
     Name = "UserImage",
     Parent = LoaderFrame,
     BackgroundTransparency = 1,
-    Image = "rbxassetid://132336058081263",
+    Image = "rbxassetid://94377325741905",
     Position = UDim2.new(0, 15, 0, 10),
     Size = UDim2.new(0, 50, 0, 50)
 })
@@ -270,7 +270,7 @@ end
 -- Tab Author
 Tabs.Author:AddParagraph({
     Title = "Thông tin",
-    Content = "Script được phát triển bởi Nttphu1721.\nHỗ trợ game: Steal An Eggs."
+    Content = "Script by Nttphu1721.\nSteal An Eggs."
 })
 
 Tabs.Author:AddButton({
