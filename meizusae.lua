@@ -249,12 +249,10 @@ local Tabs = {
 }
 local Options = Fluent.Options
 do
-	
-game:GetService("Players").LocalPlayer.Idled:connect(function()
-	game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
-	wait(1)
-	game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
-end)
+
+local id = game.PlaceId
+if id == 107778070777162 then stealanegg = true; else game:Shutdown() end;
+
 
 -- end
 Fluent:Notify({
