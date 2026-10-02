@@ -52,7 +52,12 @@ local LoaderConfig = {
         [4] = {2, 100}
     }
 }
-
+local StepMessages = {
+    [1] = "Meizu Hub",
+    [2] = "Meizu Hub",
+    [3] = "Meizu Hub.",
+    [4] = "Thanks For Using Meizu!"
+}
 
 
 local function TweenObject(Object, Duration, Properties)
