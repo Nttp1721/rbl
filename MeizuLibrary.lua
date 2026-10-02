@@ -1,6 +1,6 @@
 --[[
     ╔══════════════════════════════════════════════╗
-       MEIZU UI LIBRARY — v3.0
+       MEIZU UI LIBRARY — v3.0.1
        Hiện đại · Mượt mà · Dễ dùng (chuẩn Fluent)
     ╚══════════════════════════════════════════════╝
     Fix v2.1: cửa sổ không mở lúc load (state minimized sai),
@@ -9,7 +9,7 @@
 ]]
 
 local Meizu = {}
-Meizu.Version      = "3.0"
+Meizu.Version      = "3.0.1"
 Meizu.Flags        = {}
 Meizu.CurrentTheme = "Meizu"
 
@@ -38,6 +38,28 @@ local gradients     = {}
 local Connections   = {}
 local Root, NotifyContainer
 
+local function Create(className, props, children)
+    local inst = Instance.new(className)
+    if props then
+        for k, v in pairs(props) do
+            if k ~= "Parent" then inst[k] = v end
+        end
+    end
+    if children then
+        for _, c in ipairs(children) do c.Parent = inst end
+    end
+    if props and props.Parent then inst.Parent = props.Parent end
+    return inst
+end
+
+local function Tween(obj, time, props, style, direction, delayTime)
+    local info = TweenInfo.new(time or 0.25, style or Enum.EasingStyle.Quint,
+        direction or Enum.EasingDirection.Out, 0, false, delayTime or 0)
+    local tween = TweenService:Create(obj, info, props)
+    tween:Play()
+    return tween
+end
+
 -- // Animation / layout constants
 local ORB_SIZE = UDim2.new(0, 50, 0, 50)
 local ORB_POSITION = UDim2.new(0.120833337 - 0.1, 0, 0.0952890813 + 0.01, 0)
@@ -65,27 +87,6 @@ local function ReleaseFeedback(button)
     Tween(scale, 0.16, {Scale = 1}, Enum.EasingStyle.Back)
 end
 
-local function Create(className, props, children)
-    local inst = Instance.new(className)
-    if props then
-        for k, v in pairs(props) do
-            if k ~= "Parent" then inst[k] = v end
-        end
-    end
-    if children then
-        for _, c in ipairs(children) do c.Parent = inst end
-    end
-    if props and props.Parent then inst.Parent = props.Parent end
-    return inst
-end
-
-local function Tween(obj, time, props, style, direction, delayTime)
-    local info = TweenInfo.new(time or 0.25, style or Enum.EasingStyle.Quint,
-        direction or Enum.EasingDirection.Out, 0, false, delayTime or 0)
-    local tween = TweenService:Create(obj, info, props)
-    tween:Play()
-    return tween
-end
 
 -- CanvasGroup nhưng tự fallback về Frame nếu executor không hỗ trợ
 local function NewGroup(props)
