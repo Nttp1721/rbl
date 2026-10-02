@@ -1,7 +1,7 @@
 --// Aurora Demo — script ví dụ đầy đủ tính năng cơ bản
 --// Nhớ upload bản Aurora.lua v2 lên repo trước rồi chạy (link bên dưới)
 
-local Aurora = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/Aurora.lua"))()
+local Aurora = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"))()
 
 local Window = Aurora.CreateWindow({
     Title = "Aurora Demo",
