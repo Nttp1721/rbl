@@ -181,9 +181,51 @@ local function LoadImageAsset(url, folder, path)
     return ""
 end
 
-Assets.Logo = LoadImageAsset(CONFIG.ImageUrl, CONFIG.ImageFolder, CONFIG.ImageFile)
+-- Tải ảnh NGẦM (không chặn loader). Xong thì tự gắn vào logo loader.
+local LoaderLogo -- gán ở phần loader bên dưới
+local ImageReady = false
 
-SystemNotify("Loading...", 9)
+task.spawn(function()
+    Assets.Logo = LoadImageAsset(CONFIG.ImageUrl, CONFIG.ImageFolder, CONFIG.ImageFile)
+    ImageReady = true
+    if LoaderLogo and LoaderLogo.Parent and Assets.Logo ~= "" then
+        LoaderLogo.Image = Assets.Logo
+    end
+end)
+
+-- Tải thư viện UI NGẦM song song, trong lúc loader đang chạy
+local function LoadRemote(url)
+    local okGet, source = pcall(game.HttpGet, game, url)
+    if not okGet then
+        return nil, "HttpGet lỗi: " .. tostring(source)
+    end
+    local fn, compileErr = loadstring(source)
+    if not fn then
+        return nil, "loadstring lỗi: " .. tostring(compileErr)
+    end
+    local okRun, result = pcall(fn)
+    if not okRun then
+        return nil, "Chạy thư viện lỗi: " .. tostring(result)
+    end
+    return result
+end
+
+local Libs = {}
+local LibsPending = 3
+
+local function Prefetch(key, url)
+    task.spawn(function()
+        local result, err = LoadRemote(url)
+        Libs[key] = { result, err }
+        LibsPending = LibsPending - 1
+    end)
+end
+
+Prefetch("Fluent", "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua")
+Prefetch("Save", "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua")
+Prefetch("Interface", "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua")
+
+SystemNotify("Loading...", 4)
 
 ----------------------------------------------------------------------
 -- 4. LOADER (HIỆU ỨNG TẢI)
@@ -197,11 +239,12 @@ local LoaderColors = {
 }
 
 -- {thời gian chờ (giây), phần trăm}
+-- (đã rút ngắn: tổng ~2 giây; muốn chậm lại thì tăng số giây ở cột 1)
 local LoaderKeyframes = {
-    { 1, 10 },
-    { 2, 30 },
-    { 3, 60 },
-    { 2, 100 },
+    { 0.3, 10 },
+    { 0.5, 30 },
+    { 0.6, 60 },
+    { 0.5, 100 },
 }
 
 local StepMessages = {
@@ -262,7 +305,7 @@ local LoaderFrame = Create("Frame", {
 })
 AddCorner(12, LoaderFrame)
 
-local LoaderLogo = Create("ImageLabel", {
+LoaderLogo = Create("ImageLabel", {
     Name = "Logo",
     Parent = LoaderFrame,
     BackgroundTransparency = 1,
@@ -366,25 +409,16 @@ LoaderGui:Destroy()
 ----------------------------------------------------------------------
 -- 5. TẢI THƯ VIỆN FLUENT
 ----------------------------------------------------------------------
-local function LoadRemote(url)
-    local okGet, source = pcall(game.HttpGet, game, url)
-    if not okGet then
-        return nil, "HttpGet lỗi: " .. tostring(source)
-    end
-    local fn, compileErr = loadstring(source)
-    if not fn then
-        return nil, "loadstring lỗi: " .. tostring(compileErr)
-    end
-    local okRun, result = pcall(fn)
-    if not okRun then
-        return nil, "Chạy thư viện lỗi: " .. tostring(result)
-    end
-    return result
+-- Thư viện đã được tải ngầm từ lúc loader bắt đầu, ở đây chỉ chờ cho xong (tối đa 20s)
+local waited = 0
+while LibsPending > 0 and waited < 20 do
+    task.wait(0.05)
+    waited = waited + 0.05
 end
 
-local Fluent, errFluent = LoadRemote("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua")
-local SaveManager, errSave = LoadRemote("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua")
-local InterfaceManager, errInterface = LoadRemote("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua")
+local Fluent, errFluent = unpack(Libs.Fluent or {})
+local SaveManager, errSave = unpack(Libs.Save or {})
+local InterfaceManager, errInterface = unpack(Libs.Interface or {})
 
 if not Fluent or not SaveManager or not InterfaceManager then
     warn("[Meizu Hub] Không tải được thư viện UI:",
@@ -684,7 +718,8 @@ CreateToggleButton = function()
     ToggleButton = Create("ImageButton", {
         Name = "MeizuToggleButton",
         Parent = ToggleGui,
-        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BackgroundColor3 = Color3.fromRGB(0, 0, 0), -- nền đen
+        BackgroundTransparency = 0,
         BorderColor3 = Color3.fromRGB(0, 0, 0),
         BorderSizePixel = 0,
         Position = lastPosition,
@@ -703,7 +738,7 @@ CreateToggleButton = function()
             Size = UDim2.new(1, 0, 1, 0),
             Font = Enum.Font.GothamBold,
             Text = "M",
-            TextColor3 = Color3.fromRGB(0, 0, 0),
+            TextColor3 = Color3.fromRGB(255, 255, 255),
             TextSize = 24,
         })
     end
@@ -753,6 +788,13 @@ CreateToggleButton = function()
     -- Bị xoá bởi game/anti-cheat -> tự tạo lại ngay
     table.insert(ToggleConnections, ToggleGui.Destroying:Connect(Respawn))
     table.insert(ToggleConnections, ToggleButton.Destroying:Connect(Respawn))
+end
+
+-- Chờ ảnh tải xong (tối đa 5s) để nút tròn có hình ngay từ đầu
+local imageWaited = 0
+while not ImageReady and imageWaited < 5 do
+    task.wait(0.1)
+    imageWaited = imageWaited + 0.1
 end
 
 CreateToggleButton()
