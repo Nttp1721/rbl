@@ -226,3 +226,25 @@ TweenObject(v6, 0.25, {
 });
 wait(0.25);
 v5:Destroy();
+
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "Meizu Hub",
+    SubTitle = "Steal An Eggs",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(530, 350),
+    Acrylic = false,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.End
+})
+
+local Tabs = {
+	Author = Window:AddTab({Title = "Author", Icon = ""}),
+    Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    Misc = Window:AddTab({ Title = "Misc", Icon = "" }),
+}
+local Options = Fluent.Options
+do
