@@ -193,15 +193,11 @@ local StepLabel = CreateObject("TextLabel", {
     AnchorPoint = Vector2.new(0.5, 0.5)
 })
 
-local function UpdateStepText(StepNumber)
-    StepLabel.Text = StepMessages[StepNumber] or ""
-end
 
 local function UpdatePercentage(Percent, StepNumber)
     TweenObject(ProgressBar, 0.5, {
         Size = UDim2.new(Percent / 100, 0, 0, 24)
     })
-    UpdateStepText(StepNumber)
 end
 
 TweenObject(LoaderFrame, 0.25, {
