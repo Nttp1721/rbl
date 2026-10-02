@@ -247,9 +247,16 @@ local Tabs = {
 	ESP = Window:AddTab({ Title = "ESP", Icon = "" }),
     Misc = Window:AddTab({ Title = "Misc", Icon = "" }),
 }
+local Options = Fluent.Options
+do
+	
+game:GetService("Players").LocalPlayer.Idled:connect(function()
+	game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+	wait(1)
+	game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+end)
 
-
-
+-- end
 Fluent:Notify({
     Title = "Meizu Hub",
     Content = "Loading Successfully",
