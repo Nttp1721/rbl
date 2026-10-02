@@ -1,22 +1,22 @@
 --[[
-    MEIZU LIBRARY v2.1 — EXAMPLE / TEST SCRIPT
+    MEIZU LIBRARY v2.2 — EXAMPLE / TEST SCRIPT
 ]]
 
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"))()
 
 local Window = Library:CreateWindow({
     Title = "Meizu Hub",
-    SubTitle = "v2.1 • by Nttp1721",
+    SubTitle = "v2.2 • by Nttp1721",
     Theme = "Dark",
     Accent = Color3.fromRGB(88, 101, 242),
     ToggleKeybind = Enum.KeyCode.RightControl,
     ToggleUIButton = true,
-    -- ToggleImage = "rbxassetid://10723407389", -- mở comment để set hình nút nổi từ đầu
+    -- ToggleImage = "https://i.ibb.co/S7rpHJJN/meizuxp.png", -- đã là mặc định trong lib
     Size = UDim2.fromOffset(600, 430),
 })
 
 Library:Notify({
-    Title = "Meizu Library v2.1",
+    Title = "Meizu Library v2.2",
     Content = "Load thành công! Nhấn <b>RightControl</b> để ẩn/hiện UI.",
     Duration = 6,
 })
@@ -56,9 +56,9 @@ Combat:CreateMultiDropdown({
 local Misc = Main:CreateSection("Misc")
 Misc:CreateButton({
     Title = "Send Notification",
-    Description = "Thử hệ thống thông báo (đã fix)",
+    Description = "Thử hệ thống thông báo",
     Callback = function()
-        Library:Notify({Title = "Hello!", Content = "Đây là notification test — giờ đã hiện normal trên mọi thiết bị!", Duration = 4})
+        Library:Notify({Title = "Hello!", Content = "Đây là notification test!", Duration = 4})
     end,
 })
 Misc:CreateButton({
@@ -116,11 +116,11 @@ Movement:CreateSlider({
     end,
 })
 
---// ================= TAB: UI SETTINGS (DEMO FIX) =================
+--// ================= TAB: UI TEST =================
 local UITest = Window:CreateTab("UI Test")
 UITest:CreateParagraph({
     Title = "Test zone",
-    Content = "Tab này để thử các fix: đổi theme, đổi accent (kéo ô đậm/nhạt), đổi hình nút nổi.",
+    Content = "Thử: đổi theme, đổi accent (kéo ô đậm/nhạt), đổi hình nút nổi bằng PNG.",
 })
 UITest:CreateButton({
     Title = "Cycle Theme",
@@ -141,8 +141,15 @@ UITest:CreateColorPicker({
     end,
 })
 UITest:CreateButton({
-    Title = "Set Toggle Image #1",
-    Description = "Dùng asset ID có sẵn",
+    Title = "Set Meizu PNG",
+    Description = "Ảnh meizuxp.png từ URL ngoài",
+    Callback = function()
+        Window:SetToggleImage("https://i.ibb.co/S7rpHJJN/meizuxp.png")
+    end,
+})
+UITest:CreateButton({
+    Title = "Set rbxasset Image",
+    Description = "Ảnh từ asset Roblox (luôn hoạt động)",
     Callback = function()
         Window:SetToggleImage("rbxassetid://10723407389")
     end,
@@ -155,4 +162,4 @@ UITest:CreateButton({
 })
 
 Window:SelectTab(1)
-print("✅ Meizu Library v2.1 test loaded!")
+print("✅ Meizu Library v2.2 test loaded!")
