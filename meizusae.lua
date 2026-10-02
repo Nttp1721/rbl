@@ -517,6 +517,23 @@ local FLUENT_ELEMENT_ORDER = 7
 local function RegisterCleanup(fn)
     table.insert(CompatCleanups, fn)
 end
+
+-- Fluent elements trong các bản phát hành khác nhau có thể lưu GUI instance
+-- ở .Instance hoặc .Frame. Chuẩn hoá lại để bộ não Chilli đọc được cả hai.
+local function GetFluentElementInstance(option)
+    if type(option) ~= "table" then
+        return nil
+    end
+
+    for _, key in ipairs({ "Instance", "Frame", "Container" }) do
+        local value = rawget(option, key)
+        if typeof(value) == "Instance" then
+            return value
+        end
+    end
+
+    return nil
+end
 ChilliCompat.RegisterCleanup = RegisterCleanup
 
 local function RunCompatCleanups()
@@ -598,6 +615,8 @@ end
 -- trả về Element có SetTitle/SetDesc nên cập nhật nội dung động được.
 local function AddCompatRow(section, desc)
     local ftab = section.FluentTab
+    local fsection = section.FluentSection
+    local target = fsection or ftab
     local isLabel = desc.__IsLabel == true
     local titleText = tostring(desc.Name or "")
     local bodyText = tostring(desc.Text or desc.Content or "")
@@ -610,12 +629,12 @@ local function AddCompatRow(section, desc)
     local para
     pcall(function()
         if isLabel then
-            para = ftab:AddParagraph({
+            para = target:AddParagraph({
                 Title   = bodyText ~= "" and bodyText or titleText,
                 Content = "",
             })
         else
-            para = ftab:AddParagraph({
+            para = target:AddParagraph({
                 Title   = titleText,
                 Content = bodyText,
             })
@@ -736,12 +755,30 @@ end
 
 -- ===================== SECTION (nhóm element trong tab) =====================
 local function CreateCompatSection(tab, desc)
+    desc = type(desc) == "table" and desc or {}
+
     local name = tostring(desc.Name or "Section")
     local path = tab.Path .. " > " .. name
-    local key = path
 
-    if SectionByPath[key] then
-        return SectionByPath[key]
+    if SectionByPath[path] then
+        return SectionByPath[path]
+    end
+
+    -- QUAN TRỌNG:
+    -- Phải giữ lại đối tượng Section thật của Fluent rồi thêm control vào
+    -- Section đó. Bản cũ tạo AddSection() nhưng sau đó lại AddToggle/
+    -- AddDropdown trực tiếp lên Tab => toàn bộ control không nằm trong
+    -- Section layout của Fluent, dẫn tới hiện tiêu đề section nhưng control
+    -- bị lệch/ẩn và đôi lúc chuỗi khởi tạo bị ngắt giữa chừng.
+    local fluentSection
+    local okSection, resultSection = pcall(function()
+        return tab.FluentTab:AddSection(name)
+    end)
+
+    if okSection and type(resultSection) == "table" then
+        fluentSection = resultSection
+    else
+        warn("[Meizu Hub] CreateSection failed:", name, tostring(resultSection))
     end
 
     local section = {
@@ -749,47 +786,87 @@ local function CreateCompatSection(tab, desc)
         Path = path,
         Tab = tab,
         FluentTab = tab.FluentTab,
+        FluentSection = fluentSection,
+        _subscriptions = {},
     }
 
-    -- tiêu đề nhóm giống cấu trúc Chilli (divider của Fluent)
-    pcall(function()
-        tab.FluentTab:AddSection(name)
-    end)
+    local function GetTarget()
+        -- Ưu tiên Section thật của Fluent.
+        if fluentSection then
+            return fluentSection
+        end
+        -- Fallback để script không chết nếu một bản Fluent khác không trả
+        -- Section object.
+        return tab.FluentTab
+    end
+
+    local function RememberConnection(connection)
+        if connection then
+            table.insert(section._subscriptions, connection)
+            return connection
+        end
+    end
+
+    local function DestroyOption(option)
+        if type(option) == "table" and type(option.Destroy) == "function" then
+            pcall(option.Destroy, option)
+        end
+    end
 
     -- ---------- TOGGLE ----------
     function section:CreateToggle(desc2)
+        desc2 = type(desc2) == "table" and desc2 or {}
+
         local name2 = tostring(desc2.Name or "Toggle")
         local elementPath = path .. " > " .. name2
         local flag = EnsureFlag(elementPath)
         local userCallback = desc2.Callback
-        local handle = {}
+        local handle = {
+            Path = elementPath,
+            Flag = flag,
+            _group = nil,
+            _Option = nil,
+        }
 
-        local option = tab.FluentTab:AddToggle(flag, {
-            Title = desc2.SubOf and ("   └ " .. name2) or name2,
-            Desc = desc2.Note,
-            Description = desc2.Note,
-            Default = desc2.Default == true,
-            Callback = function(value)
-                -- exclusive group: bật 1 con thì tắt các con còn lại trong nhóm
-                if value == true and handle._group then
-                    for _, other in ipairs(handle._group.Members) do
-                        if other ~= handle then
-                            pcall(function()
-                                other._Option:SetValue(false)
-                            end)
+        local option
+        local ok, result = pcall(function()
+            return GetTarget():AddToggle(flag, {
+                Title = desc2.SubOf and ("   └ " .. name2) or name2,
+                Description = desc2.Note,
+                Default = desc2.Default == true,
+                Callback = function(value)
+                    if value == true and handle._group then
+                        for _, other in ipairs(handle._group.Members) do
+                            if other ~= handle and other._Option then
+                                pcall(function()
+                                    other._Option:SetValue(false)
+                                end)
+                            end
                         end
                     end
-                end
-                if type(userCallback) == "function" then
-                    pcall(userCallback, value == true)
-                end
-            end,
-        })
 
-        handle.Path = elementPath
-        handle.Flag = flag
+                    if type(userCallback) == "function" then
+                        -- Callback errors from the original brain must not
+                        -- abort the entire UI construction thread.
+                        pcall(userCallback, value == true)
+                    end
+                end,
+            })
+        end)
+
+        if ok then
+            option = result
+        else
+            warn("[Meizu Hub] Toggle failed:", elementPath, tostring(result))
+            option = {
+                Value = desc2.Default == true,
+                SetValue = function(self, value)
+                    self.Value = value == true
+                end,
+            }
+        end
+
         handle._Option = option
-        handle._group = nil
 
         function handle:Get(_self)
             return option.Value == true
@@ -802,12 +879,19 @@ local function CreateCompatSection(tab, desc)
         end
 
         function handle:Subscribe(fn)
-            if type(fn) ~= "function" then
+            if type(fn) ~= "function" or type(option) ~= "table" then
                 return { Disconnect = function() end }
             end
-            option:OnChanged(function(value)
-                pcall(fn, value == true)
-            end)
+
+            if type(option.OnChanged) == "function" then
+                local okChanged = pcall(option.OnChanged, option, function(value)
+                    pcall(fn, value == true)
+                end)
+                if okChanged then
+                    return { Disconnect = function() end }
+                end
+            end
+
             return { Disconnect = function() end }
         end
 
@@ -823,8 +907,14 @@ local function CreateCompatSection(tab, desc)
             return elementPath
         end
 
-        function handle:Destroy() end
-        handle.Instance = nil
+        function handle:Destroy()
+            DestroyOption(option)
+        end
+
+        -- Chilli's fn6() only needs a GuiObject for optional text fixing.
+        -- Fluent's public Toggle object does not expose Instance, so use the
+        -- real section container as a safe compatibility target.
+        handle.Instance = fluentSection and fluentSection.Container or nil
 
         HandleByPath[elementPath] = handle
         return handle
@@ -832,65 +922,102 @@ local function CreateCompatSection(tab, desc)
 
     -- ---------- BUTTON ----------
     function section:CreateButton(desc2)
+        desc2 = type(desc2) == "table" and desc2 or {}
+
         local name2 = tostring(desc2.Name or "Button")
         local buttonText = desc2.ButtonText
         local userCallback = desc2.Callback
-        local displayTitle = buttonText and (buttonText .. "  •  " .. name2) or name2
+        local displayTitle = buttonText and (tostring(buttonText) .. "  •  " .. name2) or name2
         local handle = {}
 
-        local option = tab.FluentTab:AddButton({
-            Title = displayTitle,
-            Desc = desc2.Note,
-            Description = desc2.Note,
-            Callback = function()
-                if type(userCallback) == "function" then
-                    pcall(userCallback)
-                end
-            end,
-        })
+        local option
+        local ok, result = pcall(function()
+            return GetTarget():AddButton({
+                Title = displayTitle,
+                Description = desc2.Note,
+                Callback = function()
+                    if type(userCallback) == "function" then
+                        pcall(userCallback)
+                    end
+                end,
+            })
+        end)
 
-        -- Cập nhật chữ trên nút: Fluent Button trả về Element có SetTitle
-        -- (hàm đóng theo closure - tham số 1 bị bỏ qua, tham số 2 là chữ mới)
+        if ok then
+            option = result
+        else
+            warn("[Meizu Hub] Button failed:", path .. " > " .. name2, tostring(result))
+            option = {}
+        end
+
         function handle:SetActionText(_self, text)
             if type(option) == "table" and type(option.SetTitle) == "function" then
                 pcall(option.SetTitle, option, tostring(text or ""))
             end
         end
 
-        function handle:Destroy() end
-        handle.Instance = nil
+        function handle:Destroy()
+            DestroyOption(option)
+        end
+
+        handle.Instance = fluentSection and fluentSection.Container or nil
         return handle
     end
 
     -- ---------- SLIDER ----------
     function section:CreateSlider(desc2)
+        desc2 = type(desc2) == "table" and desc2 or {}
+
         local name2 = tostring(desc2.Name or "Slider")
         local elementPath = path .. " > " .. name2
         local flag = EnsureFlag(elementPath)
         local userCallback = desc2.Callback
         local increment = tonumber(desc2.Increment) or 1
         local rounding = 0
+
         if increment < 0.1 then
             rounding = 2
         elseif increment < 1 then
             rounding = 1
         end
-        local handle = {}
 
-        local option = tab.FluentTab:AddSlider(flag, {
-            Title = desc2.SubOf and ("   └ " .. name2) or name2,
-            Desc = desc2.Note,
-            Description = desc2.Note,
-            Min = tonumber(desc2.Min) or 0,
-            Max = tonumber(desc2.Max) or 100,
-            Default = tonumber(desc2.Default) or 0,
-            Rounding = rounding,
-            Callback = function(value)
-                if type(userCallback) == "function" then
-                    pcall(userCallback, tonumber(value) or 0)
-                end
-            end,
-        })
+        local minValue = tonumber(desc2.Min) or 0
+        local maxValue = tonumber(desc2.Max) or 100
+        local defaultValue = tonumber(desc2.Default)
+        if defaultValue == nil then
+            defaultValue = minValue
+        end
+
+        local handle = { Path = elementPath, Flag = flag }
+        local option
+
+        local ok, result = pcall(function()
+            return GetTarget():AddSlider(flag, {
+                Title = desc2.SubOf and ("   └ " .. name2) or name2,
+                Description = desc2.Note,
+                Min = minValue,
+                Max = maxValue,
+                Default = defaultValue,
+                Rounding = rounding,
+                Callback = function(value)
+                    if type(userCallback) == "function" then
+                        pcall(userCallback, tonumber(value) or 0)
+                    end
+                end,
+            })
+        end)
+
+        if ok then
+            option = result
+        else
+            warn("[Meizu Hub] Slider failed:", elementPath, tostring(result))
+            option = {
+                Value = defaultValue,
+                SetValue = function(self, value)
+                    self.Value = tonumber(value) or defaultValue
+                end,
+            }
+        end
 
         function handle:Get(_self)
             return tonumber(option.Value) or 0
@@ -903,48 +1030,72 @@ local function CreateCompatSection(tab, desc)
         end
 
         function handle:Subscribe(fn)
-            if type(fn) ~= "function" then
-                return { Disconnect = function() end }
+            if type(fn) == "function" and type(option) == "table" and type(option.OnChanged) == "function" then
+                pcall(option.OnChanged, option, function(value)
+                    pcall(fn, tonumber(value) or 0)
+                end)
             end
-            option:OnChanged(function(value)
-                pcall(fn, tonumber(value) or 0)
-            end)
             return { Disconnect = function() end }
         end
 
-        function handle:Destroy() end
-        handle.Instance = nil
+        function handle:Destroy()
+            DestroyOption(option)
+        end
 
+        handle.Instance = fluentSection and fluentSection.Container or nil
         HandleByPath[elementPath] = handle
         return handle
     end
 
     -- ---------- DROPDOWN / MULTIDROPDOWN ----------
     local function MakeDropdown(desc2, isMulti)
+        desc2 = type(desc2) == "table" and desc2 or {}
+
         local name2 = tostring(desc2.Name or "Dropdown")
         local elementPath = path .. " > " .. name2
         local flag = EnsureFlag(elementPath)
         local userCallback = desc2.Callback
-        local handle = {}
+        local values = type(desc2.Options) == "table" and desc2.Options or {}
+        local handle = { Path = elementPath, Flag = flag }
+        local option
 
-        local option = tab.FluentTab:AddDropdown(flag, {
-            Title = desc2.SubOf and ("   └ " .. name2) or name2,
-            Desc = desc2.Note,
-            Description = desc2.Note,
-            Values = type(desc2.Options) == "table" and desc2.Options or {},
-            Default = desc2.Default,
-            Multi = isMulti,
-            Callback = function(value)
-                if type(userCallback) == "function" then
-                    if isMulti then
-                        -- bộ não chilli chấp nhận cả mảng lẫn bảng {tên = true}
-                        pcall(userCallback, type(value) == "table" and value or {})
-                    else
-                        pcall(userCallback, tostring(value))
+        local ok, result = pcall(function()
+            return GetTarget():AddDropdown(flag, {
+                Title = desc2.SubOf and ("   └ " .. name2) or name2,
+                Description = desc2.Note,
+                Values = values,
+                Default = desc2.Default,
+                Multi = isMulti,
+                Callback = function(value)
+                    if type(userCallback) == "function" then
+                        if isMulti then
+                            pcall(userCallback, type(value) == "table" and value or {})
+                        else
+                            pcall(userCallback, value == nil and "" or tostring(value))
+                        end
                     end
-                end
-            end,
-        })
+                end,
+            })
+        end)
+
+        if ok then
+            option = result
+        else
+            warn("[Meizu Hub] Dropdown failed:", elementPath, tostring(result))
+            local initial
+            if isMulti then
+                initial = {}
+            else
+                initial = type(desc2.Default) == "string" and desc2.Default or nil
+            end
+
+            option = {
+                Value = initial,
+                SetValue = function(self, value)
+                    self.Value = value
+                end,
+            }
+        end
 
         function handle:Get(_self)
             return option.Value
@@ -956,8 +1107,13 @@ local function CreateCompatSection(tab, desc)
             end)
         end
 
-        function handle:Destroy() end
-        handle.Instance = nil
+        function handle:Destroy()
+            DestroyOption(option)
+        end
+
+        -- Compatibility target for Chilli's fn6(). It intentionally only
+        -- scans the Section container, never the whole window.
+        handle.Instance = fluentSection and fluentSection.Container or nil
 
         HandleByPath[elementPath] = handle
         return handle
@@ -971,29 +1127,43 @@ local function CreateCompatSection(tab, desc)
         return MakeDropdown(desc2, true)
     end
 
-    -- ---------- INPUT (ô nhập chữ) ----------
+    -- ---------- INPUT ----------
     function section:CreateInput(desc2)
+        desc2 = type(desc2) == "table" and desc2 or {}
+
         local name2 = tostring(desc2.Name or "Input")
         local elementPath = path .. " > " .. name2
         local flag = EnsureFlag(elementPath)
         local userCallback = desc2.Callback
-        local handle = {}
+        local handle = { Path = elementPath, Flag = flag }
+        local option
 
-        local settings = {
-            Title = desc2.SubOf and ("   └ " .. name2) or name2,
-            Desc = desc2.Note,
-            Description = desc2.Note,
-            Placeholder = desc2.Placeholder,
-            Default = desc2.Default,
-            MaxLength = tonumber(desc2.MaxLength),
-            Callback = function(value)
-                if type(userCallback) == "function" then
-                    pcall(userCallback, tostring(value or ""))
-                end
-            end,
-        }
+        local ok, result = pcall(function()
+            return GetTarget():AddInput(flag, {
+                Title = desc2.SubOf and ("   └ " .. name2) or name2,
+                Description = desc2.Note,
+                Placeholder = desc2.Placeholder,
+                Default = desc2.Default,
+                MaxLength = tonumber(desc2.MaxLength),
+                Callback = function(value)
+                    if type(userCallback) == "function" then
+                        pcall(userCallback, tostring(value or ""))
+                    end
+                end,
+            })
+        end)
 
-        local option = tab.FluentTab:AddInput(flag, settings)
+        if ok then
+            option = result
+        else
+            warn("[Meizu Hub] Input failed:", elementPath, tostring(result))
+            option = {
+                Value = tostring(desc2.Default or ""),
+                SetValue = function(self, value)
+                    self.Value = tostring(value or "")
+                end,
+            }
+        end
 
         function handle:Get(_self)
             return tostring(option.Value or "")
@@ -1005,15 +1175,17 @@ local function CreateCompatSection(tab, desc)
             end)
         end
 
-        function handle:Destroy() end
-        handle.State = handle -- bộ não chilli truy cập handle.State._registered
-        handle.Instance = nil
+        function handle:Destroy()
+            DestroyOption(option)
+        end
 
+        handle.State = handle
+        handle.Instance = fluentSection and fluentSection.Container or nil
         HandleByPath[elementPath] = handle
         return handle
     end
 
-    -- ---------- TEXT / LABEL (hàng chữ trạng thái, cập nhật được) ----------
+    -- ---------- TEXT / LABEL ----------
     function section:CreateText(desc2)
         return AddCompatRow(section, desc2)
     end
@@ -1024,12 +1196,9 @@ local function CreateCompatSection(tab, desc)
         return AddCompatRow(section, desc2)
     end
 
-    -- CreateCanvas được gắn ở PHẦN B (engine canvas bên dưới)
-
-    SectionByPath[key] = section
+    SectionByPath[path] = section
     return section
 end
-
 
 --[[
 ========================================================================
@@ -1049,7 +1218,17 @@ Engine bên dưới dựng lại toàn bộ hệ đó trên Fluent, quy đổi �
 
 local function CreateCompatCanvas(section, desc)
     desc = type(desc) == "table" and desc or {}
-    local container = GetTabContainer(section.FluentTab)
+    local container = nil
+    if type(section.FluentSection) == "table" then
+        for _, key in ipairs({ "Container", "ContainerFrame", "ScrollFrame", "Group" }) do
+            local value = rawget(section.FluentSection, key)
+            if typeof(value) == "Instance" and value:IsA("GuiObject") then
+                container = value
+                break
+            end
+        end
+    end
+    container = container or GetTabContainer(section.FluentTab)
 
     local handle = {
         Name = desc.Name,
@@ -2248,8 +2427,8 @@ do
 		--   Steal -> Auto Steal
 		--   Event -> Dr Scramble Mech
 		--
-		-- defaultTab vẫn là tab Farm để SaveManager/Finalize và thứ tự tab
-		-- cũ không bị phá. Các tab Steal/Event chỉ là "vỏ" mới cho section.
+		-- defaultTab là Farm; Steal/Event là các tab thật riêng biệt.
+		-- Logic/handles phía dưới vẫn giữ nguyên, chỉ đổi parent UI.
 		-- ================================================================
 		local stealTab = v2:CreateTab({ Name = "Steal", SectionsExpanded = true })
 		local eventTab = v2:CreateTab({ Name = "Event", SectionsExpanded = true })
