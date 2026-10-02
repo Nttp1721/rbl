@@ -1,0 +1,113 @@
+local Aurora = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/Aurora.lua"))()
+
+local Window = Aurora:CreateWindow({
+	Title = "Aurora Hub",
+	SubTitle = "v1.0",
+	Size = UDim2.fromOffset(620, 440),   -- dùng fromOffset
+	Theme = "Dark",                       -- Dark | Light | Midnight | Rose
+	MinimizeKey = Enum.KeyCode.RightControl,
+})
+
+local Main = Window:AddTab({ Title = "Main" })
+local Visual = Window:AddTab({ Title = "Visual" })
+local Settings = Window:AddTab({ Title = "Settings" })
+
+----------------------------------------------------------------- MAIN
+Main:AddSection("Combat")
+
+Main:AddParagraph({
+	Title = "Chào mừng",
+	Content = "Đây là thư viện Aurora UI. Nhấn RightControl để ẩn/hiện.",
+})
+
+Main:AddButton({
+	Title = "Thông báo thử",
+	Description = "Bấm để hiện notification",
+	Callback = function()
+		Aurora:Notify({ Title = "Xin chào!", Content = "Aurora hoạt động tốt 🎉", Duration = 4 })
+	end,
+})
+
+local toggle = Main:AddToggle("AutoFarm", { Title = "Auto Farm", Description = "Bật/tắt tự động", Default = false })
+toggle:OnChanged(function(state)
+	print("Auto Farm:", state)
+end)
+
+Main:AddSlider("WalkSpeed", {
+	Title = "WalkSpeed", Min = 16, Max = 200, Default = 16, Rounding = 0,
+	Callback = function(v)
+		local hum = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum.WalkSpeed = v end
+	end,
+})
+
+Main:AddDropdown("Weapon", {
+	Title = "Chọn vũ khí", Values = { "Sword", "Bow", "Staff", "Dagger" }, Default = 1,
+	Callback = function(v) print("Weapon:", v) end,
+})
+
+Main:AddDropdown("Targets", {
+	Title = "Mục tiêu (nhiều)", Values = { "Boss", "Elite", "Mob", "Player" }, Multi = true, Default = { "Boss" },
+	Callback = function(map)
+		for name in pairs(map) do print("Chọn:", name) end
+	end,
+})
+
+Main:AddInput("Webhook", {
+	Title = "Tên người chơi", Placeholder = "Nhập tên...", Default = "",
+	Callback = function(text) print("Input:", text) end,
+})
+
+Main:AddKeybind("FlyKey", {
+	Title = "Phím Fly", Default = Enum.KeyCode.F, Mode = "Toggle",
+	Callback = function(state) print("Fly:", state) end,
+})
+
+----------------------------------------------------------------- VISUAL
+Visual:AddSection("ESP")
+Visual:AddColorpicker("EspColor", {
+	Title = "Màu ESP", Default = Color3.fromRGB(255, 80, 120),
+	Callback = function(c) print("Màu:", c) end,
+})
+
+----------------------------------------------------------------- SETTINGS
+Settings:AddSection("Giao diện")
+Settings:AddDropdown("ThemePick", {
+	Title = "Theme", Values = { "Dark", "Light", "Midnight", "Rose" }, Default = "Dark",
+	Callback = function(name) Aurora:SetTheme(name) end,
+})
+
+Settings:AddSection("Config")
+Settings:AddInput("ConfigName", { Title = "Tên config", Default = "default" })
+
+Settings:AddButton({
+	Title = "Lưu config",
+	Callback = function()
+		local ok, err = Aurora:SaveConfig(Aurora.Options.ConfigName.Value)
+		Aurora:Notify({ Title = ok and "Đã lưu" or "Lỗi", Content = ok and "Config đã được lưu." or tostring(err) })
+	end,
+})
+
+Settings:AddButton({
+	Title = "Tải config",
+	Callback = function()
+		local ok, err = Aurora:LoadConfig(Aurora.Options.ConfigName.Value)
+		Aurora:Notify({ Title = ok and "Đã tải" or "Lỗi", Content = ok and "Config đã được áp dụng." or tostring(err) })
+	end,
+})
+
+Settings:AddButton({
+	Title = "Hộp thoại xác nhận",
+	Callback = function()
+		Window:Dialog({
+			Title = "Xác nhận", Content = "Bạn có muốn tiếp tục không?",
+			Buttons = {
+				{ Title = "Không" },
+				{ Title = "Có", Callback = function() Aurora:Notify({ Title = "OK", Content = "Bạn đã chọn Có" }) end },
+			},
+		})
+	end,
+})
+
+Window:SelectTab(1)
+Aurora:Notify({ Title = "Aurora", Content = "Đã tải xong giao diện!", Duration = 5 })
