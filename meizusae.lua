@@ -249,3 +249,11 @@ local Tabs = {
 }
 local Options = Fluent.Options
 do
+
+
+Fluent:Notify({
+    Title = "Meizu Hub",
+    Content = "Loading Successfully",
+    SubContent = "Script By Nttphu1721",
+    Duration = 5
+})
