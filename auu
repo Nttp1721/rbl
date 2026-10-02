@@ -1,113 +1,145 @@
+--// Aurora Demo — script ví dụ đầy đủ tính năng cơ bản
+--// Nhớ upload bản Aurora.lua v2 lên repo trước rồi chạy (link bên dưới)
+
 local Aurora = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/Aurora.lua"))()
 
-local Window = Aurora:CreateWindow({
-	Title = "Aurora Hub",
-	SubTitle = "v1.0",
-	Size = UDim2.fromOffset(620, 440),   -- dùng fromOffset
-	Theme = "Dark",                       -- Dark | Light | Midnight | Rose
-	MinimizeKey = Enum.KeyCode.RightControl,
+local Window = Aurora.CreateWindow({
+    Title = "Aurora Demo",
+    SubTitle = "v2.0 · by Nttp1721",
+    Size = UDim2.fromOffset(600, 430),
+    TabWidth = 160,
+    Theme = "Aurora",                       -- Aurora / Midnight / Rose / Amethyst / Light
+    ToggleKey = Enum.KeyCode.RightShift,    -- phím ẩn/hiện (orb 50x50 góc trái dưới, kéo được)
+    Splash = true,
 })
 
-local Main = Window:AddTab({ Title = "Main" })
-local Visual = Window:AddTab({ Title = "Visual" })
-local Settings = Window:AddTab({ Title = "Settings" })
+-- ================================================= TAB 1: TRANG CHÍNH
+local Main = Window:AddTab({Title = "Trang chính"})
+Main:AddSection({Title = "Tính năng"})
 
------------------------------------------------------------------ MAIN
-Main:AddSection("Combat")
+local farming = false
+local Progress = Main:AddProgressBar({Title = "Tiến độ farm"})
 
-Main:AddParagraph({
-	Title = "Chào mừng",
-	Content = "Đây là thư viện Aurora UI. Nhấn RightControl để ẩn/hiện.",
+local Auto = Main:AddToggle({
+    Title = "Auto Farm",
+    Description = "Tự động farm coin (demo tăng progress)",
+    ConfigKey = "autofarm",
+    Callback = function(v)
+        farming = v
+        Aurora.Notify({Title = "Auto Farm", Content = v and "Đã bật" or "Đã tắt", Type = v and "Success" or "Info"})
+    end,
+})
+
+Main:AddSlider({
+    Title = "Tốc độ chạy",
+    Description = "Thay WalkSpeed thật của nhân vật",
+    Min = 16, Max = 200, Default = 16, Suffix = " ws", ConfigKey = "walkspeed",
+    Callback = function(v)
+        local char = game:GetService("Players").LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = v end
+    end,
+})
+
+Main:AddDropdown({
+    Title = "Vũ khí",
+    Values = {"Kiếm", "Súng", "Cung", "Búa"},
+    Default = "Kiếm", ConfigKey = "weapon",
+    Callback = function(v) print("Đổi vũ khí:", v) end,
+})
+
+Main:AddDropdown({
+    Title = "Chọn pet (multi)",
+    Values = {"Rồng", "Mèo", "Chó", "Phượng"},
+    Multi = true, ConfigKey = "pets",
+    Callback = function(list) print("Pets:", table.concat(list, ", ")) end,
 })
 
 Main:AddButton({
-	Title = "Thông báo thử",
-	Description = "Bấm để hiện notification",
-	Callback = function()
-		Aurora:Notify({ Title = "Xin chào!", Content = "Aurora hoạt động tốt 🎉", Duration = 4 })
-	end,
+    Title = "Bắt đầu ngay", Primary = true,
+    Description = "Mở hộp thoại xác nhận (Prompt)",
+    Callback = function()
+        Aurora.Prompt({
+            Title = "Xác nhận",
+            Content = "Bạn có chắc muốn bắt đầu farm không?",
+            ConfirmText = "Bắt đầu", CancelText = "Thôi",
+            Callback = function(ok)
+                if ok then Auto:Set(true) else Aurora.Notify({Title = "Đã hủy", Type = "Warning"}) end
+            end,
+        })
+    end,
 })
 
-local toggle = Main:AddToggle("AutoFarm", { Title = "Auto Farm", Description = "Bật/tắt tự động", Default = false })
-toggle:OnChanged(function(state)
-	print("Auto Farm:", state)
+-- vòng lặp demo: đẩy progress khi farm đang bật
+task.spawn(function()
+    local p = 0
+    while true do
+        task.wait(0.1)
+        if farming then
+            p = (p + 0.05) % 1
+            Progress:Set(p)
+        end
+    end
 end)
 
-Main:AddSlider("WalkSpeed", {
-	Title = "WalkSpeed", Min = 16, Max = 200, Default = 16, Rounding = 0,
-	Callback = function(v)
-		local hum = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-		if hum then hum.WalkSpeed = v end
-	end,
+-- ================================================= TAB 2: HIỂN THỊ
+local Visual = Window:AddTab({Title = "Hiển thị"})
+
+Visual:AddToggle({
+    Title = "ESP Người chơi",
+    Description = "Demo: đổi màu theo ColorPicker bên dưới",
+    ConfigKey = "esp",
+    Callback = function(v) print("ESP:", v) end,
 })
 
-Main:AddDropdown("Weapon", {
-	Title = "Chọn vũ khí", Values = { "Sword", "Bow", "Staff", "Dagger" }, Default = 1,
-	Callback = function(v) print("Weapon:", v) end,
+Visual:AddColorPicker({
+    Title = "Màu ESP", Default = Color3.fromRGB(124, 92, 255), ConfigKey = "espcolor",
+    Callback = function(c) print("Màu ESP:", c) end,
 })
 
-Main:AddDropdown("Targets", {
-	Title = "Mục tiêu (nhiều)", Values = { "Boss", "Elite", "Mob", "Player" }, Multi = true, Default = { "Boss" },
-	Callback = function(map)
-		for name in pairs(map) do print("Chọn:", name) end
-	end,
+Visual:AddInput({
+    Title = "Tên người chơi cần theo dõi",
+    PlaceholderText = "Nhập username…", ConfigKey = "target",
+    Callback = function(text) print("Target:", text) end,
 })
 
-Main:AddInput("Webhook", {
-	Title = "Tên người chơi", Placeholder = "Nhập tên...", Default = "",
-	Callback = function(text) print("Input:", text) end,
+Visual:AddKeybind({
+    Title = "Phím bật/tắt farm",
+    Default = Enum.KeyCode.F, Mode = "Toggle", ConfigKey = "farmkey",
+    Callback = function(v) Auto:Set(v) end,   -- phím F = toggle giống công tắc
 })
 
-Main:AddKeybind("FlyKey", {
-	Title = "Phím Fly", Default = Enum.KeyCode.F, Mode = "Toggle",
-	Callback = function(state) print("Fly:", state) end,
+Visual:AddLabel({
+    Title = "Mẹo",
+    Description = "Nhấn RightShift để ẩn/hiện GUI, kéo orb tròn sang nơi khác được, cửa sổ thả ra ngoài màn sẽ tự nảy về trong.",
 })
 
------------------------------------------------------------------ VISUAL
-Visual:AddSection("ESP")
-Visual:AddColorpicker("EspColor", {
-	Title = "Màu ESP", Default = Color3.fromRGB(255, 80, 120),
-	Callback = function(c) print("Màu:", c) end,
+-- ================================================= TAB 3: CÀI ĐẶT + LƯU CONFIG
+local Settings = Window:AddTab({Title = "Cài đặt"})
+
+Settings:AddDropdown({
+    Title = "Theme",
+    Values = Aurora.ThemeList(), Default = Aurora.CurrentTheme,
+    Callback = function(name) Aurora.SetTheme(name) end,
 })
 
------------------------------------------------------------------ SETTINGS
-Settings:AddSection("Giao diện")
-Settings:AddDropdown("ThemePick", {
-	Title = "Theme", Values = { "Dark", "Light", "Midnight", "Rose" }, Default = "Dark",
-	Callback = function(name) Aurora:SetTheme(name) end,
-})
-
-Settings:AddSection("Config")
-Settings:AddInput("ConfigName", { Title = "Tên config", Default = "default" })
+Settings:AddDivider()
 
 Settings:AddButton({
-	Title = "Lưu config",
-	Callback = function()
-		local ok, err = Aurora:SaveConfig(Aurora.Options.ConfigName.Value)
-		Aurora:Notify({ Title = ok and "Đã lưu" or "Lỗi", Content = ok and "Config đã được lưu." or tostring(err) })
-	end,
+    Title = "Test thông báo",
+    Description = "Xem đủ 4 loại: Success / Error / Warning / Info",
+    Callback = function()
+        Aurora.Notify({Title = "Thành công", Content = "Đã test Success", Type = "Success"})
+        task.delay(0.3, function() Aurora.Notify({Title = "Cảnh báo", Content = "Đã test Warning", Type = "Warning"}) end)
+        task.delay(0.6, function() Aurora.Notify({Title = "Lỗi", Content = "Đã test Error", Type = "Error"}) end)
+        task.delay(0.9, function() Aurora.Notify({Title = "Thông tin", Content = "Đã test Info", Type = "Info", Duration = 2}) end)
+    end,
 })
 
-Settings:AddButton({
-	Title = "Tải config",
-	Callback = function()
-		local ok, err = Aurora:LoadConfig(Aurora.Options.ConfigName.Value)
-		Aurora:Notify({ Title = ok and "Đã tải" or "Lỗi", Content = ok and "Config đã được áp dụng." or tostring(err) })
-	end,
-})
+-- Tab tự sinh: nhập tên → Lưu / Tải / Xóa config (lưu mọi phần tử có ConfigKey)
+Window:AddConfigTab()
 
-Settings:AddButton({
-	Title = "Hộp thoại xác nhận",
-	Callback = function()
-		Window:Dialog({
-			Title = "Xác nhận", Content = "Bạn có muốn tiếp tục không?",
-			Buttons = {
-				{ Title = "Không" },
-				{ Title = "Có", Callback = function() Aurora:Notify({ Title = "OK", Content = "Bạn đã chọn Có" }) end },
-			},
-		})
-	end,
-})
-
-Window:SelectTab(1)
-Aurora:Notify({ Title = "Aurora", Content = "Đã tải xong giao diện!", Duration = 5 })
+-- Thông báo chào sau khi splash chạy xong
+task.delay(1.8, function()
+    Aurora.Notify({Title = "Aurora Demo", Content = "Loaded thành công! RightShift để ẩn/hiện.", Type = "Success"})
+end)
