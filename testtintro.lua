@@ -28,7 +28,7 @@ local CONFIG = {
     Version    = "1.1",
     Discord    = "https://discord.gg/5GynHCJZXr",
     LogoAsset  = "rbxassetid://94377325741905",  -- logo dùng cho thông báo/loader
-    ToggleIcon = "rbxassetid://132336058081263", -- hình nút tròn bên góc trái (giữ nguyên)
+    ToggleIcon = "rbxassetid://94377325741905", -- hình nút tròn bên góc trái (giữ nguyên)
     MenuKey    = Enum.KeyCode.End,
     SaveFolder = "MeizuHub/StealAnEggs",
 }
