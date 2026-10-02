@@ -1,8 +1,6 @@
 --[[
     Meizu Hub - Steal An Eggs
     Script by: Nttphu1721
-    Chế độ: Full framework skeleton
-    Yêu cầu: Chỉ hoạt động khi đang ở game có PlaceId = 107778070777162
 ]]
 
 local VALID_GAME_ID = 107778070777162
@@ -11,7 +9,7 @@ local VALID_GAME_ID = 107778070777162
 if game.PlaceId ~= VALID_GAME_ID then
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "Meizu Hub",
-        Text = "Script chỉ làm việc trên Steal An Eggs!",
+        Text = "Script Cho Steal An Eggs!",
         Icon = "rbxassetid://94377325741905",
         Duration = 5
     })
@@ -55,12 +53,7 @@ local LoaderConfig = {
     }
 }
 
-local StepMessages = {
-    [1] = "Khởi tạo script...",
-    [2] = "Tải dữ liệu UI...",
-    [3] = "Thiết lập chức năng...",
-    [4] = "Hoàn thành!"
-}
+
 
 local function TweenObject(Object, Duration, Properties)
     local Tween = game.TweenService:Create(
@@ -362,10 +355,10 @@ InterfaceManager:BuildInterfaceSection(Tabs.Misc)
 SaveManager:BuildConfigSection(Tabs.Misc)
 
 Window:SelectTab(1)
-
+local a=Instance.new("ScreenGui")local b=Instance.new("ImageButton")local c=Instance.new("UICorner")a.Parent=game.Players.LocalPlayer:WaitForChild("PlayerGui")a.ZIndexBehavior=Enum.ZIndexBehavior.Sibling;b.Parent=a;b.BackgroundColor3=Color3.fromRGB(255,255,255)b.BorderColor3=Color3.fromRGB(0,0,0)b.BorderSizePixel=0;b.Position=UDim2.new(0.120833337 - 0.1, 0, 0.0952890813 + 0.01, 0)b.Size=UDim2.new(0,50,0,50)b.Image="rbxassetid://132336058081263"c.Parent=b;local function d()local e=Instance.new('LocalScript',b)e.Parent.MouseButton1Click:Connect(function()game:GetService("VirtualInputManager"):SendKeyEvent(true,Enum.KeyCode.End,false,game)end)end;coroutine.wrap(d)()
 Fluent:Notify({
     Title = "Meizu Hub",
-    Content = "Script đã tải xong và sẵn sàng chạy!",
+    Content = "Loading Successfully!",
     SubContent = "Script By Nttphu1721",
     Duration = 5
 })
@@ -381,9 +374,6 @@ _G.MeizuHub = {
     Notify = Notify
 }
 
-print("[Meizu Hub] Khởi động thành công.")
-print("[Meizu Hub] PlaceId: " .. game.PlaceId)
-print("[Meizu Hub] Nhấn End để ẩn/hiện UI.")
 
 -- Khu vực dành cho code chính của bạn
 -- Ví dụ:
