@@ -274,10 +274,10 @@ Tabs.Author:AddParagraph({
 })
 
 Tabs.Author:AddButton({
-    Title = "Copy Credit",
-    Description = "Sao chép tên tác giả",
+    Title = "Copy Discord",
+    Description = "https://discord.gg/5GynHCJZXr",
     Callback = function()
-        setclipboard("Nttphu1721")
+        setclipboard("https://discord.gg/5GynHCJZXr")
         Notify("Đã sao chép tên tác giả vào clipboard.", "Success", 3)
     end
 })
