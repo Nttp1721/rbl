@@ -1,18 +1,23 @@
 --[[
     Meizu Hub - Steal An Eggs
     Script by: Nttphu1721
-    Phiên bản: 1.1 (khung sườn / skeleton)
+    Phiên bản: 1.2 (khung sườn / skeleton)
+
+    THAY ĐỔI v1.2:
+      - Bỏ toàn bộ rbxassetid://, dùng ảnh PNG tải từ link (getcustomasset)
+      - Bấm dấu X trong menu = ẨN menu (không huỷ), mở lại bằng nút tròn bên trái
+      - Muốn tắt hẳn script: Misc -> Unload Script
 
     CẤU TRÚC FILE:
       1. Cấu hình + Services
       2. Kiểm tra PlaceId (sai game -> shutdown ngay)
-      3. Chống chạy trùng script
-      4. Loader (hiệu ứng tải)
+      3. Chống chạy trùng + tải ảnh PNG
+      4. Loader
       5. Tải thư viện Fluent
-      6. Tạo Window + Tabs
-      7. UI từng tab (có chỗ TODO để bạn thêm code)
+      6. Window + Tabs
+      7. UI từng tab (có TODO)
       8. SaveManager / InterfaceManager
-      9. Nút tròn bên trái (bấm để mở/đóng menu, không bao giờ mất)
+      9. Chặn nút X + nút tròn bên trái (không bao giờ mất)
      10. Fluent Notify báo đã tải xong
 ]]
 
@@ -25,10 +30,11 @@ local CONFIG = {
     Name       = "Meizu Hub",
     SubTitle   = "Steal An Eggs",
     Author     = "Nttphu1721",
-    Version    = "1.1",
+    Version    = "1.2",
     Discord    = "https://discord.gg/5GynHCJZXr",
-    LogoAsset  = "rbxassetid://94377325741905",  -- logo dùng cho thông báo/loader
-    ToggleIcon = "rbxassetid://94377325741905", -- hình nút tròn bên góc trái (giữ nguyên)
+    ImageUrl   = "https://i.ibb.co/S7rpHJJN/meizuxp.png", -- ảnh dùng cho toàn bộ script
+    ImageFolder = "MeizuHub",
+    ImageFile   = "MeizuHub/meizuxp.png",
     MenuKey    = Enum.KeyCode.End,
     SaveFolder = "MeizuHub/StealAnEggs",
 }
@@ -37,7 +43,6 @@ local Players          = game:GetService("Players")
 local StarterGui       = game:GetService("StarterGui")
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local RunService       = game:GetService("RunService")
 local CoreGui          = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
@@ -46,25 +51,28 @@ while not LocalPlayer do
     LocalPlayer = Players.LocalPlayer
 end
 
--- Helper: gọi an toàn
 local function Try(fn, ...)
     local ok, result = pcall(fn, ...)
     return ok, result
 end
 
--- Helper: gửi thông báo hệ thống Roblox
+-- Ảnh sau khi tải sẽ nằm ở đây ("" = chưa có / không hỗ trợ)
+local Assets = { Logo = "" }
+
 local function SystemNotify(text, duration)
     Try(function()
-        StarterGui:SetCore("SendNotification", {
+        local data = {
             Title    = CONFIG.Name,
             Text     = text,
-            Icon     = CONFIG.LogoAsset,
             Duration = duration or 5,
-        })
+        }
+        if Assets.Logo ~= "" then
+            data.Icon = Assets.Logo
+        end
+        StarterGui:SetCore("SendNotification", data)
     end)
 end
 
--- Helper: chọn nơi đặt GUI an toàn nhất
 local function GetGuiParent()
     local ok, parent = pcall(function()
         if typeof(gethui) == "function" then
@@ -88,7 +96,7 @@ if game.PlaceId ~= VALID_GAME_ID then
 end
 
 ----------------------------------------------------------------------
--- 3. CHỐNG CHẠY TRÙNG SCRIPT
+-- 3. CHỐNG CHẠY TRÙNG + TẢI ẢNH PNG TỪ LINK
 ----------------------------------------------------------------------
 local Env = (typeof(getgenv) == "function" and getgenv()) or _G
 
@@ -98,7 +106,6 @@ if Env.MeizuHubLoaded and typeof(Env.MeizuHubUnload) == "function" then
 end
 Env.MeizuHubLoaded = true
 
--- Maid: gom connection / instance để dọn khi unload
 local Maid = { _tasks = {} }
 function Maid:Give(item)
     table.insert(self._tasks, item)
@@ -118,7 +125,63 @@ function Maid:Clean()
     table.clear(self._tasks)
 end
 
-local Running = true -- cờ để dừng các vòng lặp khi unload
+local Running = true
+
+-- Tải ảnh PNG từ URL -> lưu file -> getcustomasset -> trả về asset dùng được trong Image
+-- Trả về "" nếu executor không hỗ trợ hoặc tải lỗi (script vẫn chạy bình thường)
+local function LoadImageAsset(url, folder, path)
+    local getAsset = getcustomasset or getsynasset
+    if typeof(getAsset) ~= "function" or typeof(writefile) ~= "function" then
+        warn("[Meizu Hub] Executor không hỗ trợ getcustomasset/writefile -> bỏ qua ảnh.")
+        return ""
+    end
+
+    local ok, result = pcall(function()
+        if typeof(isfolder) == "function" and typeof(makefolder) == "function" then
+            if not isfolder(folder) then
+                makefolder(folder)
+            end
+        end
+
+        -- Dùng lại file đã tải nếu còn hợp lệ (header PNG)
+        if typeof(isfile) == "function" and typeof(readfile) == "function" and isfile(path) then
+            local cached = readfile(path)
+            if #cached > 100 and cached:sub(2, 4) == "PNG" then
+                return getAsset(path)
+            end
+        end
+
+        -- Tải mới
+        local data
+        local okGet, body = pcall(game.HttpGet, game, url)
+        if okGet and type(body) == "string" and #body > 100 then
+            data = body
+        else
+            local req = request or http_request or (syn and syn.request)
+            if req then
+                local res = req({ Url = url, Method = "GET" })
+                if res and type(res.Body) == "string" then
+                    data = res.Body
+                end
+            end
+        end
+
+        if not data or #data < 100 or data:sub(2, 4) ~= "PNG" then
+            error("Tải ảnh thất bại hoặc không phải file PNG")
+        end
+
+        writefile(path, data)
+        return getAsset(path)
+    end)
+
+    if ok and type(result) == "string" and result ~= "" then
+        return result
+    end
+    warn("[Meizu Hub] Lỗi tải ảnh:", tostring(result))
+    return ""
+end
+
+Assets.Logo = LoadImageAsset(CONFIG.ImageUrl, CONFIG.ImageFolder, CONFIG.ImageFile)
 
 SystemNotify("Loading...", 9)
 
@@ -203,7 +266,7 @@ local LoaderLogo = Create("ImageLabel", {
     Name = "Logo",
     Parent = LoaderFrame,
     BackgroundTransparency = 1,
-    Image = CONFIG.LogoAsset,
+    Image = Assets.Logo, -- "" nếu không tải được
     Position = UDim2.new(0, 15, 0, 10),
     Size = UDim2.new(0, 50, 0, 50),
 })
@@ -278,14 +341,12 @@ local function UpdateLoader(percent, step)
     StepLabel.Text = StepMessages[step] or ""
 end
 
--- Mở loader
 Tween(LoaderFrame, 0.25, { Size = UDim2.new(0, 346, 0, 132) })
 task.wait(0.3)
 Tween(LoaderTitle, 0.5, { TextTransparency = 0 })
 Tween(ProgressBG, 0.5, { BackgroundTransparency = 0 })
 Tween(ProgressBar, 0.5, { BackgroundTransparency = 0 })
 
--- Chạy từng mốc (dùng ipairs để đúng thứ tự)
 for index, data in ipairs(LoaderKeyframes) do
     task.wait(data[1])
     UpdateLoader(data[2], index)
@@ -294,7 +355,6 @@ end
 UpdateLoader(100, 4)
 task.wait(0.8)
 
--- Đóng loader
 Tween(LoaderTitle, 0.5, { TextTransparency = 1 })
 Tween(ProgressBG, 0.5, { BackgroundTransparency = 1 })
 Tween(ProgressBar, 0.5, { BackgroundTransparency = 1 })
@@ -333,6 +393,9 @@ if not Fluent or not SaveManager or not InterfaceManager then
     Env.MeizuHubLoaded = false
     return
 end
+
+-- Lưu hàm Destroy gốc của Fluent (chỉ dùng khi Unload thật sự)
+local RealFluentDestroy = Fluent.Destroy
 
 ----------------------------------------------------------------------
 -- 6. TẠO WINDOW + TABS
@@ -396,11 +459,11 @@ Tabs.Main:AddParagraph({
     Content = "Khu vực dành cho các tính năng chính của script.",
 })
 
-local MainSection = Tabs.Main:AddSection("Tính năng chính")
+Tabs.Main:AddSection("Tính năng chính")
 
 local MainToggle = Tabs.Main:AddToggle("MainToggle", {
-    Title    = "Enable Main Feature",
-    Default  = false,
+    Title   = "Enable Main Feature",
+    Default = false,
 })
 
 MainToggle:OnChanged(function(value)
@@ -408,7 +471,7 @@ MainToggle:OnChanged(function(value)
     print("[Meizu Hub] Main feature:", value)
 end)
 
--- Ví dụ vòng lặp chuẩn (tự dừng khi tắt toggle hoặc khi unload):
+-- Vòng lặp mẫu (tự dừng khi unload)
 task.spawn(function()
     while Running do
         if Options.MainToggle and Options.MainToggle.Value then
@@ -481,11 +544,11 @@ Tabs.Misc:AddButton({
 
 Tabs.Misc:AddButton({
     Title       = "Unload Script",
-    Description = "Tắt hoàn toàn script (sẽ xoá cả nút tròn bên trái)",
+    Description = "Tắt hẳn script (xoá cả nút tròn bên trái)",
     Callback    = function()
         Window:Dialog({
             Title   = "Unload Script",
-            Content = "Bạn có chắc muốn tắt script không?",
+            Content = "Bạn có chắc muốn tắt hẳn script không?",
             Buttons = {
                 {
                     Title    = "Có",
@@ -519,9 +582,24 @@ SaveManager:BuildConfigSection(Tabs.Misc)
 Window:SelectTab(1)
 
 ----------------------------------------------------------------------
--- 9. NÚT TRÒN BÊN TRÁI (BẤM ĐỂ MỞ/ĐÓNG MENU - KHÔNG BAO GIỜ MẤT)
+-- 9A. ẨN / HIỆN MENU + CHẶN NÚT X (X = ẨN, KHÔNG HUỶ)
 ----------------------------------------------------------------------
--- Mở/đóng menu Fluent
+local function IsMenuHidden()
+    return Window.Minimized == true
+end
+
+local function HideMenu()
+    if not IsMenuHidden() then
+        Try(function() Window:Minimize() end)
+    end
+end
+
+local function ShowMenu()
+    if IsMenuHidden() then
+        Try(function() Window:Minimize() end)
+    end
+end
+
 local function ToggleMenu()
     local ok = pcall(function()
         Window:Minimize()
@@ -537,7 +615,29 @@ local function ToggleMenu()
     end
 end
 
--- Vị trí gốc (giữ nguyên như bản cũ)
+-- Cách 1: chặn hộp thoại "Close" của Fluent -> bấm X là ẩn menu luôn
+local OriginalDialog = Window.Dialog
+Window.Dialog = function(self, config, ...)
+    if type(config) == "table" and config.Title == "Close" then
+        HideMenu()
+        return
+    end
+    return OriginalDialog(self, config, ...)
+end
+
+-- Cách 2 (dự phòng): nếu Fluent vẫn gọi Destroy thì chỉ ẩn menu, không huỷ
+-- (Unload thật dùng RealFluentDestroy ở bên dưới)
+Fluent.Destroy = function()
+    if Running then
+        HideMenu()
+    else
+        Try(function() RealFluentDestroy(Fluent) end)
+    end
+end
+
+----------------------------------------------------------------------
+-- 9B. NÚT TRÒN BÊN TRÁI (BẤM ĐỂ MỞ/ĐÓNG MENU - KHÔNG BAO GIỜ MẤT)
+----------------------------------------------------------------------
 local TOGGLE_POSITION = UDim2.new(0.120833337 - 0.1, 0, 0.0952890813 + 0.01, 0)
 local TOGGLE_SIZE = UDim2.new(0, 50, 0, 50)
 
@@ -551,7 +651,7 @@ local function DisconnectToggleConnections()
     table.clear(ToggleConnections)
 end
 
-local CreateToggleButton -- khai báo trước để dùng trong hàm tự hồi sinh
+local CreateToggleButton
 
 local function Respawn()
     if Running then
@@ -562,7 +662,12 @@ end
 CreateToggleButton = function()
     if not Running then return end
 
-    -- Dọn bản cũ (nếu còn)
+    -- Giữ lại vị trí nếu người chơi đã kéo nút đi chỗ khác
+    local lastPosition = TOGGLE_POSITION
+    if ToggleButton and ToggleButton.Parent then
+        lastPosition = ToggleButton.Position
+    end
+
     DisconnectToggleConnections()
     if ToggleGui then
         Try(function() ToggleGui:Destroy() end)
@@ -570,10 +675,9 @@ CreateToggleButton = function()
 
     ToggleGui = Create("ScreenGui", {
         Name = "MeizuToggleGui",
-        ResetOnSpawn = false,                       -- không mất khi chết/respawn
+        ResetOnSpawn = false,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
         DisplayOrder = 1000,
-        IgnoreGuiInset = false,
         Parent = GetGuiParent(),
     })
 
@@ -583,14 +687,28 @@ CreateToggleButton = function()
         BackgroundColor3 = Color3.fromRGB(255, 255, 255),
         BorderColor3 = Color3.fromRGB(0, 0, 0),
         BorderSizePixel = 0,
-        Position = TOGGLE_POSITION,
+        Position = lastPosition,
         Size = TOGGLE_SIZE,
-        Image = CONFIG.ToggleIcon,
+        Image = Assets.Logo, -- ảnh PNG từ link
         AutoButtonColor = true,
     })
     Create("UICorner", { Parent = ToggleButton })
 
-    -- Bấm = mở/đóng menu; kéo = di chuyển nút (phân biệt bằng ngưỡng kéo)
+    -- Nếu không tải được ảnh thì hiện chữ "M" để nút vẫn nhìn thấy và bấm được
+    if Assets.Logo == "" then
+        Create("TextLabel", {
+            Name = "Fallback",
+            Parent = ToggleButton,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 1, 0),
+            Font = Enum.Font.GothamBold,
+            Text = "M",
+            TextColor3 = Color3.fromRGB(0, 0, 0),
+            TextSize = 24,
+        })
+    end
+
+    -- Bấm = mở/đóng menu; kéo = di chuyển nút
     local dragging, dragStart, startPos, moved = false, nil, nil, false
     local DRAG_THRESHOLD = 6
 
@@ -632,7 +750,7 @@ CreateToggleButton = function()
         end
     end))
 
-    -- Nếu bị xoá bởi game/anti-cheat -> tự tạo lại ngay
+    -- Bị xoá bởi game/anti-cheat -> tự tạo lại ngay
     table.insert(ToggleConnections, ToggleGui.Destroying:Connect(Respawn))
     table.insert(ToggleConnections, ToggleButton.Destroying:Connect(Respawn))
 end
@@ -656,7 +774,6 @@ task.spawn(function()
     end
 end)
 
--- Hồi sinh nút khi nhân vật respawn (phòng trường hợp GUI nằm ở PlayerGui)
 Maid:Give(LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.5)
     if Running and (not ToggleGui or not ToggleGui.Parent) then
@@ -665,33 +782,36 @@ Maid:Give(LocalPlayer.CharacterAdded:Connect(function()
 end))
 
 ----------------------------------------------------------------------
--- UNLOAD (dọn sạch mọi thứ khi tắt script)
+-- UNLOAD (tắt hẳn script, dọn sạch mọi thứ)
 ----------------------------------------------------------------------
 Env.MeizuHubUnload = function()
     Running = false
     DisconnectToggleConnections()
     Maid:Clean()
     Try(function() if ToggleGui then ToggleGui:Destroy() end end)
-    Try(function() Fluent:Destroy() end)
+    Try(function() RealFluentDestroy(Fluent) end)
     Env.MeizuHubLoaded = false
     Env.MeizuHubUnload = nil
     Env.MeizuHub = nil
 end
 
 ----------------------------------------------------------------------
--- BIẾN TOÀN CỤC (để bạn truy cập từ các phần code thêm sau này)
+-- BIẾN TOÀN CỤC (để truy cập từ code thêm sau này)
 ----------------------------------------------------------------------
 Env.MeizuHub = {
-    Version  = CONFIG.Version,
-    PlaceId  = game.PlaceId,
-    Author   = CONFIG.Author,
-    Config   = CONFIG,
-    Window   = Window,
-    Tabs     = Tabs,
-    Options  = Options,
-    Fluent   = Fluent,
-    Notify   = Notify,
-    Maid     = Maid,
+    Version   = CONFIG.Version,
+    PlaceId   = game.PlaceId,
+    Author    = CONFIG.Author,
+    Config    = CONFIG,
+    Assets    = Assets,
+    Window    = Window,
+    Tabs      = Tabs,
+    Options   = Options,
+    Fluent    = Fluent,
+    Notify    = Notify,
+    Maid      = Maid,
+    ShowMenu  = ShowMenu,
+    HideMenu  = HideMenu,
     IsRunning = function() return Running end,
 }
 _G.MeizuHub = Env.MeizuHub
@@ -700,7 +820,6 @@ _G.MeizuHub = Env.MeizuHub
 -- KHU VỰC CODE CHÍNH CỦA BẠN (thêm logic quan trọng vào đây)
 ----------------------------------------------------------------------
 -- Gợi ý:
---   local Player = LocalPlayer
 --   local function MainLoop()
 --       while Running do
 --           -- TODO: code của bạn
