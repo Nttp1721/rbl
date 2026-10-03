@@ -1,165 +1,265 @@
---[[
-    MEIZU LIBRARY v2.2 — EXAMPLE / TEST SCRIPT
-]]
+--// MeizuLibrary1 - Simple Test Script
+--// Library source:
+--// https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"))()
+local Library = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua"
+))()
 
+--// Create Window
 local Window = Library:CreateWindow({
-    Title = "Meizu Hub",
-    SubTitle = "v2.2 • by Nttp1721",
-    Theme = "Dark",
+    Title = "Meizu Test",
+    SubTitle = "Library v2.3 Test",
+
+    Theme = "Dark", -- Dark / Light / Midnight / Void
     Accent = Color3.fromRGB(88, 101, 242),
+
     ToggleKeybind = Enum.KeyCode.RightControl,
     ToggleUIButton = true,
-    -- ToggleImage = "https://i.ibb.co/S7rpHJJN/meizuxp.png", -- đã là mặc định trong lib
-    Size = UDim2.fromOffset(600, 430),
+    ToggleText = "M",
+
+    Size = UDim2.fromOffset(620, 460),
+    Language = "vi",
+
+    -- Để false cho test nhanh.
+    -- Đổi thành true để test Loading Screen của library.
+    Loader = false,
+    LoaderTitle = "Meizu Test Loader",
+    LoaderColor = Color3.fromRGB(88, 101, 242),
 })
 
-Library:Notify({
-    Title = "Meizu Library v2.2",
-    Content = "Load thành công! Nhấn <b>RightControl</b> để ẩn/hiện UI.",
-    Duration = 6,
-})
+--// Main Tab
+local MainTab = Window:CreateTab("Test", "rbxassetid://6026568198", 1)
 
---// ================= TAB: MAIN =================
-local Main = Window:CreateTab("Main", "rbxassetid://10723407389")
+local MainSection = MainTab:CreateSection("Controls")
 
-local Combat = Main:CreateSection("Combat")
-Combat:CreateToggle({
-    Title = "Kill Aura",
-    Description = "Tự động tấn công kẻ địch xung quanh",
-    Default = false,
-    Flag = "KillAura",
-    Callback = function(v) print("[Main] Kill Aura =", v) end,
-})
-Combat:CreateSlider({
-    Title = "Kill Aura Range",
-    Min = 10, Max = 500, Default = 120, Rounding = 0,
-    Flag = "AuraRange",
-    Callback = function(v) print("[Main] Range =", v) end,
-})
-Combat:CreateDropdown({
-    Title = "Target Mode",
-    Options = {"Closest", "Lowest HP", "Random", "All"},
-    Default = "Closest",
-    Flag = "TargetMode",
-    Callback = function(v) print("[Main] Target =", v) end,
-})
-Combat:CreateMultiDropdown({
-    Title = "Auto Collect",
-    Options = {"Coins", "Gems", "Chests", "Orbs", "Keys"},
-    Default = {"Coins", "Gems"},
-    Flag = "AutoCollect",
-    Callback = function(list) print("[Main] Collect:", table.concat(list, ", ")) end,
-})
-
-local Misc = Main:CreateSection("Misc")
-Misc:CreateButton({
-    Title = "Send Notification",
-    Description = "Thử hệ thống thông báo",
+--// Button test
+MainSection:CreateButton({
+    Title = "Test Button",
+    Description = "Bấm nút này để test callback + notification.",
     Callback = function()
-        Library:Notify({Title = "Hello!", Content = "Đây là notification test!", Duration = 4})
+        print("[MEIZU TEST] Button clicked")
+
+        Library:Notify({
+            Title = "Button",
+            Content = "Bạn vừa bấm Test Button!",
+            Duration = 3,
+        })
     end,
 })
-Misc:CreateButton({
-    Title = "Open Dialog",
+
+--// Toggle test
+MainSection:CreateToggle({
+    Title = "Test Toggle",
+    Description = "Bật/tắt để kiểm tra trạng thái toggle.",
+    Default = false,
+    Flag = "TestToggle",
+    Callback = function(value)
+        print("[MEIZU TEST] Toggle =", value)
+
+        Library:Notify({
+            Title = "Toggle",
+            Content = "Trạng thái: " .. tostring(value),
+            Duration = 2,
+        })
+    end,
+})
+
+--// Slider test
+MainSection:CreateSlider({
+    Title = "Test Slider",
+    Description = "Kéo từ 0 đến 100 để test slider.",
+    Min = 0,
+    Max = 100,
+    Default = 50,
+    Rounding = 0,
+    Flag = "TestSlider",
+    Callback = function(value)
+        print("[MEIZU TEST] Slider =", value)
+    end,
+})
+
+--// Dropdown test
+MainSection:CreateDropdown({
+    Title = "Test Dropdown",
+    Description = "Chọn một option.",
+    Options = {"Option A", "Option B", "Option C", "Option D"},
+    Default = "Option A",
+    Flag = "TestDropdown",
+    Callback = function(value)
+        print("[MEIZU TEST] Dropdown =", value)
+    end,
+})
+
+--// Multi Dropdown test
+MainSection:CreateMultiDropdown({
+    Title = "Test Multi Dropdown",
+    Description = "Chọn nhiều option cùng lúc.",
+    Options = {"Red", "Green", "Blue", "Yellow"},
+    Default = {"Red", "Blue"},
+    Flag = "TestMultiDropdown",
+    Callback = function(values)
+        print("[MEIZU TEST] MultiDropdown =", table.concat(values, ", "))
+    end,
+})
+
+--// Input test
+MainSection:CreateInput({
+    Title = "Test Input",
+    Description = "Nhập text rồi Enter hoặc click ra ngoài.",
+    Placeholder = "Nhập gì đó...",
+    Default = "Hello Meizu",
+    Flag = "TestInput",
+    Callback = function(value)
+        print("[MEIZU TEST] Input =", value)
+
+        Library:Notify({
+            Title = "Input",
+            Content = "Bạn nhập: " .. tostring(value),
+            Duration = 3,
+        })
+    end,
+})
+
+local ExtraSection = MainTab:CreateSection("Extra")
+
+--// Color Picker test
+ExtraSection:CreateColorPicker({
+    Title = "Test Color Picker",
+    Description = "Kéo ô màu để test HSV + callback.",
+    Default = Color3.fromRGB(255, 80, 120),
+    Flag = "TestColor",
+    Callback = function(color)
+        print("[MEIZU TEST] Color =", color)
+    end,
+})
+
+--// Keybind test
+ExtraSection:CreateKeybind({
+    Title = "Test Keybind",
+    Description = "Bấm vào ô bên phải rồi nhấn một phím.",
+    Default = Enum.KeyCode.F,
+    Flag = "TestKeybind",
+    ChangedCallback = function(key)
+        print("[MEIZU TEST] Keybind changed =", key.Name)
+
+        Library:Notify({
+            Title = "Keybind",
+            Content = "Phím mới: " .. key.Name,
+            Duration = 2,
+        })
+    end,
+})
+
+--// Paragraph test
+ExtraSection:CreateParagraph({
+    Title = "Paragraph Test",
+    Content = "Đây là paragraph dùng để kiểm tra text wrapping, kích thước tự động và giao diện của library.",
+})
+
+--// Dialog test
+ExtraSection:CreateButton({
+    Title = "Test Dialog",
+    Description = "Mở hộp thoại xác nhận.",
     Callback = function()
         Window:Dialog({
-            Title = "Teleport",
-            Content = "Bạn có muốn teleport đến Boss không?",
+            Title = "Meizu Dialog",
+            Content = "Dialog hoạt động bình thường không? Hãy thử bấm từng nút.",
             Buttons = {
-                {Title = "Cancel"},
-                {Title = "Teleport", Variant = "Primary", Callback = function()
-                    Library:Notify({Title = "Teleported!", Content = "Đã dịch chuyển thành công!"})
-                end},
+                {
+                    Title = "Cancel",
+                },
+                {
+                    Title = "OK",
+                    Variant = "Primary",
+                    Callback = function()
+                        print("[MEIZU TEST] Dialog OK")
+                        Library:Notify({
+                            Title = "Dialog",
+                            Content = "Bạn đã bấm OK.",
+                            Duration = 2,
+                        })
+                    end,
+                },
             },
         })
     end,
 })
-Misc:CreateKeybind({
-    Title = "Toggle Kill Aura",
-    Default = Enum.KeyCode.E,
-    Flag = "AuraKey",
-    Callback = function()
-        Library.Flags.KillAura = not Library.Flags.KillAura
-        print("[Main] Kill Aura toggled:", Library.Flags.KillAura)
-    end,
-})
-Misc:CreateInput({
-    Title = "Webhook",
-    Placeholder = "Nhập URL...",
-    Flag = "Webhook",
-    Callback = function(text) print("[Main] Webhook:", text) end,
-})
 
---// ================= TAB: PLAYER =================
-local Player = Window:CreateTab("Player")
-local Movement = Player:CreateSection("Movement")
-Movement:CreateToggle({Title = "Enable Character Mods", Flag = "CharMods", Default = false})
-Movement:CreateSlider({
-    Title = "WalkSpeed", Min = 16, Max = 300, Default = 16, Flag = "WalkSpeed",
-    Callback = function(v)
-        local char = game.Players.LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum and Library.Flags.CharMods then hum.WalkSpeed = v end
-    end,
-})
-Movement:CreateSlider({
-    Title = "JumpPower", Min = 50, Max = 300, Default = 50, Flag = "JumpPower",
-    Callback = function(v)
-        local char = game.Players.LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum and Library.Flags.CharMods then
-            hum.UseJumpPower = true
-            hum.JumpPower = v
-        end
+--// API test tab
+local APITab = Window:CreateTab("API", "rbxassetid://6022668898", 2)
+local APISection = APITab:CreateSection("Library API")
+
+APISection:CreateButton({
+    Title = "Theme: Light",
+    Callback = function()
+        Library:ApplyTheme("Light")
     end,
 })
 
---// ================= TAB: UI TEST =================
-local UITest = Window:CreateTab("UI Test")
-UITest:CreateParagraph({
-    Title = "Test zone",
-    Content = "Thử: đổi theme, đổi accent (kéo ô đậm/nhạt), đổi hình nút nổi bằng PNG.",
-})
-UITest:CreateButton({
-    Title = "Cycle Theme",
-    Description = "Dark → Light → Midnight → Void",
+APISection:CreateButton({
+    Title = "Theme: Midnight",
     Callback = function()
-        local list = {"Dark", "Light", "Midnight", "Void"}
-        local i = table.find(list, Library.Theme) or 1
-        Library:ApplyTheme(list[(i % #list) + 1])
-        Library:Notify({Title = "Theme", Content = "Đã đổi sang theme <b>" .. Library.Theme .. "</b>", Duration = 3})
-    end,
-})
-UITest:CreateColorPicker({
-    Title = "Accent Color (Test Drag)",
-    Default = Color3.fromRGB(88, 101, 242),
-    Flag = "AccentTest",
-    Callback = function(c)
-        Library:ApplyAccent(c)
-    end,
-})
-UITest:CreateButton({
-    Title = "Set Meizu PNG",
-    Description = "Ảnh meizuxp.png từ URL ngoài",
-    Callback = function()
-        Window:SetToggleImage("https://i.ibb.co/S7rpHJJN/meizuxp.png")
-    end,
-})
-UITest:CreateButton({
-    Title = "Set rbxasset Image",
-    Description = "Ảnh từ asset Roblox (luôn hoạt động)",
-    Callback = function()
-        Window:SetToggleImage("rbxassetid://10723407389")
-    end,
-})
-UITest:CreateButton({
-    Title = "Reset Toggle Image",
-    Callback = function()
-        Window:SetToggleImage(nil)
+        Library:ApplyTheme("Midnight")
     end,
 })
 
-Window:SelectTab(1)
-print("✅ Meizu Library v2.2 test loaded!")
+APISection:CreateButton({
+    Title = "Theme: Void",
+    Callback = function()
+        Library:ApplyTheme("Void")
+    end,
+})
+
+APISection:CreateButton({
+    Title = "Accent: Purple",
+    Callback = function()
+        Library:ApplyAccent(Color3.fromRGB(170, 85, 255))
+    end,
+})
+
+APISection:CreateButton({
+    Title = "Accent: Green",
+    Callback = function()
+        Library:ApplyAccent(Color3.fromRGB(60, 220, 120))
+    end,
+})
+
+APISection:CreateToggle({
+    Title = "Rainbow Accent",
+    Default = false,
+    Callback = function(value)
+        Library:SetRainbow(value)
+    end,
+})
+
+APISection:CreateDropdown({
+    Title = "Language",
+    Options = {"Tiếng Việt", "English"},
+    Default = "Tiếng Việt",
+    Callback = function(value)
+        Library:SetLanguage(value == "English" and "en" or "vi")
+    end,
+})
+
+APISection:CreateButton({
+    Title = "Notify Test",
+    Callback = function()
+        Library:Notify({
+            Title = "Notification Test",
+            Content = "Notify API đang hoạt động.",
+            Duration = 4,
+        })
+    end,
+})
+
+--// Ready callback
+Window:OnReady(function()
+    print("[MEIZU TEST] UI READY")
+
+    Library:Notify({
+        Title = "Meizu Test",
+        Content = "UI đã load xong. Hãy test từng control.",
+        Duration = 4,
+    })
+end)
