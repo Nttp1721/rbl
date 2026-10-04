@@ -1683,44 +1683,112 @@ MeizuLibrary.CreateWindow = function(a, b)
             return el
         end
 
-        --// PARAGRAPH
+        --// PARAGRAPH (robust fixed-height layout)
         function target:CreateParagraph(cfg)
             cfg = cfg or {}
-            local Card = MakeCard(36, false)
-            Card.Size = UDim2.new(1, 0, 0, 0)
-            Card.AutomaticSize = Enum.AutomaticSize.Y
-            New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = Card})
+            local PAD_X, PAD_T, PAD_B, GAP = 12, 10, 10, 4
+            local Card = MakeCard(40, false)
+
+            local TitleLabel
+            local ContentLabel
+
+            local function ApplyLayout()
+                if not Card or not Card.Parent then return end
+                local width = math.max(120, Card.AbsoluteSize.X - (PAD_X * 2))
+                local titleH = 0
+                local contentH = 0
+
+                if TitleLabel then
+                    titleH = MeasureTextHeight(TitleLabel.Text, Enum.Font.GothamBold, 13, width)
+                    TitleLabel.Size = UDim2.new(1, 0, 0, titleH)
+                end
+                if ContentLabel then
+                    contentH = MeasureTextHeight(ContentLabel.Text, Enum.Font.Gotham, 12, width) + 2
+                    ContentLabel.Size = UDim2.new(1, 0, 0, contentH)
+                end
+
+                local total = PAD_T + titleH
+                if TitleLabel and ContentLabel then
+                    total = total + GAP
+                end
+                total = total + contentH + PAD_B
+                Card.Size = UDim2.new(1, 0, 0, math.max(36, total))
+            end
+
+            Card.Size = UDim2.new(1, 0, 0, 40)
+            Card.ClipsDescendants = false
+
             New("UIPadding", {
-                PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10),
-                PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), Parent = Card})
+                PaddingTop = UDim.new(0, PAD_T),
+                PaddingBottom = UDim.new(0, PAD_B),
+                PaddingLeft = UDim.new(0, PAD_X),
+                PaddingRight = UDim.new(0, PAD_X),
+                Parent = Card,
+            })
+            local Layout = New("UIListLayout", {
+                Padding = UDim.new(0, GAP),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Parent = Card,
+            })
+
             if cfg.Title then
-                local T1 = New("TextLabel", {
+                TitleLabel = New("TextLabel", {
                     BackgroundTransparency = 1,
                     Font = Enum.Font.GothamBold, TextSize = 13,
-                    Text = cfg.Title, TextColor3 = T("Text"),
+                    Text = tostring(cfg.Title), TextColor3 = T("Text"),
                     TextXAlignment = Enum.TextXAlignment.Left,
-                    TextWrapped = true,
-                    Size = UDim2.new(1, 0, 0, 0),
-                    AutomaticSize = Enum.AutomaticSize.Y,
+                    TextYAlignment = Enum.TextYAlignment.Top,
+                    TextWrapped = true, RichText = false,
                     LayoutOrder = 1, Parent = Card,
                 })
-                Register(T1, {TextColor3 = "Text"})
+                Register(TitleLabel, {TextColor3 = "Text"})
             end
-            if cfg.Content then
-                local T2 = New("TextLabel", {
+
+            if cfg.Content ~= nil then
+                ContentLabel = New("TextLabel", {
                     BackgroundTransparency = 1,
                     Font = Enum.Font.Gotham, TextSize = 12,
-                    Text = cfg.Content, TextColor3 = T("SubText"),
+                    Text = tostring(cfg.Content), TextColor3 = T("SubText"),
                     TextXAlignment = Enum.TextXAlignment.Left,
+                    TextYAlignment = Enum.TextYAlignment.Top,
                     TextWrapped = true, RichText = true,
-                    Size = UDim2.new(1, 0, 0, 0),
-                    AutomaticSize = Enum.AutomaticSize.Y,
                     LayoutOrder = 2, Parent = Card,
                 })
-                Register(T2, {TextColor3 = "SubText"})
+                Register(ContentLabel, {TextColor3 = "SubText"})
             end
-            AddSearch(Card, cfg.Title)
-            return {Frame = Card}
+
+            AddSearch(Card, cfg.Title or cfg.Content)
+
+            local element = {
+                Frame = Card,
+                TitleLabel = TitleLabel,
+                ContentLabel = ContentLabel,
+                SetTitle = function(self, text)
+                    if TitleLabel and TitleLabel.Parent then
+                        TitleLabel.Text = tostring(text or "")
+                        ApplyLayout()
+                    end
+                end,
+                SetContent = function(self, text, textColor)
+                    if ContentLabel and ContentLabel.Parent then
+                        ContentLabel.Text = tostring(text or "")
+                        if textColor then ContentLabel.TextColor3 = textColor end
+                        ApplyLayout()
+                    end
+                end,
+            }
+
+            local lastWidth = 0
+            Card:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                local width = Card.AbsoluteSize.X
+                if math.abs(width - lastWidth) > 0.5 then
+                    lastWidth = width
+                    task.defer(ApplyLayout)
+                end
+            end)
+
+            task.defer(ApplyLayout)
+            return element
         end
     end
 
