@@ -5,45 +5,32 @@
     ██║╚██╔╝██║██╔══╝  ██║╚════██║  ╚██╔╝
     ██║ ╚═╝ ██║███████╗██║███████║   ██║
     ╚═╝     ╚═╝╚══════╝╚═╝╚══════╝   ╚═╝
-    MEIZU LIBRARY v2.3 — Modern UI Library (Fluent-inspired)
+    MEIZU LIBRARY v2.2 — Modern UI Library (Fluent-inspired)
     =========================================================
-    v2.3 (CHANGELOG)
-      + Nút nổi: hình CỐ ĐỊNH (meizuxp.png), đã xoá chức năng đổi hình
-      + Ngôn ngữ: Tiếng Việt / English (chọn trong Settings, tự ghi nhớ)
-      + Màn hình loading (giống testtintro.lua) trước khi mở UI
-      + Animation mượt hơn: mở/đóng, đổi tab, nhấn nút, toggle, thông báo...
-      + Fix: Settings tab chiếm index 1 | keybind bật/tắt bị gọi 2 lần |
-             bóng đổ bị cắt | kéo slider/colorpicker hỏng sau khi tạo lại UI
-
     API:
       Library:CreateWindow{Title, SubTitle, Theme, Accent, ToggleKeybind,
-                           ToggleUIButton, ToggleText, Size, Language,
-                           Loader, LoaderTitle, LoaderColor}
+                           ToggleUIButton, ToggleImage, ToggleText, Size}
       Window:CreateTab(name, iconId, order) / Window:SelectTab(1)
       Window:Toggle(state) / Window:Dialog{Title, Content, Buttons}
-      Window:OnReady(fn)                  -- chạy khi loading xong & UI đã mở
+      Window:SetToggleImage(assetIdHoặcUrl | nil)  -- đổi hình nút nổi
       Tab/Section:CreateButton / CreateToggle / CreateSlider / CreateDropdown
                   CreateMultiDropdown / CreateKeybind / CreateInput
                   CreateColorPicker / CreateParagraph / CreateSection
       Library:Notify{Title, Content, Duration} / Library:ApplyTheme("Dark")
       Library:ApplyAccent(Color3) / Library:SetRainbow(bool)
-      Library:SetLanguage("vi" | "en") / Library:GetLanguage()
       Library:SaveSettings(name) / Library:LoadSettings(name) / Library:Destroy()
       Library.Flags --> giá trị theo Flag
-
-    ĐA NGÔN NGỮ CHO SCRIPT CỦA BẠN:
-      Mọi Title / Description / Content / Placeholder đều nhận 2 dạng:
-        Title = "Auto Farm"                       -- chuỗi thường
-        Title = {vi = "Tự động farm", en = "Auto Farm"}   -- tự đổi khi đổi ngôn ngữ
 ]]
 
 --// ================== CẤU HÌNH NHANH ==================
 local TOGGLE_BUTTON_SIZE     = UDim2.new(0, 50, 0, 50)                                  -- Nút nổi
-local TOGGLE_BUTTON_POSITION = UDim2.new(0.120833337 - 0.1, 0, 0.0952890813 + 0.01, 0)  -- Vị trí mặc định
-local TOGGLE_BUTTON_RADIUS   = 12                                                       -- Bo góc kiểu testtintro
+local TOGGLE_BUTTON_POSITION = UDim2.new(0.120833337 - 0.1, 0, 0.0952890813 + 0.01, 0)  -- Vị trí
 
--- HÌNH NÚT NỔI: CỐ ĐỊNH, không đổi được
-local LOGO_URL = "https://i.ibb.co/S7rpHJJN/meizuxp.png"
+-- Hình mặc định của nút nổi (URL PNG hoặc rbxassetid://ID)
+local TOGGLE_BUTTON_IMAGE    = "https://i.ibb.co/S7rpHJJN/meizuxp.png"
+
+-- Bo góc nút nổi theo kiểu testtintro.lua (KHÔNG tròn hoàn hảo)
+local TOGGLE_BUTTON_RADIUS   = 12
 --// ====================================================
 
 local MeizuLibrary = {
@@ -53,19 +40,15 @@ local MeizuLibrary = {
     Accent        = Color3.fromRGB(88, 101, 242),
     ToggleKeybind = Enum.KeyCode.RightControl,
     SoundEnabled  = true,
-    Language      = "vi",
     Folder        = "MeizuLibrary",
     _FlagElems    = {},
     _ThemeObjs    = {},
     _AccentObjs   = {},
     _ThemeHooks   = {},
-    _LangObjs     = {},
-    _LangHooks    = {},
     _Connections  = {},
     _ActiveDrags  = {},
-    _Notifs       = {},
     _NotifCount   = 0,
-    _Gen          = 0,
+    _ToggleImage  = nil,
     Destroyed     = false,
 }
 
@@ -77,148 +60,62 @@ local HttpService      = game:GetService("HttpService")
 local TextService      = game:GetService("TextService")
 
 local LocalPlayer = Players.LocalPlayer
-while not LocalPlayer do
-    task.wait()
-    LocalPlayer = Players.LocalPlayer
-end
 
---// ============================ NGÔN NGỮ ============================
-local Strings = {
-    -- chung
-    search_placeholder = {vi = "Tìm kiếm...", en = "Search..."},
-    select_placeholder = {vi = "Chọn...", en = "Select..."},
-    none_selected      = {vi = "Chưa chọn", en = "None selected"},
-    input_placeholder  = {vi = "Nhập tại đây...", en = "Type here..."},
-    key_none           = {vi = "Không", en = "None"},
-    notification       = {vi = "Thông báo", en = "Notification"},
-    dialog             = {vi = "Hộp thoại", en = "Dialog"},
-    btn_ok             = {vi = "OK", en = "OK"},
-    btn_cancel         = {vi = "Hủy", en = "Cancel"},
-    btn_close          = {vi = "Đóng", en = "Close"},
-    btn_unload         = {vi = "Gỡ", en = "Unload"},
-    close_title        = {vi = "Đóng giao diện", en = "Close UI"},
-    close_content      = {vi = "Bạn có muốn tắt hoàn toàn giao diện không?", en = "Do you want to completely close the UI?"},
 
-    -- Settings
-    tab_settings   = {vi = "Cài đặt", en = "Settings"},
-    about_content  = {
-        vi = "Thư viện UI hiện đại — lấy cảm hứng từ Fluent Design.\nCảm ơn bạn đã sử dụng!",
-        en = "Modern UI Library — Inspired by Fluent Design.\nThank you for using it!",
-    },
-    sec_interface  = {vi = "Giao diện", en = "Interface"},
-    sec_config     = {vi = "Cấu hình", en = "Config"},
-    sec_system     = {vi = "Hệ thống", en = "System"},
-    language       = {vi = "Ngôn ngữ", en = "Language"},
-    language_desc  = {vi = "Chọn ngôn ngữ hiển thị của giao diện", en = "Choose the interface language"},
-    language_changed = {vi = "Đã chuyển sang Tiếng Việt", en = "Switched to English"},
-    theme          = {vi = "Chủ đề màu", en = "Theme"},
-    accent         = {vi = "Màu nhấn", en = "Accent Color"},
-    rainbow        = {vi = "Màu nhấn cầu vồng", en = "Rainbow Accent"},
-    sound          = {vi = "Hiệu ứng âm thanh", en = "Sound Effects"},
-    keybind_toggle = {vi = "Phím ẩn/hiện UI", en = "Toggle UI Keybind"},
-    config_name    = {vi = "Tên cấu hình", en = "Config Name"},
-    save_config    = {vi = "Lưu cấu hình", en = "Save Config"},
-    load_config    = {vi = "Tải cấu hình", en = "Load Config"},
-    config_title   = {vi = "Cấu hình", en = "Config"},
-    config_saved   = {vi = "Đã lưu cấu hình '<b>%s</b>'!", en = "Saved config '<b>%s</b>'!"},
-    config_loaded  = {vi = "Đã tải cấu hình '<b>%s</b>'!", en = "Loaded config '<b>%s</b>'!"},
-    config_nosave  = {vi = "Executor không hỗ trợ writefile!", en = "Your executor doesn't support writefile!"},
-    config_notfound = {vi = "Không tìm thấy cấu hình!", en = "Config not found!"},
-    unload         = {vi = "Gỡ thư viện", en = "Unload Library"},
-    unload_desc    = {vi = "Xoá toàn bộ giao diện khỏi game", en = "Remove the entire UI from the game"},
-    unload_title   = {vi = "Gỡ giao diện", en = "Unload"},
-    unload_content = {vi = "Bạn có chắc muốn gỡ giao diện không?", en = "Are you sure you want to unload the UI?"},
+--// ====================== LANGUAGE SYSTEM ======================
+MeizuLibrary.Language = "vi"
+MeizuLibrary.Languages = { vi = "Tiếng Việt", en = "English" }
+MeizuLibrary._LocEntries = {}
 
-    -- Loader
-    loader_title = {vi = "Cảm ơn bạn đã sử dụng Meizu", en = "Thanks For Using Meizu"},
-    loader_step_1 = {vi = "Đang khởi tạo thư viện...", en = "Initializing library..."},
-    loader_step_2 = {vi = "Đang tải tài nguyên...", en = "Loading assets..."},
-    loader_step_3 = {vi = "Đang dựng giao diện...", en = "Building interface..."},
-    loader_step_4 = {vi = "Hoàn tất! Chúc bạn vui vẻ", en = "Done! Have fun"},
+MeizuLibrary.LanguageMap = {
+    ["Settings"] = {vi="Cài đặt", en="Settings"},
+    ["Theme"] = {vi="Chủ đề", en="Theme"},
+    ["Accent Color"] = {vi="Màu nhấn", en="Accent Color"},
+    ["Rainbow Accent"] = {vi="Màu nhấn cầu vồng", en="Rainbow Accent"},
+    ["Sound Effects"] = {vi="Âm thanh", en="Sound Effects"},
+    ["Toggle UI Keybind"] = {vi="Phím bật/tắt UI", en="Toggle UI Keybind"},
+    ["Config Name"] = {vi="Tên config", en="Config Name"},
+    ["Save Config"] = {vi="Lưu config", en="Save Config"},
+    ["Load Config"] = {vi="Tải config", en="Load Config"},
+    ["Unload Library"] = {vi="Gỡ Library", en="Unload Library"},
+    ["Language"] = {vi="Ngôn ngữ", en="Language"},
+    ["Search..."] = {vi="Tìm kiếm...", en="Search..."},
 }
-MeizuLibrary.Strings = Strings
 
--- Lấy chuỗi theo ngôn ngữ hiện tại (nhận string hoặc {vi=,en=})
-local function Resolve(v)
-    if type(v) == "table" then
-        local s = v[MeizuLibrary.Language] or v.en or v.vi
-        if s == nil then
-            local _, first = next(v)
-            s = first
+function MeizuLibrary:_Translate(key)
+    local row = self.LanguageMap[key]
+    if type(row) == "table" then
+        return row[self.Language] or row.en or key
+    end
+    return key
+end
+
+function MeizuLibrary:_ApplyLocalization()
+    if not self._ScreenGui then return end
+    for _, obj in ipairs(self._ScreenGui:GetDescendants()) do
+        local key = obj:GetAttribute("MeizuLocKey")
+        if key and (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then
+            pcall(function() obj.Text = self:_Translate(key) end)
         end
-        return s ~= nil and tostring(s) or ""
-    end
-    if v == nil then return "" end
-    return tostring(v)
-end
-
-local function S(key) return Strings[key] or key end
-
-local function LS(key, ...)
-    local s = Resolve(Strings[key] or key)
-    if select("#", ...) > 0 then
-        local ok, r = pcall(string.format, s, ...)
-        if ok then return r end
-    end
-    return s
-end
-
--- Gán text + tự cập nhật khi đổi ngôn ngữ (chỉ khi value là bảng {vi=,en=})
-local function BindText(obj, prop, value, transform)
-    local function apply()
-        local s = Resolve(value)
-        if transform then s = transform(s) end
-        obj[prop] = s
-    end
-    apply()
-    if type(value) == "table" then
-        table.insert(MeizuLibrary._LangObjs, {Object = obj, Apply = apply})
-    end
-end
-
-local function OnLangChange(fn)
-    table.insert(MeizuLibrary._LangHooks, fn)
-end
-
--- Chuỗi tìm kiếm gom cả 2 ngôn ngữ
-local function SearchText(v)
-    if type(v) == "table" then
-        local parts = {}
-        for _, s in pairs(v) do table.insert(parts, tostring(s)) end
-        return string.lower(table.concat(parts, " "))
-    end
-    return string.lower(tostring(v or ""))
-end
-
--- Viết hoa chỉ khi chuỗi thuần ASCII (tránh vỡ dấu tiếng Việt)
-local function UpperSafe(s)
-    if string.find(s, "[\128-\255]") then return s end
-    return string.upper(s)
-end
-
-local function PrefPath() return MeizuLibrary.Folder .. "/language.txt" end
-
-local function LoadLangPref()
-    if typeof(readfile) ~= "function" or typeof(isfile) ~= "function" then return nil end
-    local ok, v = pcall(function()
-        if isfile(PrefPath()) then return readfile(PrefPath()) end
-        return nil
-    end)
-    if ok and type(v) == "string" then
-        local code = v:match("^%s*(%a+)%s*$")
-        if code == "vi" or code == "en" then return code end
-    end
-    return nil
-end
-
-local function SaveLangPref(code)
-    if typeof(writefile) ~= "function" then return end
-    pcall(function()
-        if typeof(isfolder) == "function" and typeof(makefolder) == "function" and not isfolder(MeizuLibrary.Folder) then
-            makefolder(MeizuLibrary.Folder)
+        local descKey = obj:GetAttribute("MeizuLocDesc")
+        if descKey and (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then
+            pcall(function() obj.Text = self:_Translate(descKey) end)
         end
-        writefile(PrefPath(), code)
-    end)
+    end
+end
+
+function MeizuLibrary:SetLanguage(lang)
+    lang = tostring(lang or "vi"):lower()
+    if lang ~= "vi" and lang ~= "en" then lang = "vi" end
+    self.Language = lang
+    self.Flags["__language"] = lang
+    if type(writefile) == "function" and type(isfolder) == "function" and type(makefolder) == "function" then
+        pcall(function()
+            if not isfolder(self.Folder) then makefolder(self.Folder) end
+            writefile(self.Folder .. "/language.json", HttpService:JSONEncode({Language=lang}))
+        end)
+    end
+    self:_ApplyLocalization()
 end
 
 --// ============================ THEMES ============================
@@ -279,23 +176,8 @@ local function Shade(color, mult)
     return color:Lerp(Color3.new(0, 0, 0), 1 - mult)
 end
 
-local ClassDefaults = {
-    Frame          = {BorderSizePixel = 0},
-    CanvasGroup    = {BorderSizePixel = 0},
-    ScrollingFrame = {BorderSizePixel = 0},
-    TextLabel      = {BorderSizePixel = 0, Text = ""},
-    TextButton     = {BorderSizePixel = 0, AutoButtonColor = false, Text = ""},
-    TextBox        = {BorderSizePixel = 0},
-    ImageLabel     = {BorderSizePixel = 0},
-    ImageButton    = {BorderSizePixel = 0, AutoButtonColor = false},
-}
-
 local function New(class, props, children)
     local obj = Instance.new(class)
-    local defaults = ClassDefaults[class]
-    if defaults then
-        for k, v in pairs(defaults) do obj[k] = v end
-    end
     local parent = nil
     if props then
         for k, v in pairs(props) do
@@ -340,16 +222,10 @@ end
 local function SafeCall(fn, ...)
     if type(fn) ~= "function" then return end
     local args = {...}
-    local n = select("#", ...)
     task.spawn(function()
-        local ok, err = pcall(fn, unpack(args, 1, n))
+        local ok, err = pcall(fn, unpack(args))
         if not ok then warn("[MeizuLibrary] Callback error: " .. tostring(err)) end
     end)
-end
-
-local function IsPointer(input)
-    return input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch
 end
 
 local function Ripple(parent, x, y)
@@ -362,37 +238,20 @@ local function Ripple(parent, x, y)
         Size = UDim2.fromOffset(0, 0),
         BackgroundColor3 = Color3.fromRGB(255, 255, 255),
         BackgroundTransparency = 0.8,
+        BorderSizePixel = 0,
         ZIndex = 50,
         Parent = parent,
     })
     New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = circle})
-    Tween(circle, 0.6, {Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1}, Enum.EasingStyle.Quad)
-    task.delay(0.65, function() if circle then circle:Destroy() end end)
-end
-
--- Hiệu ứng nhấn: thẻ co nhẹ rồi bật lại mượt
-local function AddPress(card)
-    local sc = New("UIScale", {Scale = 1, Parent = card})
-    local function release()
-        Tween(sc, 0.35, {Scale = 1}, Enum.EasingStyle.Back)
-    end
-    card.InputBegan:Connect(function(input)
-        if IsPointer(input) then
-            Tween(sc, 0.09, {Scale = 0.985}, Enum.EasingStyle.Quad)
-        end
-    end)
-    card.InputEnded:Connect(function(input)
-        if IsPointer(input) then release() end
-    end)
-    card.MouseLeave:Connect(release)
-    return sc
+    Tween(circle, 0.55, {Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1}, Enum.EasingStyle.Quad)
+    task.delay(0.6, function() if circle then circle:Destroy() end end)
 end
 
 local function MakeDraggable(handle, target)
     local dragging = false
     local dragInput, dragStart, startPos
     handle.InputBegan:Connect(function(input)
-        if IsPointer(input) then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startPos = target.Position
@@ -464,11 +323,9 @@ local function CreateScreenGui()
         gui.IgnoreGuiInset = true
         gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         gui.DisplayOrder = 9999
-        if syn and syn.protect_gui then pcall(syn.protect_gui, gui) end
         gui.Parent = parent
     end)
-    if not ok or not gui or not gui.Parent then
-        if gui then pcall(function() gui:Destroy() end) end
+    if not ok or not gui then
         gui = Instance.new("ScreenGui")
         gui.Name = "MeizuLibrary"
         gui.ResetOnSpawn = false
@@ -510,7 +367,8 @@ local function EnsureDragPipeline()
         end
     end))
     table.insert(MeizuLibrary._Connections, UserInputService.InputEnded:Connect(function(input)
-        if IsPointer(input) then
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
             local drags = MeizuLibrary._ActiveDrags
             MeizuLibrary._ActiveDrags = {}
             for _, h in ipairs(drags) do pcall(h.OnEnd, input) end
@@ -523,81 +381,39 @@ local function AddDrag(handlers)
     table.insert(MeizuLibrary._ActiveDrags, handlers)
 end
 
---// ==================== LOGO CỐ ĐỊNH (tải 1 lần, dùng cho loader + nút nổi) ====================
-local LogoState = {Asset = "", Ready = false, Started = false, Listeners = {}}
-
-local function IsPng(data)
-    return type(data) == "string" and #data > 100 and data:sub(2, 4) == "PNG"
-end
-
--- Tải PNG -> lưu file -> getcustomasset. Trả "" nếu executor không hỗ trợ / lỗi mạng
-local function FetchLogo()
-    local getAsset = getcustomasset or getsynasset
-    if typeof(getAsset) ~= "function" or typeof(writefile) ~= "function" then
-        return ""
-    end
-    local folder = MeizuLibrary.Folder
-    local path = folder .. "/meizuxp.png"
-    local ok, result = pcall(function()
-        if typeof(isfolder) == "function" and typeof(makefolder) == "function" and not isfolder(folder) then
-            makefolder(folder)
-        end
-        -- Dùng lại file đã tải nếu còn hợp lệ
-        if typeof(isfile) == "function" and typeof(readfile) == "function" and isfile(path) then
-            local cached = readfile(path)
-            if IsPng(cached) then return getAsset(path) end
-        end
-        local data
-        local okGet, body = pcall(game.HttpGet, game, LOGO_URL)
-        if okGet and IsPng(body) then
-            data = body
-        else
-            local req = request or http_request or (syn and syn.request)
-            if req then
-                local res = req({Url = LOGO_URL, Method = "GET"})
-                if res and IsPng(res.Body) then data = res.Body end
+--// ==================== RESOLVE IMAGE (ID hoặc URL .png) ====================
+local function ResolveImageAsset(id)
+    if type(id) == "number" then return "rbxassetid://" .. tostring(id) end
+    if type(id) ~= "string" then return nil end
+    id = id:match("^%s*(.-)%s*$") or ""
+    if id == "" then return nil end
+    if tonumber(id) then return "rbxassetid://" .. id end
+    if id:sub(1, 8) == "rbxasset" then return id end
+    if id:sub(1, 4) == "http" then
+        local ok, content = pcall(function() return game:HttpGet(id, true) end)
+        if not ok or not content then return nil end
+        if writefile and getcustomasset then
+            local ext = (id:lower():match("%.jpe?g$") and ".jpg") or ".png"
+            local path = MeizuLibrary.Folder .. "/toggle_image" .. ext
+            local okW = pcall(function()
+                if isfolder and not isfolder(MeizuLibrary.Folder) then makefolder(MeizuLibrary.Folder) end
+                writefile(path, content)
+            end)
+            if okW then
+                local okA, asset = pcall(getcustomasset, path)
+                if okA and asset then return asset end
             end
         end
-        if not data then error("Tải logo thất bại") end
-        writefile(path, data)
-        return getAsset(path)
-    end)
-    if ok and type(result) == "string" and result ~= "" then
-        return result
+        return nil
     end
-    return ""
+    return nil
 end
 
-local function StartLogoLoad()
-    if LogoState.Started then return end
-    LogoState.Started = true
-    task.spawn(function()
-        LogoState.Asset = FetchLogo()
-        LogoState.Ready = true
-        for _, fn in ipairs(LogoState.Listeners) do pcall(fn, LogoState.Asset) end
-        LogoState.Listeners = {}
-    end)
-end
-
-local function OnLogo(fn)
-    if LogoState.Ready then
-        task.spawn(fn, LogoState.Asset)
-    else
-        table.insert(LogoState.Listeners, fn)
-    end
-end
-
-StartLogoLoad() -- bắt đầu tải ngầm ngay khi nạp thư viện
-
---// ============================ NOTIFICATIONS ============================
-MeizuLibrary.Notify = function(a, b, c)
-    local cfg, dur
-    if a == MeizuLibrary then cfg, dur = b, c else cfg, dur = a, b end
-    if type(cfg) == "string" or (type(cfg) == "table" and cfg.Title == nil and cfg.Content == nil and (cfg.vi or cfg.en)) then
-        cfg = {Content = cfg, Duration = tonumber(dur)}
-    end
+--// ============================ NOTIFICATIONS (fix — không dùng AutomaticSize) ============================
+MeizuLibrary.Notify = function(a, b)
+    local cfg = (a == MeizuLibrary) and b or a
+    if type(cfg) == "string" then cfg = {Content = cfg, Duration = tonumber(b)} end
     cfg = cfg or {}
-
     local ScreenGui = MeizuLibrary._ScreenGui
     if not ScreenGui or MeizuLibrary.Destroyed then return end
 
@@ -613,7 +429,7 @@ MeizuLibrary.Notify = function(a, b, c)
             Parent = ScreenGui,
         })
         New("UIListLayout", {
-            Padding = UDim.new(0, 0),
+            Padding = UDim.new(0, 8),
             SortOrder = Enum.SortOrder.LayoutOrder,
             HorizontalAlignment = Enum.HorizontalAlignment.Right,
             Parent = holder,
@@ -623,48 +439,37 @@ MeizuLibrary.Notify = function(a, b, c)
 
     MeizuLibrary._NotifCount = MeizuLibrary._NotifCount + 1
 
-    local title = Resolve(cfg.Title ~= nil and cfg.Title or S("notification"))
-    local content = cfg.Content ~= nil and Resolve(cfg.Content) or nil
-
     -- Tính kích thước thủ công
     local WIDTH = 300
     local PAD_T, PAD_B, PAD_L, PAD_R = 12, 14, 14, 10
     local textW = WIDTH - PAD_L - 6 - PAD_R
     local titleH = 16
     local contentH = 0
-    if content then
-        contentH = math.min(MeasureTextHeight(content, Enum.Font.Gotham, 12, textW) + 2, 96)
+    if cfg.Content then
+        contentH = math.min(MeasureTextHeight(cfg.Content, Enum.Font.Gotham, 12, textW) + 2, 96)
     end
-    local cardH = PAD_T + titleH + (content and (5 + contentH) or 0) + PAD_B + 3
-
-    -- Wrap cao hơn card 8px (làm khoảng cách) -> khi đóng thì co lại mượt, không bị giật
-    local Wrap = New("Frame", {
-        BackgroundTransparency = 1,
-        Size = UDim2.fromOffset(WIDTH, cardH + 8),
-        LayoutOrder = -MeizuLibrary._NotifCount,
-        ZIndex = 200,
-        Parent = holder,
-    })
+    local cardH = PAD_T + titleH + (cfg.Content and (5 + contentH) or 0) + PAD_B + 3
 
     local Card = New("CanvasGroup", {
         BackgroundColor3 = T("Notification"),
         Size = UDim2.fromOffset(WIDTH, cardH),
-        Position = UDim2.fromOffset(70, 0),
         GroupTransparency = 1,
+        ClipsDescendants = true,
+        LayoutOrder = -MeizuLibrary._NotifCount,
+        BorderSizePixel = 0,
         ZIndex = 200,
-        Parent = Wrap,
+        Parent = holder,
     })
     Register(Card, {BackgroundColor3 = "Notification"})
     New("UICorner", {CornerRadius = UDim.new(0, 10), Parent = Card})
     local CardStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.4, Parent = Card})
     Register(CardStroke, {Color = "Stroke"})
-    local scale = New("UIScale", {Scale = 0.9, Parent = Card})
 
     local Bar = New("Frame", {
         BackgroundColor3 = MeizuLibrary.Accent,
         Position = UDim2.new(0, 0, 0, PAD_T),
         Size = UDim2.new(0, 3, 0, cardH - PAD_T - PAD_B),
-        ZIndex = 201, Parent = Card,
+        BorderSizePixel = 0, ZIndex = 201, Parent = Card,
     })
     RegisterAccent(Bar, "BackgroundColor3")
     New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Bar})
@@ -676,13 +481,13 @@ MeizuLibrary.Notify = function(a, b, c)
         Font = Enum.Font.GothamBold, TextSize = 13,
         TextColor3 = T("Text"), TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
-        Text = title,
+        Text = cfg.Title or "Notification",
         ZIndex = 201, Parent = Card,
     })
     Register(NTitle, {TextColor3 = "Text"})
 
     local NClose = New("TextButton", {
-        Text = "X", BackgroundTransparency = 1,
+        Text = "X", AutoButtonColor = false, BackgroundTransparency = 1,
         AnchorPoint = Vector2.new(1, 0),
         Position = UDim2.new(1, -6, 0, PAD_T - 2),
         Size = UDim2.fromOffset(22, 20),
@@ -693,7 +498,7 @@ MeizuLibrary.Notify = function(a, b, c)
     NClose.MouseEnter:Connect(function() Tween(NClose, 0.15, {TextColor3 = T("Text")}) end)
     NClose.MouseLeave:Connect(function() Tween(NClose, 0.2, {TextColor3 = T("SubText")}) end)
 
-    if content then
+    if cfg.Content then
         local NContent = New("TextLabel", {
             BackgroundTransparency = 1,
             Position = UDim2.new(0, PAD_L + 6, 0, PAD_T + titleH + 5),
@@ -703,7 +508,7 @@ MeizuLibrary.Notify = function(a, b, c)
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Top,
             TextWrapped = true, RichText = true,
-            Text = content, ZIndex = 201, Parent = Card,
+            Text = cfg.Content, ZIndex = 201, Parent = Card,
         })
         Register(NContent, {TextColor3 = "SubText"})
     end
@@ -713,53 +518,40 @@ MeizuLibrary.Notify = function(a, b, c)
         AnchorPoint = Vector2.new(0, 1),
         Position = UDim2.new(0, 0, 1, 0),
         Size = UDim2.new(1, 0, 0, 3),
-        ZIndex = 200, Parent = Card,
+        BorderSizePixel = 0, ZIndex = 200, Parent = Card,
     })
     Register(ProgTrack, {BackgroundColor3 = "Track"})
+    New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = ProgTrack})
     local ProgFill = New("Frame", {
         BackgroundColor3 = MeizuLibrary.Accent,
         AnchorPoint = Vector2.new(0, 1),
         Position = UDim2.new(0, 0, 1, 0),
         Size = UDim2.new(1, 0, 0, 3),
-        ZIndex = 201, Parent = Card,
+        BorderSizePixel = 0, ZIndex = 201, Parent = Card,
     })
     RegisterAccent(ProgFill, "BackgroundColor3")
+    New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = ProgFill})
 
     local closed = false
-    local closer = {}
     local function Close()
         if closed then return end
         closed = true
-        for i, e in ipairs(MeizuLibrary._Notifs) do
-            if e == closer then table.remove(MeizuLibrary._Notifs, i) break end
-        end
-        Tween(Card, 0.28, {Position = UDim2.fromOffset(70, 0), GroupTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        Tween(scale, 0.28, {Scale = 0.92}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        task.delay(0.26, function()
-            if not Wrap.Parent then return end
-            local tw = Tween(Wrap, 0.25, {Size = UDim2.fromOffset(WIDTH, 0)}, Enum.EasingStyle.Quint)
-            tw.Completed:Connect(function() if Wrap then Wrap:Destroy() end end)
-            task.delay(0.5, function() if Wrap and Wrap.Parent then Wrap:Destroy() end end)
-        end)
-    end
-    closer.Close = Close
-    table.insert(MeizuLibrary._Notifs, closer)
-    -- Giới hạn tối đa 6 thông báo cùng lúc
-    while #MeizuLibrary._Notifs > 6 do
-        local oldest = table.remove(MeizuLibrary._Notifs, 1)
-        if oldest and oldest.Close then oldest.Close() end
+        local sc = Card:FindFirstChildOfClass("UIScale")
+        Tween(Card, 0.2, {GroupTransparency = 1})
+        if sc then Tween(sc, 0.2, {Scale = 0.88}, Enum.EasingStyle.Quint) end
+        task.delay(0.22, function() if Card then Card:Destroy() end end)
     end
     NClose.Activated:Connect(Close)
 
-    Tween(Card, 0.35, {GroupTransparency = 0})
-    Tween(Card, 0.5, {Position = UDim2.fromOffset(0, 0)}, Enum.EasingStyle.Quint)
-    Tween(scale, 0.45, {Scale = 1}, Enum.EasingStyle.Back)
+    local scale = New("UIScale", {Scale = 0.85, Parent = Card})
+    Tween(Card, 0.25, {GroupTransparency = 0})
+    Tween(scale, 0.35, {Scale = 1}, Enum.EasingStyle.Back)
     PlaySound("rbxasset://sounds/electronicpingshort.wav", 0.25, 1.15)
 
-    local d = tonumber(cfg.Duration) or 5
-    if d > 0 then
-        Tween(ProgFill, d, {Size = UDim2.new(0, 0, 0, 3)}, Enum.EasingStyle.Linear)
-        task.delay(d, Close)
+    local dur = tonumber(cfg.Duration) or 5
+    if dur > 0 then
+        Tween(ProgFill, dur, {Size = UDim2.new(0, 0, 0, 3)}, Enum.EasingStyle.Linear)
+        task.delay(dur, Close)
     end
 end
 
@@ -805,28 +597,8 @@ function MeizuLibrary:SetRainbow(enabled)
     end
 end
 
-function MeizuLibrary:GetLanguage()
-    return self.Language
-end
-
-function MeizuLibrary:SetLanguage(code, silent)
-    if code ~= "vi" and code ~= "en" then return false end
-    self.Language = code
-    for i = #self._LangObjs, 1, -1 do
-        local e = self._LangObjs[i]
-        if not e.Object or not e.Object.Parent then
-            table.remove(self._LangObjs, i)
-        else
-            pcall(e.Apply)
-        end
-    end
-    for _, fn in ipairs(self._LangHooks) do pcall(fn) end
-    if not silent then SaveLangPref(code) end
-    return true
-end
-
 function MeizuLibrary:SaveSettings(name)
-    if typeof(writefile) ~= "function" then return false end
+    if not writefile then return false end
     name = tostring(name or "config")
     local data = {}
     for flag, el in pairs(self._FlagElems) do
@@ -835,25 +607,33 @@ function MeizuLibrary:SaveSettings(name)
             data[flag] = Serialize(v)
         end
     end
+    data["__language"] = self.Language
+    if self._ToggleImage then
+        data["__toggleimage"] = self._ToggleImage
+    end
     local ok = pcall(function()
-        if typeof(isfolder) == "function" and typeof(makefolder) == "function" and not isfolder(self.Folder) then
-            makefolder(self.Folder)
-        end
+        if isfolder and not isfolder(self.Folder) then makefolder(self.Folder) end
         writefile(self.Folder .. "/" .. name .. ".json", HttpService:JSONEncode(data))
     end)
     return ok
 end
 
 function MeizuLibrary:LoadSettings(name)
-    if typeof(readfile) ~= "function" then return false end
+    if not readfile then return false end
     name = tostring(name or "config")
     local okR, content = pcall(readfile, self.Folder .. "/" .. name .. ".json")
     if not okR then return false end
     local okD, data = pcall(function() return HttpService:JSONDecode(content) end)
     if not okD or type(data) ~= "table" then return false end
     for flag, v in pairs(data) do
-        local el = self._FlagElems[flag]
-        if el then pcall(el.Set, Deserialize(v)) end
+        if flag == "__language" then
+            self.Language = (v == "en") and "en" or "vi"
+        elseif flag == "__toggleimage" then
+            -- fixed launcher image: ignore legacy override data
+        else
+            local el = self._FlagElems[flag]
+            if el then pcall(el.Set, Deserialize(v)) end
+        end
     end
     return true
 end
@@ -867,15 +647,12 @@ function MeizuLibrary:Destroy()
     end
     self._Connections = {}
     self._ActiveDrags = {}
-    self._DragPipelineInit = false -- FIX: cho phép kéo slider/colorpicker sau khi tạo lại UI
     if self._ScreenGui then
         pcall(function() self._ScreenGui:Destroy() end)
         self._ScreenGui = nil
     end
     self._ThemeObjs, self._AccentObjs, self._ThemeHooks, self._FlagElems = {}, {}, {}, {}
-    self._LangObjs, self._LangHooks, self._Notifs = {}, {}, {}
     self._NotifHolder = nil
-    self._Window = nil
 end
 
 --// ============================ CREATE WINDOW ============================
@@ -886,91 +663,58 @@ MeizuLibrary.CreateWindow = function(a, b)
 
     if MeizuLibrary._ScreenGui then MeizuLibrary:Destroy() end
     MeizuLibrary.Destroyed = false
-    MeizuLibrary._Gen = MeizuLibrary._Gen + 1
-    local gen = MeizuLibrary._Gen
 
-    local Window = {_Tabs = {}, _UserTabs = {}, _CurrentTab = nil, _ReadyCbs = {}, _Ready = false, _SwitchToken = 0, _OpenToken = 0}
+    if config.Theme and MeizuLibrary.Themes[config.Theme] then MeizuLibrary.Theme = config.Theme end
+    if typeof(config.Accent) == "Color3" then MeizuLibrary.Accent = config.Accent end
+    if config.ToggleKeybind then MeizuLibrary.ToggleKeybind = config.ToggleKeybind end
+    if config.Language == "en" or config.Language == "vi" then MeizuLibrary.Language = config.Language end
+
+    local Window = {_Tabs = {}, _CurrentTab = nil, _BootSelected = false}
     MeizuLibrary._Window = Window
 
     local ScreenGui = CreateScreenGui()
     MeizuLibrary._ScreenGui = ScreenGui
 
-    local function Alive()
-        return MeizuLibrary._Gen == gen and not MeizuLibrary.Destroyed and MeizuLibrary._ScreenGui == ScreenGui
-    end
-
-    -- Ngôn ngữ: ưu tiên lựa chọn đã lưu > config > mặc định Tiếng Việt
-    local savedLang = LoadLangPref()
-    if savedLang then
-        MeizuLibrary.Language = savedLang
-    elseif config.Language == "vi" or config.Language == "en" then
-        MeizuLibrary.Language = config.Language
-    end
-
-    if config.Theme and MeizuLibrary.Themes[config.Theme] then MeizuLibrary.Theme = config.Theme end
-    if typeof(config.Accent) == "Color3" then
-        MeizuLibrary.Accent = config.Accent
-        MeizuLibrary._UserAccent = config.Accent
-    end
-    if config.ToggleKeybind then MeizuLibrary.ToggleKeybind = config.ToggleKeybind end
-
-    StartLogoLoad()
-
     local WinSize = config.Size or UDim2.fromOffset(600, 430)
     local W, H = WinSize.X.Offset, WinSize.Y.Offset
-    local vp = ScreenGui.AbsoluteSize
-    if vp.X > 0 and vp.Y > 0 then
-        W = math.min(W, vp.X - 24)
-        H = math.min(H, vp.Y - 24)
-    end
-    W = math.max(W, 420)
-    H = math.max(H, 280)
-    local SIDEBAR_W = (W < 520) and 150 or 185
+    local SIDEBAR_W = 185
 
     local isOpen = false
-    local SetToggleVisual -- gán ở phần nút nổi
+    local IconWrap
 
-    -- Root (trong suốt) chứa bóng đổ + cửa sổ -> bóng không bị CanvasGroup cắt
-    local Root = New("Frame", {
-        Name = "Root",
+    local Main = New("CanvasGroup", {
+        Name = "Main",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, 0, 0.5, 0),
         Size = UDim2.fromOffset(W, H),
-        BackgroundTransparency = 1,
+        BackgroundColor3 = T("Window"),
+        BorderSizePixel = 0,
+        GroupTransparency = 1,
         Visible = false,
         Parent = ScreenGui,
     })
-    local MainScale = New("UIScale", {Scale = 0.92, Parent = Root})
+    Register(Main, {BackgroundColor3 = "Window"})
+    New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = Main})
+    local MainStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.3, Parent = Main})
+    Register(MainStroke, {Color = "Stroke"})
+    local MainScale = New("UIScale", {Scale = 0.92, Parent = Main})
 
-    local Shadow = New("ImageLabel", {
+    New("ImageLabel", {
         Name = "Shadow", BackgroundTransparency = 1,
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
         Size = UDim2.new(1, 80, 1, 80),
         Image = "rbxassetid://6014261993",
         ImageColor3 = Color3.fromRGB(0, 0, 0),
-        ImageTransparency = 1,
+        ImageTransparency = 0.45,
         ScaleType = Enum.ScaleType.Slice,
         SliceCenter = Rect.new(49, 49, 450, 450),
-        ZIndex = 0, Parent = Root,
+        ZIndex = 0, Parent = Main,
     })
-
-    local Main = New("CanvasGroup", {
-        Name = "Main",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundColor3 = T("Window"),
-        GroupTransparency = 1,
-        ZIndex = 1,
-        Parent = Root,
-    })
-    Register(Main, {BackgroundColor3 = "Window"})
-    New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = Main})
-    local MainStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.3, Parent = Main})
-    Register(MainStroke, {Color = "Stroke"})
 
     local Sidebar = New("Frame", {
         Name = "Sidebar", BackgroundColor3 = T("Sidebar"),
-        Size = UDim2.new(0, SIDEBAR_W, 1, 0), Parent = Main,
+        Size = UDim2.new(0, SIDEBAR_W, 1, 0), BorderSizePixel = 0, Parent = Main,
     })
     Register(Sidebar, {BackgroundColor3 = "Sidebar"})
     New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = Sidebar})
@@ -979,7 +723,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         Name = "Content", BackgroundColor3 = T("Window"),
         Position = UDim2.new(0, SIDEBAR_W - 14, 0, 0),
         Size = UDim2.new(1, -SIDEBAR_W + 14, 1, 0),
-        Parent = Main,
+        BorderSizePixel = 0, Parent = Main,
     })
     Register(Content, {BackgroundColor3 = "Window"})
     New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = Content})
@@ -987,49 +731,38 @@ MeizuLibrary.CreateWindow = function(a, b)
     local TitleLabel = New("TextLabel", {
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 16, 0, 10),
-        Size = UDim2.new(1, -24, 0, 20),
+        Size = UDim2.new(1, -70, 0, 20),
         Font = Enum.Font.GothamBold, TextSize = 17,
         TextColor3 = T("Text"), TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
+        Text = config.Title or "Meizu Library",
         Parent = Sidebar,
     })
-    BindText(TitleLabel, "Text", config.Title or "Meizu Library")
     Register(TitleLabel, {TextColor3 = "Text"})
     local SubLabel = New("TextLabel", {
         BackgroundTransparency = 1,
         Position = UDim2.new(0, 16, 0, 32),
-        Size = UDim2.new(1, -24, 0, 14),
+        Size = UDim2.new(1, -70, 0, 14),
         Font = Enum.Font.Gotham, TextSize = 11,
         TextColor3 = T("SubText"), TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
+        Text = config.SubTitle or ("v" .. MeizuLibrary.Version),
         Parent = Sidebar,
     })
-    BindText(SubLabel, "Text", config.SubTitle or ("v" .. MeizuLibrary.Version))
     Register(SubLabel, {TextColor3 = "SubText"})
 
     local SearchBox = New("TextBox", {
         Position = UDim2.new(0, 14, 0, 56),
         Size = UDim2.new(1, -28, 0, 30),
         BackgroundColor3 = T("Input"),
-        Text = "",
+        Text = "", PlaceholderText = MeizuLibrary:_Translate("Search..."),
         PlaceholderColor3 = T("Placeholder"),
         TextColor3 = T("Text"),
         Font = Enum.Font.Gotham, TextSize = 12,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ClearTextOnFocus = false,
+        ClearTextOnFocus = false, BorderSizePixel = 0,
         Parent = Sidebar,
     })
-    BindText(SearchBox, "PlaceholderText", S("search_placeholder"))
     Register(SearchBox, {BackgroundColor3 = "Input", PlaceholderColor3 = "Placeholder", TextColor3 = "Text"})
     New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = SearchBox})
-    New("UIPadding", {PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = SearchBox})
-    local SearchStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 1, Parent = SearchBox})
-    SearchBox.Focused:Connect(function()
-        Tween(SearchStroke, 0.2, {Color = MeizuLibrary.Accent, Transparency = 0.2})
-    end)
-    SearchBox.FocusLost:Connect(function()
-        Tween(SearchStroke, 0.25, {Transparency = 1})
-    end)
+    New("UIPadding", {PaddingLeft = UDim.new(0, 10), Parent = SearchBox})
 
     local TabsHolder = New("ScrollingFrame", {
         BackgroundTransparency = 1,
@@ -1038,7 +771,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         ScrollBarThickness = 2,
         CanvasSize = UDim2.new(),
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        Parent = Sidebar,
+        BorderSizePixel = 0, Parent = Sidebar,
     })
     RegisterAccent(TabsHolder, "ScrollBarImageColor3")
     New("UIListLayout", {Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = TabsHolder})
@@ -1047,14 +780,14 @@ MeizuLibrary.CreateWindow = function(a, b)
         Position = UDim2.new(0, 10, 1, -46),
         Size = UDim2.new(1, -20, 0, 38),
         BackgroundColor3 = T("Element"),
-        Parent = Sidebar,
+        BorderSizePixel = 0, Parent = Sidebar,
     })
     Register(PlayerCard, {BackgroundColor3 = "Element"})
     New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = PlayerCard})
     local Avatar = New("ImageLabel", {
         BackgroundColor3 = T("Tab"),
         Position = UDim2.new(0, 5, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5),
-        Size = UDim2.fromOffset(28, 28), Parent = PlayerCard,
+        Size = UDim2.fromOffset(28, 28), BorderSizePixel = 0, Parent = PlayerCard,
     })
     Register(Avatar, {BackgroundColor3 = "Tab"})
     New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Avatar})
@@ -1062,7 +795,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         local ok, thumb = pcall(function()
             return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
         end)
-        if ok and Avatar.Parent then Avatar.Image = thumb end
+        if ok then Avatar.Image = thumb end
     end)
     local PName = New("TextLabel", {
         BackgroundTransparency = 1,
@@ -1078,32 +811,23 @@ MeizuLibrary.CreateWindow = function(a, b)
 
     local function CircleBtn(xoff)
         local btn = New("TextButton", {
-            BackgroundTransparency = 1,
+            Text = "", AutoButtonColor = false, BackgroundTransparency = 1,
             AnchorPoint = Vector2.new(1, 0),
             Position = UDim2.new(1, xoff, 0, 10),
             Size = UDim2.fromOffset(22, 22),
-            ZIndex = 40, Parent = Main,
+            ZIndex = 40, BorderSizePixel = 0, Parent = Main,
         })
         Register(btn, {BackgroundColor3 = "Tab"})
         New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = btn})
-        local sc = New("UIScale", {Scale = 1, Parent = btn})
-        btn.MouseEnter:Connect(function()
-            Tween(btn, 0.15, {BackgroundTransparency = 0.3})
-            Tween(sc, 0.2, {Scale = 1.1}, Enum.EasingStyle.Back)
-        end)
-        btn.MouseLeave:Connect(function()
-            Tween(btn, 0.2, {BackgroundTransparency = 1})
-            Tween(sc, 0.25, {Scale = 1})
-        end)
-        btn.InputBegan:Connect(function(i) if IsPointer(i) then Tween(sc, 0.08, {Scale = 0.9}) end end)
-        btn.InputEnded:Connect(function(i) if IsPointer(i) then Tween(sc, 0.25, {Scale = 1.05}, Enum.EasingStyle.Back) end end)
+        btn.MouseEnter:Connect(function() Tween(btn, 0.15, {BackgroundTransparency = 0.3}) end)
+        btn.MouseLeave:Connect(function() Tween(btn, 0.2, {BackgroundTransparency = 1}) end)
         return btn
     end
     local MinBtn = CircleBtn(-62)
     local MinBar = New("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
         Size = UDim2.new(0, 8, 0, 2), BackgroundColor3 = T("SubText"),
-        ZIndex = 41, Parent = MinBtn,
+        BorderSizePixel = 0, ZIndex = 41, Parent = MinBtn,
     })
     Register(MinBar, {BackgroundColor3 = "SubText"})
     local CloseBtn = CircleBtn(-34)
@@ -1111,25 +835,17 @@ MeizuLibrary.CreateWindow = function(a, b)
         local l = New("Frame", {
             AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
             Size = UDim2.new(0, 10, 0, 2), Rotation = rot,
-            BackgroundColor3 = T("SubText"), ZIndex = 41, Parent = CloseBtn,
+            BackgroundColor3 = T("SubText"), BorderSizePixel = 0, ZIndex = 41, Parent = CloseBtn,
         })
         Register(l, {BackgroundColor3 = "SubText"})
     end
 
-    -- Vùng kéo cửa sổ: thanh trên của sidebar + thanh trên của nội dung
     local DragHandle = New("Frame", {
         BackgroundTransparency = 1,
         Size = UDim2.new(0, SIDEBAR_W, 0, 54),
         Parent = Main,
     })
-    MakeDraggable(DragHandle, Root)
-    local DragHandle2 = New("Frame", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, SIDEBAR_W, 0, 0),
-        Size = UDim2.new(1, -SIDEBAR_W, 0, 36),
-        Parent = Main,
-    })
-    MakeDraggable(DragHandle2, Root)
+    MakeDraggable(DragHandle, Main)
 
     local TabContainer = New("Frame", {
         BackgroundTransparency = 1,
@@ -1145,16 +861,17 @@ MeizuLibrary.CreateWindow = function(a, b)
             local Card
             if interactive then
                 Card = New("TextButton", {
+                    Text = "", AutoButtonColor = false,
                     BackgroundColor3 = T("Element"),
                     Size = UDim2.new(1, 0, 0, height),
-                    ClipsDescendants = true,
+                    ClipsDescendants = true, BorderSizePixel = 0,
                     Parent = container,
                 })
             else
                 Card = New("Frame", {
                     BackgroundColor3 = T("Element"),
                     Size = UDim2.new(1, 0, 0, height),
-                    ClipsDescendants = true,
+                    ClipsDescendants = true, BorderSizePixel = 0,
                     Parent = container,
                 })
             end
@@ -1167,55 +884,46 @@ MeizuLibrary.CreateWindow = function(a, b)
                     BackgroundTransparency = 1,
                     BackgroundColor3 = Color3.fromRGB(255, 255, 255),
                     Size = UDim2.fromScale(1, 1),
-                    ZIndex = 5, Parent = Card,
+                    ZIndex = 5, BorderSizePixel = 0, Parent = Card,
                 })
                 New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = Hover})
-                Card.MouseEnter:Connect(function()
-                    Tween(Hover, 0.18, {BackgroundTransparency = 0.93})
-                    Tween(Stroke, 0.2, {Transparency = 0.15})
-                end)
-                Card.MouseLeave:Connect(function()
-                    Tween(Hover, 0.28, {BackgroundTransparency = 1})
-                    Tween(Stroke, 0.3, {Transparency = 0.4})
-                end)
-                AddPress(Card)
+                Card.MouseEnter:Connect(function() Tween(Hover, 0.15, {BackgroundTransparency = 0.93}) end)
+                Card.MouseLeave:Connect(function() Tween(Hover, 0.25, {BackgroundTransparency = 1}) end)
             end
             return Card
         end
 
         local function AddText(Card, title, desc, rightSpace)
             rightSpace = rightSpace or 70
-            local hasDesc = desc ~= nil
             local Title = New("TextLabel", {
                 BackgroundTransparency = 1,
                 Font = Enum.Font.GothamMedium, TextSize = 13,
+                Text = title or "",
                 TextColor3 = T("Text"),
                 TextXAlignment = Enum.TextXAlignment.Left,
                 TextTruncate = Enum.TextTruncate.AtEnd,
-                Position = hasDesc and UDim2.new(0, 12, 0, 8) or UDim2.new(0, 12, 0, 0),
-                Size = UDim2.new(1, -rightSpace, hasDesc and 0 or 1, hasDesc and 14 or 0),
+                Position = desc and UDim2.new(0, 12, 0, 8) or UDim2.new(0, 12, 0, 0),
+                Size = UDim2.new(1, -rightSpace, desc and 0 or 1, desc and 14 or 0),
                 Parent = Card,
             })
-            BindText(Title, "Text", title ~= nil and title or "")
             Register(Title, {TextColor3 = "Text"})
-            if hasDesc then
+            if desc then
                 local Desc = New("TextLabel", {
                     BackgroundTransparency = 1,
                     Font = Enum.Font.Gotham, TextSize = 11,
-                    TextColor3 = T("SubText"),
+                    Text = desc, TextColor3 = T("SubText"),
                     TextXAlignment = Enum.TextXAlignment.Left,
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     Position = UDim2.new(0, 12, 0, 24),
                     Size = UDim2.new(1, -rightSpace, 0, 12),
                     Parent = Card,
                 })
-                BindText(Desc, "Text", desc)
                 Register(Desc, {TextColor3 = "SubText"})
             end
         end
 
         local function AddSearch(Card, text)
-            table.insert(tab._Elements, {Frame = Card, Text = SearchText(text)})
+            table.insert(tab._Elements, {Frame = Card, Text = string.lower(tostring(text or ""))})
         end
 
         local function BindFlag(el, flag, initial)
@@ -1240,7 +948,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Position = UDim2.new(0, 2, 0.5, 0),
                 AnchorPoint = Vector2.new(0, 0.5),
                 Size = UDim2.new(0, 3, 0, 12),
-                Parent = Head,
+                BorderSizePixel = 0, Parent = Head,
             })
             RegisterAccent(Bar, "BackgroundColor3")
             New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Bar})
@@ -1249,11 +957,11 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Position = UDim2.new(0, 13, 0, 0),
                 Size = UDim2.new(1, -13, 1, 0),
                 Font = Enum.Font.GothamBold, TextSize = 11,
+                Text = string.upper(tostring(name or "Section")),
                 TextColor3 = T("SubText"),
                 TextXAlignment = Enum.TextXAlignment.Left,
                 Parent = Head,
             })
-            BindText(SecLabel, "Text", name ~= nil and name or "Section", UpperSafe)
             Register(SecLabel, {TextColor3 = "SubText"})
             local SectionObj = {}
             BindElements(SectionObj, Sec, tab)
@@ -1268,7 +976,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             local Card = MakeCard(h, true)
             AddText(Card, cfg.Title or "Button", cfg.Description, 30)
             Card.InputBegan:Connect(function(input)
-                if IsPointer(input) then
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     local pos = input.Position
                     Ripple(Card, pos.X - Card.AbsolutePosition.X, pos.Y - Card.AbsolutePosition.Y)
                 end
@@ -1291,7 +999,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Position = UDim2.new(1, -12, 0.5, 0),
                 Size = UDim2.fromOffset(42, 22),
                 BackgroundColor3 = T("ToggleOff"),
-                Parent = Card,
+                BorderSizePixel = 0, Parent = Card,
             })
             Register(Track, {BackgroundColor3 = "ToggleOff"})
             New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Track})
@@ -1300,22 +1008,15 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Position = UDim2.new(0, 3, 0.5, 0),
                 Size = UDim2.fromOffset(16, 16),
                 BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                Parent = Track,
+                BorderSizePixel = 0, Parent = Track,
             })
             New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Knob})
 
             local state = (cfg.Default == true)
-            local function Render(v, instant)
+            local function Render(v)
                 if not Track.Parent then return end
-                local goal = v and 23 or 3
-                if instant then
-                    Track.BackgroundColor3 = v and MeizuLibrary.Accent or T("ToggleOff")
-                    Knob.Position = UDim2.new(0, goal, 0.5, 0)
-                    Knob.Size = UDim2.fromOffset(16, 16)
-                else
-                    Tween(Track, 0.28, {BackgroundColor3 = v and MeizuLibrary.Accent or T("ToggleOff")})
-                    Tween(Knob, 0.35, {Position = UDim2.new(0, goal, 0.5, 0), Size = UDim2.fromOffset(16, 16)}, Enum.EasingStyle.Back)
-                end
+                Tween(Track, 0.25, {BackgroundColor3 = v and MeizuLibrary.Accent or T("ToggleOff")})
+                Tween(Knob, 0.3, {Position = UDim2.new(0, v and 23 or 3, 0.5, 0)}, Enum.EasingStyle.Back)
             end
             local function Set(v, fire)
                 v = (v == true)
@@ -1324,23 +1025,9 @@ MeizuLibrary.CreateWindow = function(a, b)
                 if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = v end
                 if fire then SafeCall(cfg.Callback, v) end
             end
-
-            -- Hiệu ứng nhấn: núm kéo dài (kiểu iOS)
-            Card.InputBegan:Connect(function(input)
-                if IsPointer(input) then
-                    Tween(Knob, 0.12, {
-                        Size = UDim2.fromOffset(21, 16),
-                        Position = UDim2.new(0, state and 18 or 3, 0.5, 0),
-                    }, Enum.EasingStyle.Quad)
-                end
-            end)
-            Card.MouseLeave:Connect(function()
-                if Knob.Size.X.Offset ~= 16 then Render(state) end
-            end)
             Card.Activated:Connect(function() Set(not state, true) end)
-
-            Render(state, true)
-            OnThemeChange(function() Render(state, true) end)
+            Render(state)
+            OnThemeChange(function() Render(state) end)
 
             local el = {Frame = Card, Get = function() return state end, Set = function(v) Set(v, false) end}
             BindFlag(el, cfg.Flag, state)
@@ -1352,7 +1039,6 @@ MeizuLibrary.CreateWindow = function(a, b)
         function target:CreateSlider(cfg)
             cfg = cfg or {}
             local min, max = cfg.Min or 0, cfg.Max or 100
-            if max <= min then max = min + 1 end
             local rounding = cfg.Rounding or 0
             local hasDesc = cfg.Description ~= nil
             local h = hasDesc and 64 or 50
@@ -1365,7 +1051,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Position = UDim2.new(1, -12, 0, hasDesc and 8 or 0),
                 Size = UDim2.new(0, 70, hasDesc and 0 or 1, hasDesc and 14 or 0),
                 Font = Enum.Font.GothamBold, TextSize = 12,
-                TextColor3 = T("Text"), TextXAlignment = Enum.TextXAlignment.Right,
+                TextColor3 = T("Text"), Text = "",
                 Parent = Card,
             })
             Register(ValueLabel, {TextColor3 = "Text"})
@@ -1381,13 +1067,13 @@ MeizuLibrary.CreateWindow = function(a, b)
                 AnchorPoint = Vector2.new(0, 0.5),
                 Position = UDim2.new(0, 0, 0.5, 0),
                 Size = UDim2.new(1, 0, 0, 6),
-                Parent = Holder,
+                BorderSizePixel = 0, Parent = Holder,
             })
             Register(Track, {BackgroundColor3 = "Track"})
             New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Track})
             local Fill = New("Frame", {
                 BackgroundColor3 = MeizuLibrary.Accent,
-                Size = UDim2.new(0, 0, 1, 0), Parent = Track,
+                Size = UDim2.new(0, 0, 1, 0), BorderSizePixel = 0, Parent = Track,
             })
             RegisterAccent(Fill, "BackgroundColor3")
             New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Fill})
@@ -1396,36 +1082,23 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Position = UDim2.new(0, 0, 0.5, 0),
                 Size = UDim2.fromOffset(14, 14),
                 BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                ZIndex = 3, Parent = Holder,
+                BorderSizePixel = 0, ZIndex = 3, Parent = Holder,
             })
             New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Knob})
             local KnobStroke = New("UIStroke", {Color = MeizuLibrary.Accent, Thickness = 2, Parent = Knob})
             RegisterAccent(KnobStroke, "Color")
-
-            -- Vùng chạm lớn hơn thanh trượt (dễ bấm trên điện thoại)
-            local Hit = New("TextButton", {
-                BackgroundTransparency = 1,
-                Position = UDim2.new(0, -8, 0, -12),
-                Size = UDim2.new(1, 16, 1, 24),
-                ZIndex = 6, Parent = Holder,
-            })
 
             local value = cfg.Default or min
             local function Format(v)
                 if rounding > 0 then return string.format("%." .. rounding .. "f", v) end
                 return tostring(math.floor(v + 0.5))
             end
-            local function Set(v, fire, animTime)
+            local function Set(v, fire)
                 v = math.clamp(tonumber(v) or min, min, max)
                 value = v
                 local pct = math.clamp((v - min) / (max - min), 0, 1)
-                if animTime and animTime > 0 then
-                    Tween(Fill, animTime, {Size = UDim2.new(pct, 0, 1, 0)}, Enum.EasingStyle.Quad)
-                    Tween(Knob, animTime, {Position = UDim2.new(pct, 0, 0.5, 0)}, Enum.EasingStyle.Quad)
-                else
-                    Fill.Size = UDim2.new(pct, 0, 1, 0)
-                    Knob.Position = UDim2.new(pct, 0, 0.5, 0)
-                end
+                Fill.Size = UDim2.new(pct, 0, 1, 0)
+                Knob.Position = UDim2.new(pct, 0, 0.5, 0)
                 ValueLabel.Text = Format(v)
                 if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = v end
                 if fire then SafeCall(cfg.Callback, v) end
@@ -1441,13 +1114,13 @@ MeizuLibrary.CreateWindow = function(a, b)
                 else
                     v = tonumber(string.format("%." .. rounding .. "f", v))
                 end
-                Set(v, true, 0.07)
+                Set(v, true)
             end
-            Hit.InputBegan:Connect(function(input)
-                if IsPointer(input) then
+            Holder.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     dragging = true
                     releaseGuard = BeginGuard(Card)
-                    Tween(Knob, 0.18, {Size = UDim2.fromOffset(18, 18)}, Enum.EasingStyle.Back)
+                    Tween(Knob, 0.15, {Size = UDim2.fromOffset(16, 16)})
                     UpdateFromX(input.Position.X)
                     AddDrag({
                         OnChanged = function(inp)
@@ -1456,14 +1129,14 @@ MeizuLibrary.CreateWindow = function(a, b)
                         OnEnd = function()
                             dragging = false
                             if releaseGuard then releaseGuard() releaseGuard = nil end
-                            Tween(Knob, 0.25, {Size = UDim2.fromOffset(14, 14)}, Enum.EasingStyle.Back)
+                            Tween(Knob, 0.2, {Size = UDim2.fromOffset(14, 14)})
                         end,
                     })
                 end
             end)
 
-            local el = {Frame = Card, Get = function() return value end, Set = function(v) Set(v, false, 0.3) end}
-            Set(value, false, 0)
+            local el = {Frame = Card, Get = function() return value end, Set = function(v) Set(v, false) end}
+            Set(value, false)
             BindFlag(el, cfg.Flag, value)
             AddSearch(Card, cfg.Title)
             return el
@@ -1487,6 +1160,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 TextColor3 = T("SubText"),
                 TextXAlignment = Enum.TextXAlignment.Right,
                 TextTruncate = Enum.TextTruncate.AtEnd,
+                Text = multi and "0 selected" or "Select...",
                 Parent = Card,
             })
             Register(SelectedLabel, {TextColor3 = "SubText"})
@@ -1504,7 +1178,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                     Size = UDim2.fromOffset(2, 7),
                     Rotation = rot,
                     BackgroundColor3 = T("SubText"),
-                    Parent = Arrow,
+                    BorderSizePixel = 0, Parent = Arrow,
                 })
                 Register(bar, {BackgroundColor3 = "SubText"})
             end
@@ -1523,14 +1197,13 @@ MeizuLibrary.CreateWindow = function(a, b)
 
             local List = New("ScrollingFrame", {
                 BackgroundColor3 = T("Dropdown"),
-                BackgroundTransparency = 0,
                 Position = UDim2.new(0, 8, 0, headH + 2),
                 Size = UDim2.new(1, -16, 0, 0),
                 CanvasSize = UDim2.new(),
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 ScrollBarThickness = 3, ScrollBarImageTransparency = 0.4,
                 Visible = false, ClipsDescendants = true,
-                ZIndex = 8, Parent = Card,
+                BorderSizePixel = 0, ZIndex = 8, Parent = Card,
             })
             Register(List, {BackgroundColor3 = "Dropdown"})
             New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = List})
@@ -1556,18 +1229,18 @@ MeizuLibrary.CreateWindow = function(a, b)
                 if not Card.Parent then return end
                 open = v
                 List.Visible = true
-                Tween(Card, 0.32, {Size = UDim2.new(1, 0, 0, headH + (v and (listH + 6) or 0))}, Enum.EasingStyle.Quint)
-                Tween(List, 0.32, {Size = UDim2.new(1, -16, 0, v and listH or 0)}, Enum.EasingStyle.Quint)
-                Tween(Arrow, 0.3, {Rotation = v and 180 or 0}, Enum.EasingStyle.Back)
+                Tween(Card, 0.28, {Size = UDim2.new(1, 0, 0, headH + (v and (listH + 6) or 0))}, Enum.EasingStyle.Quint)
+                Tween(List, 0.28, {Size = UDim2.new(1, -16, 0, v and listH or 0)}, Enum.EasingStyle.Quint)
+                Tween(Arrow, 0.25, {Rotation = v and 180 or 0})
                 if v then
                     for i, Opt in ipairs(OptionBtns) do
                         Opt.TextTransparency = 1
-                        task.delay(0.03 + i * 0.025, function()
-                            if Opt.Parent then Tween(Opt, 0.2, {TextTransparency = 0}) end
+                        task.delay(i * 0.02, function()
+                            if Opt.Parent then Tween(Opt, 0.15, {TextTransparency = 0}) end
                         end)
                     end
                 else
-                    task.delay(0.34, function()
+                    task.delay(0.3, function()
                         if not open and List.Parent then List.Visible = false end
                     end)
                 end
@@ -1579,19 +1252,19 @@ MeizuLibrary.CreateWindow = function(a, b)
                     local list = {}
                     for k in pairs(selected) do table.insert(list, tostring(k)) end
                     table.sort(list)
-                    SelectedLabel.Text = (#list > 0) and table.concat(list, ", ") or Resolve(S("none_selected"))
+                    SelectedLabel.Text = (#list > 0) and table.concat(list, ", ") or "0 selected"
                     for _, Opt in ipairs(OptionBtns) do
                         local isSel = selected[Opt.Text] == true
                         local d = Opt:FindFirstChild("Dot")
                         if d then
-                            Tween(d, 0.25, {
+                            Tween(d, 0.2, {
                                 BackgroundTransparency = isSel and 0 or 1,
                                 Size = UDim2.fromOffset(isSel and 12 or 6, isSel and 12 or 6),
-                            }, Enum.EasingStyle.Back)
+                            })
                         end
                     end
                 else
-                    SelectedLabel.Text = selected and tostring(selected) or Resolve(S("select_placeholder"))
+                    SelectedLabel.Text = selected and tostring(selected) or "Select..."
                     for _, Opt in ipairs(OptionBtns) do
                         local isSel = Opt.Text == tostring(selected)
                         Tween(Opt, 0.2, {TextColor3 = isSel and MeizuLibrary.Accent or T("Text")})
@@ -1606,17 +1279,16 @@ MeizuLibrary.CreateWindow = function(a, b)
                 OptionBtns = {}
                 for i, optName in ipairs(options) do
                     local Opt = New("TextButton", {
-                        Text = tostring(optName),
+                        Text = tostring(optName), AutoButtonColor = false,
                         BackgroundTransparency = 1,
-                        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
                         Size = UDim2.new(1, 0, 0, 24),
                         Font = Enum.Font.Gotham, TextSize = 12,
                         TextColor3 = T("Text"),
                         TextXAlignment = Enum.TextXAlignment.Left,
-                        ZIndex = 9, LayoutOrder = i, Parent = List,
+                        ZIndex = 9, LayoutOrder = i,
+                        BorderSizePixel = 0, Parent = List,
                     })
                     New("UIPadding", {PaddingLeft = UDim.new(0, 8), Parent = Opt})
-                    New("UICorner", {CornerRadius = UDim.new(0, 5), Parent = Opt})
                     if multi then
                         local Dot = New("Frame", {
                             Name = "Dot",
@@ -1625,13 +1297,13 @@ MeizuLibrary.CreateWindow = function(a, b)
                             Size = UDim2.fromOffset(6, 6),
                             BackgroundColor3 = MeizuLibrary.Accent,
                             BackgroundTransparency = 1,
-                            ZIndex = 10, Parent = Opt,
+                            ZIndex = 10, BorderSizePixel = 0, Parent = Opt,
                         })
                         RegisterAccent(Dot, "BackgroundColor3")
                         New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Dot})
                     end
                     Opt.MouseEnter:Connect(function() Tween(Opt, 0.12, {BackgroundTransparency = 0.92}) end)
-                    Opt.MouseLeave:Connect(function() Tween(Opt, 0.22, {BackgroundTransparency = 1}) end)
+                    Opt.MouseLeave:Connect(function() Tween(Opt, 0.2, {BackgroundTransparency = 1}) end)
                     Opt.Activated:Connect(function()
                         if multi then
                             if selected[optName] then selected[optName] = nil else selected[optName] = true end
@@ -1649,7 +1321,6 @@ MeizuLibrary.CreateWindow = function(a, b)
             BuildOptions()
             Refresh(false)
             OnThemeChange(function() Refresh(false) end)
-            OnLangChange(function() Refresh(false) end)
 
             local el = {
                 Frame = Card,
@@ -1685,22 +1356,18 @@ MeizuLibrary.CreateWindow = function(a, b)
             local currentKey = cfg.Default
             local listening = false
             local BindBtn = New("TextButton", {
+                Text = currentKey and currentKey.Name or "None",
+                AutoButtonColor = false,
                 AnchorPoint = Vector2.new(1, 0.5),
                 Position = UDim2.new(1, -12, 0.5, 0),
                 Size = UDim2.fromOffset(90, 26),
                 BackgroundColor3 = T("Input"),
                 Font = Enum.Font.GothamMedium, TextSize = 12,
                 TextColor3 = T("SubText"),
-                Parent = Card,
+                BorderSizePixel = 0, Parent = Card,
             })
             Register(BindBtn, {BackgroundColor3 = "Input"})
             New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = BindBtn})
-            local BindStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 1, Parent = BindBtn})
-            local function KeyText()
-                return currentKey and currentKey.Name or Resolve(S("key_none"))
-            end
-            BindBtn.Text = KeyText()
-            OnLangChange(function() if not listening then BindBtn.Text = KeyText() end end)
             BindBtn.MouseEnter:Connect(function() Tween(BindBtn, 0.15, {TextColor3 = T("Text")}) end)
             BindBtn.MouseLeave:Connect(function() Tween(BindBtn, 0.2, {TextColor3 = T("SubText")}) end)
 
@@ -1708,20 +1375,18 @@ MeizuLibrary.CreateWindow = function(a, b)
                 if listening then return end
                 listening = true
                 BindBtn.Text = "..."
-                Tween(BindStroke, 0.2, {Color = MeizuLibrary.Accent, Transparency = 0.1})
                 local conn
                 conn = UserInputService.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.Keyboard then
                         conn:Disconnect()
                         listening = false
-                        Tween(BindStroke, 0.25, {Transparency = 1})
                         if input.KeyCode ~= Enum.KeyCode.Escape then
                             currentKey = input.KeyCode
                             BindBtn.Text = currentKey.Name
                             if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = currentKey.Name end
                             SafeCall(cfg.ChangedCallback, currentKey)
                         else
-                            BindBtn.Text = KeyText()
+                            BindBtn.Text = currentKey and currentKey.Name or "None"
                         end
                     end
                 end)
@@ -1773,18 +1438,16 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Size = UDim2.fromOffset(160, 26),
                 BackgroundColor3 = T("Input"),
                 Text = cfg.Default or "",
+                PlaceholderText = cfg.Placeholder or "Type here...",
                 PlaceholderColor3 = T("Placeholder"),
                 TextColor3 = T("Text"),
                 Font = Enum.Font.Gotham, TextSize = 12,
-                TextXAlignment = Enum.TextXAlignment.Left,
                 ClearTextOnFocus = false, ClipsDescendants = true,
-                Parent = Card,
+                BorderSizePixel = 0, Parent = Card,
             })
-            BindText(Box, "PlaceholderText", cfg.Placeholder ~= nil and cfg.Placeholder or S("input_placeholder"))
             Register(Box, {BackgroundColor3 = "Input", PlaceholderColor3 = "Placeholder", TextColor3 = "Text"})
             New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = Box})
             New("UIPadding", {PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = Box})
-            local BoxStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 1, Parent = Box})
 
             if cfg.Numeric then
                 Box:GetPropertyChangedSignal("Text"):Connect(function()
@@ -1797,13 +1460,9 @@ MeizuLibrary.CreateWindow = function(a, b)
                 if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = Box.Text end
                 SafeCall(cfg.Callback, Box.Text)
             end
-            Box.Focused:Connect(function()
-                Tween(Box, 0.25, {Size = UDim2.fromOffset(180, 28)}, Enum.EasingStyle.Quint)
-                Tween(BoxStroke, 0.2, {Color = MeizuLibrary.Accent, Transparency = 0.1})
-            end)
+            Box.Focused:Connect(function() Tween(Box, 0.2, {Size = UDim2.fromOffset(180, 28)}) end)
             Box.FocusLost:Connect(function(enter)
-                Tween(Box, 0.25, {Size = UDim2.fromOffset(160, 26)}, Enum.EasingStyle.Quint)
-                Tween(BoxStroke, 0.25, {Transparency = 1})
+                Tween(Box, 0.2, {Size = UDim2.fromOffset(160, 26)})
                 if enter then Commit() end
             end)
 
@@ -1824,14 +1483,14 @@ MeizuLibrary.CreateWindow = function(a, b)
 
             -- Header bấm mở/đóng (không đè panel màu)
             local Header = New("TextButton", {
-                BackgroundTransparency = 1,
+                Text = "", AutoButtonColor = false, BackgroundTransparency = 1,
                 BackgroundColor3 = Color3.fromRGB(255, 255, 255),
                 Size = UDim2.new(1, 0, 0, headH),
-                ZIndex = 2, Parent = Card,
+                ZIndex = 2, BorderSizePixel = 0, Parent = Card,
             })
             New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = Header})
             Header.MouseEnter:Connect(function() Tween(Header, 0.15, {BackgroundTransparency = 0.94}) end)
-            Header.MouseLeave:Connect(function() Tween(Header, 0.25, {BackgroundTransparency = 1}) end)
+            Header.MouseLeave:Connect(function() Tween(Header, 0.2, {BackgroundTransparency = 1}) end)
 
             AddText(Card, cfg.Title or "Color", cfg.Description, 60)
 
@@ -1839,11 +1498,12 @@ MeizuLibrary.CreateWindow = function(a, b)
             local color = Color3.fromHSV(h, s, v)
 
             local Swatch = New("TextButton", {
+                Text = "", AutoButtonColor = false,
                 AnchorPoint = Vector2.new(1, 0.5),
                 Position = UDim2.new(1, -12, 0.5, 0),
                 Size = UDim2.fromOffset(34, 22),
                 BackgroundColor3 = color,
-                ZIndex = 3, Parent = Card,
+                ZIndex = 3, BorderSizePixel = 0, Parent = Card,
             })
             New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = Swatch})
             local SwStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.3, Parent = Swatch})
@@ -1861,15 +1521,15 @@ MeizuLibrary.CreateWindow = function(a, b)
             local SV = New("Frame", {
                 Size = UDim2.new(1, 0, 0, 84),
                 BackgroundColor3 = Color3.fromHSV(h, 1, 1),
-                ClipsDescendants = true,
+                ClipsDescendants = true, BorderSizePixel = 0,
                 Active = true, ZIndex = 3, Parent = Panel,
             })
             New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = SV})
-            local GW = New("Frame", {BackgroundColor3 = Color3.fromRGB(255, 255, 255), Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = SV})
+            local GW = New("Frame", {BackgroundColor3 = Color3.fromRGB(255, 255, 255), Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 4, Parent = SV})
             New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = GW})
             New("UIGradient", {Transparency = NumberSequence.new({
                 NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1)}), Parent = GW})
-            local GB = New("Frame", {BackgroundColor3 = Color3.fromRGB(0, 0, 0), Size = UDim2.fromScale(1, 1), ZIndex = 5, Parent = SV})
+            local GB = New("Frame", {BackgroundColor3 = Color3.fromRGB(0, 0, 0), Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 5, Parent = SV})
             New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = GB})
             New("UIGradient", {Rotation = 90, Transparency = NumberSequence.new({
                 NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0)}), Parent = GB})
@@ -1886,7 +1546,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Position = UDim2.new(0, 0, 0, 92),
                 Size = UDim2.new(1, 0, 0, 12),
                 BackgroundColor3 = Color3.new(1, 1, 1),
-                Active = true, ZIndex = 3, Parent = Panel,
+                BorderSizePixel = 0, Active = true, ZIndex = 3, Parent = Panel,
             })
             New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = HueBar})
             New("UIGradient", {
@@ -1906,7 +1566,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Position = UDim2.new(h, 0, 0.5, 0),
                 Size = UDim2.fromOffset(4, 16),
                 BackgroundColor3 = Color3.new(1, 1, 1),
-                ZIndex = 4, Parent = HueBar,
+                ZIndex = 4, BorderSizePixel = 0, Parent = HueBar,
             })
             New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = HueKnob})
 
@@ -1935,7 +1595,8 @@ MeizuLibrary.CreateWindow = function(a, b)
             end
 
             local function StartDrag(kind, input)
-                if not IsPointer(input) then return end
+                if input.UserInputType ~= Enum.UserInputType.MouseButton1
+                and input.UserInputType ~= Enum.UserInputType.Touch then return end
                 if kind == "sv" then
                     draggingSV = true
                     UpdateSV(input.Position)
@@ -1979,13 +1640,11 @@ MeizuLibrary.CreateWindow = function(a, b)
             New("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), Parent = PresetRow})
             for _, c in ipairs(presets) do
                 local p = New("TextButton", {
+                    Text = "", AutoButtonColor = false,
                     Size = UDim2.fromOffset(16, 16),
-                    BackgroundColor3 = c, ZIndex = 3, Parent = PresetRow,
+                    BackgroundColor3 = c, BorderSizePixel = 0, ZIndex = 3, Parent = PresetRow,
                 })
                 New("UICorner", {CornerRadius = UDim.new(0, 4), Parent = p})
-                local psc = New("UIScale", {Scale = 1, Parent = p})
-                p.MouseEnter:Connect(function() Tween(psc, 0.15, {Scale = 1.2}, Enum.EasingStyle.Back) end)
-                p.MouseLeave:Connect(function() Tween(psc, 0.2, {Scale = 1}) end)
                 p.Activated:Connect(function()
                     h, s, v = Color3.toHSV(c)
                     Apply(true)
@@ -1997,10 +1656,10 @@ MeizuLibrary.CreateWindow = function(a, b)
                 if not Card.Parent then return end
                 open = not open
                 Panel.Visible = true
-                Tween(Card, 0.34, {Size = UDim2.new(1, 0, 0, open and (panelY + PANEL_H + 8) or headH)}, Enum.EasingStyle.Quint)
-                Tween(Panel, 0.34, {Size = UDim2.new(1, -24, 0, open and PANEL_H or 0)}, Enum.EasingStyle.Quint)
+                Tween(Card, 0.3, {Size = UDim2.new(1, 0, 0, open and (panelY + PANEL_H + 8) or headH)}, Enum.EasingStyle.Quint)
+                Tween(Panel, 0.3, {Size = UDim2.new(1, -24, 0, open and PANEL_H or 0)}, Enum.EasingStyle.Quint)
                 if not open then
-                    task.delay(0.36, function()
+                    task.delay(0.32, function()
                         if not open and Panel.Parent then Panel.Visible = false end
                     end)
                 end
@@ -2034,32 +1693,30 @@ MeizuLibrary.CreateWindow = function(a, b)
             New("UIPadding", {
                 PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10),
                 PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), Parent = Card})
-            if cfg.Title ~= nil then
+            if cfg.Title then
                 local T1 = New("TextLabel", {
                     BackgroundTransparency = 1,
                     Font = Enum.Font.GothamBold, TextSize = 13,
-                    TextColor3 = T("Text"),
+                    Text = cfg.Title, TextColor3 = T("Text"),
                     TextXAlignment = Enum.TextXAlignment.Left,
                     TextWrapped = true,
                     Size = UDim2.new(1, 0, 0, 0),
                     AutomaticSize = Enum.AutomaticSize.Y,
                     LayoutOrder = 1, Parent = Card,
                 })
-                BindText(T1, "Text", cfg.Title)
                 Register(T1, {TextColor3 = "Text"})
             end
-            if cfg.Content ~= nil then
+            if cfg.Content then
                 local T2 = New("TextLabel", {
                     BackgroundTransparency = 1,
                     Font = Enum.Font.Gotham, TextSize = 12,
-                    TextColor3 = T("SubText"),
+                    Text = cfg.Content, TextColor3 = T("SubText"),
                     TextXAlignment = Enum.TextXAlignment.Left,
                     TextWrapped = true, RichText = true,
                     Size = UDim2.new(1, 0, 0, 0),
                     AutomaticSize = Enum.AutomaticSize.Y,
                     LayoutOrder = 2, Parent = Card,
                 })
-                BindText(T2, "Text", cfg.Content)
                 Register(T2, {TextColor3 = "SubText"})
             end
             AddSearch(Card, cfg.Title)
@@ -2068,17 +1725,16 @@ MeizuLibrary.CreateWindow = function(a, b)
     end
 
     --// ==================== CREATE TAB ====================
-    local SettingsTab -- gán ở phần Settings
-
-    local function MakeTab(name, icon, order, internal)
-        local Tab = {_Elements = {}, _Internal = internal == true}
-        local btnOrder = order or (#Window._UserTabs + 1)
+    function Window:CreateTab(name, icon, order)
+        local Tab = {_Elements = {}}
+        local btnOrder = order or (#Window._Tabs + 1)
 
         local Btn = New("TextButton", {
+            Text = "", AutoButtonColor = false,
             BackgroundColor3 = T("Tab"), BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 34),
             LayoutOrder = btnOrder,
-            Parent = TabsHolder,
+            BorderSizePixel = 0, Parent = TabsHolder,
         })
         Register(Btn, {BackgroundColor3 = "Tab"})
         New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = Btn})
@@ -2088,15 +1744,14 @@ MeizuLibrary.CreateWindow = function(a, b)
             Position = UDim2.new(0, 0, 0.5, 0),
             AnchorPoint = Vector2.new(0, 0.5),
             Size = UDim2.new(0, 3, 0, 0),
-            Parent = Btn,
+            BorderSizePixel = 0, Parent = Btn,
         })
         RegisterAccent(Indicator, "BackgroundColor3")
         New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Indicator})
 
         local xOffset = 14
-        local Icon
         if icon then
-            Icon = New("ImageLabel", {
+            local Icon = New("ImageLabel", {
                 BackgroundTransparency = 1,
                 Position = UDim2.new(0, 12, 0.5, 0),
                 AnchorPoint = Vector2.new(0, 0.5),
@@ -2105,55 +1760,34 @@ MeizuLibrary.CreateWindow = function(a, b)
                 ImageColor3 = T("SubText"),
                 Parent = Btn,
             })
+            Register(Icon, {ImageColor3 = "SubText"})
             xOffset = 38
         end
 
         local Label = New("TextLabel", {
             BackgroundTransparency = 1,
             Position = UDim2.new(0, xOffset, 0, 0),
-            Size = UDim2.new(1, -(xOffset + 8), 1, 0),
+            Size = UDim2.new(1, xOffset - 10, 1, 0),
             Font = Enum.Font.GothamMedium, TextSize = 13,
-            TextColor3 = T("SubText"),
+            Text = MeizuLibrary:_Translate(name), TextColor3 = T("SubText"),
             TextXAlignment = Enum.TextXAlignment.Left,
             TextTruncate = Enum.TextTruncate.AtEnd,
             Parent = Btn,
         })
-        BindText(Label, "Text", name ~= nil and name or "Tab")
-
-        -- Tên các ngôn ngữ (để SelectTab("Tên") hoạt động cho cả vi/en)
-        Tab._Names = {}
-        if type(name) == "table" then
-            for _, s in pairs(name) do table.insert(Tab._Names, string.lower(tostring(s))) end
-        else
-            table.insert(Tab._Names, string.lower(tostring(name or "")))
-        end
-
-        local function VisualSelected(sel, instant)
-            local textColor = sel and T("Text") or T("SubText")
-            if instant then
-                Label.TextColor3 = textColor
-                if Icon then Icon.ImageColor3 = textColor end
-            else
-                Tween(Label, 0.22, {TextColor3 = textColor})
-                if Icon then Tween(Icon, 0.22, {ImageColor3 = textColor}) end
-            end
-        end
+        Register(Label, {TextColor3 = "SubText"})
 
         Btn.MouseEnter:Connect(function()
             if Window._CurrentTab ~= Tab then Tween(Btn, 0.15, {BackgroundTransparency = 0.55}) end
-            Tween(Label, 0.2, {Position = UDim2.new(0, xOffset + 3, 0, 0)})
         end)
         Btn.MouseLeave:Connect(function()
-            if Window._CurrentTab ~= Tab then Tween(Btn, 0.22, {BackgroundTransparency = 1}) end
-            Tween(Label, 0.25, {Position = UDim2.new(0, xOffset, 0, 0)})
+            if Window._CurrentTab ~= Tab then Tween(Btn, 0.2, {BackgroundTransparency = 1}) end
         end)
-        AddPress(Btn)
 
         local Page = New("CanvasGroup", {
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
             Visible = false, GroupTransparency = 1,
-            Parent = TabContainer,
+            BorderSizePixel = 0, Parent = TabContainer,
         })
         local Scroll = New("ScrollingFrame", {
             BackgroundTransparency = 1,
@@ -2161,7 +1795,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             CanvasSize = UDim2.new(),
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
             ScrollBarThickness = 3, ScrollBarImageTransparency = 0.3,
-            Parent = Page,
+            BorderSizePixel = 0, Parent = Page,
         })
         RegisterAccent(Scroll, "ScrollBarImageColor3")
         New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = Scroll})
@@ -2171,107 +1805,83 @@ MeizuLibrary.CreateWindow = function(a, b)
 
         function Tab:Select()
             if Window._CurrentTab == Tab then return end
-            Window._SwitchToken = Window._SwitchToken + 1
-            local token = Window._SwitchToken
             local prev = Window._CurrentTab
             Window._CurrentTab = Tab
-
             if prev then
-                Tween(prev._Btn, 0.22, {BackgroundTransparency = 1})
-                Tween(prev._Indicator, 0.22, {Size = UDim2.new(0, 3, 0, 0)})
-                prev._VisualSelected(false)
-                local pp = prev._Page
-                Tween(pp, 0.14, {GroupTransparency = 1, Position = UDim2.new(0, -10, 0, 0)}, Enum.EasingStyle.Quad)
-                task.delay(0.15, function()
-                    if Window._CurrentTab ~= prev and pp.Parent then pp.Visible = false end
-                end)
+                prev._Btn.BackgroundTransparency = 1
+                Tween(prev._Label, 0.2, {TextColor3 = T("SubText")})
+                Tween(prev._Indicator, 0.2, {Size = UDim2.new(0, 3, 0, 0)})
+                prev._Page.Visible = false
             end
-
-            Tween(Btn, 0.22, {BackgroundTransparency = 0})
-            Tween(Indicator, 0.35, {Size = UDim2.new(0, 3, 0, 18)}, Enum.EasingStyle.Back)
-            VisualSelected(true)
-
-            Page.Position = UDim2.new(0, 16, 0, 0)
-            Page.GroupTransparency = 1
+            Tween(Btn, 0.2, {BackgroundTransparency = 0})
+            Tween(Label, 0.2, {TextColor3 = T("Text")})
+            Tween(Indicator, 0.25, {Size = UDim2.new(0, 3, 0, 18)}, Enum.EasingStyle.Back)
             Page.Visible = true
-            task.delay(prev and 0.08 or 0, function()
-                if Window._SwitchToken ~= token or not Page.Parent then return end
-                Tween(Page, 0.3, {GroupTransparency = 0}, Enum.EasingStyle.Quad)
-                Tween(Page, 0.45, {Position = UDim2.new(0, 0, 0, 0)}, Enum.EasingStyle.Quint)
-            end)
+            Page.GroupTransparency = 1
+            Page.Position = UDim2.new(0, 18, 0, 0)
+            Tween(Page, 0.3, {GroupTransparency = 0})
+            Tween(Page, 0.35, {Position = UDim2.new(0, 0, 0, 0)}, Enum.EasingStyle.Quint)
         end
 
         Tab._Btn = Btn
         Tab._Label = Label
         Tab._Indicator = Indicator
         Tab._Page = Page
-        Tab._VisualSelected = VisualSelected
+        Tab._Name = name
         Btn.Activated:Connect(function() Tab:Select() end)
 
         OnThemeChange(function()
             if not Btn.Parent then return end
-            VisualSelected(Window._CurrentTab == Tab, true)
+            if Window._CurrentTab == Tab then
+                Label.TextColor3 = T("Text")
+            else
+                Label.TextColor3 = T("SubText")
+            end
         end)
 
         table.insert(Window._Tabs, Tab)
-        if not Tab._Internal then table.insert(Window._UserTabs, Tab) end
         BindElements(Tab, Scroll, Tab)
         return Tab
     end
 
-    function Window:CreateTab(name, icon, order)
-        return MakeTab(name, icon, order, false)
-    end
-
     function Window:SelectTab(index)
         if type(index) == "string" then
-            local q = string.lower(index)
             for _, t in ipairs(Window._Tabs) do
-                for _, n in ipairs(t._Names or {}) do
-                    if n == q then t:Select() return end
+                if string.lower(t._Name or "") == string.lower(index) then
+                    t:Select()
+                    return
                 end
             end
         else
-            local t = Window._UserTabs[tonumber(index) or 1] or SettingsTab
+            local t = Window._Tabs[tonumber(index) or 1]
             if t then t:Select() end
         end
-    end
-
-    function Window:OnReady(fn)
-        if type(fn) ~= "function" then return end
-        if Window._Ready then SafeCall(fn) else table.insert(Window._ReadyCbs, fn) end
-    end
-
-    function Window:Notify(cfg)
-        MeizuLibrary:Notify(cfg)
     end
 
     --// ==================== OPEN / CLOSE ====================
     local function SetOpen(state)
         if state == isOpen then return end
         isOpen = state
-        Window._OpenToken = Window._OpenToken + 1
-        local token = Window._OpenToken
         if state then
-            Root.Visible = true
-            Tween(MainScale, 0.5, {Scale = 1}, Enum.EasingStyle.Quint)
-            Tween(Main, 0.32, {GroupTransparency = 0}, Enum.EasingStyle.Quad)
-            Tween(Shadow, 0.5, {ImageTransparency = 0.45}, Enum.EasingStyle.Quad)
-            if not Window._CurrentTab then
-                local first = Window._UserTabs[1] or SettingsTab
-                if first then first:Select() end
+            Main.Visible = true
+            Main.GroupTransparency = 1
+            MainScale.Scale = 0.9
+            Tween(MainScale, 0.4, {Scale = 1}, Enum.EasingStyle.Back)
+            Tween(Main, 0.25, {GroupTransparency = 0})
+            if not Window._BootSelected then
+                Window._BootSelected = true
+                if Window._Tabs[1] then Window._Tabs[1]:Select() end
             end
         else
-            Tween(MainScale, 0.32, {Scale = 0.93}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-            Tween(Main, 0.26, {GroupTransparency = 1}, Enum.EasingStyle.Quad)
-            Tween(Shadow, 0.26, {ImageTransparency = 1}, Enum.EasingStyle.Quad)
-            task.delay(0.34, function()
-                if not isOpen and token == Window._OpenToken and Root.Parent then
-                    Root.Visible = false
-                end
+            Tween(MainScale, 0.25, {Scale = 0.9}, Enum.EasingStyle.Quint)
+            local tw = Tween(Main, 0.22, {GroupTransparency = 1})
+            tw.Completed:Connect(function()
+                if not isOpen and Main.Parent then Main.Visible = false end
             end)
         end
-        if SetToggleVisual then SetToggleVisual(state) end
+        if IconWrap then
+            Tween(IconWrap, 0.5, {Rotation = state and 180 or 0}, Enum.EasingStyle.Back)
+        end
         PlaySound("rbxasset://sounds/electronicpingshort.wav", 0.2, state and 1.1 or 0.9)
     end
 
@@ -2283,16 +1893,16 @@ MeizuLibrary.CreateWindow = function(a, b)
     MinBtn.Activated:Connect(function() Window:Toggle(false) end)
     CloseBtn.Activated:Connect(function()
         Window:Dialog({
-            Title = S("close_title"),
-            Content = S("close_content"),
+            Title = "Close UI",
+            Content = "Bạn có muốn tắt hoàn toàn UI không?",
             Buttons = {
-                {Title = S("btn_cancel")},
-                {Title = S("btn_close"), Variant = "Primary", Callback = function() MeizuLibrary:Destroy() end},
+                {Title = "Cancel"},
+                {Title = "Close", Variant = "Primary", Callback = function() MeizuLibrary:Destroy() end},
             },
         })
     end)
 
-    --// ==================== KEYBIND TOÀN CỤC ====================
+    --// ==================== KEYBIND TOẦN CỤC ====================
     table.insert(MeizuLibrary._Connections, UserInputService.InputBegan:Connect(function(input, gp)
         if gp then return end
         if UserInputService:GetFocusedTextBox() then return end
@@ -2302,18 +1912,17 @@ MeizuLibrary.CreateWindow = function(a, b)
         end
     end))
 
-    --// ==================== DIALOG ====================
+    --// ==================== DIALOG (kích thước thủ công — fix) ====================
     function Window:Dialog(cfg)
         cfg = cfg or {}
         local DW = 340
         local PAD = 16
         local titleH = 18
-        local contentText = cfg.Content ~= nil and Resolve(cfg.Content) or ""
         local contentH = 0
-        if contentText ~= "" then
-            contentH = MeasureTextHeight(contentText, Enum.Font.Gotham, 12, DW - PAD * 2) + 2
+        if cfg.Content and cfg.Content ~= "" then
+            contentH = MeasureTextHeight(cfg.Content, Enum.Font.Gotham, 12, DW - PAD * 2) + 2
         end
-        local buttons = cfg.Buttons or {{Title = S("btn_ok"), Variant = "Primary"}}
+        local buttons = cfg.Buttons or {{Title = "OK", Variant = "Primary"}}
         local gap, btnH = 8, 32
         local btnW = math.min(math.floor((DW - PAD * 2 - (#buttons - 1) * gap) / #buttons), 110)
         local rowW = #buttons * btnW + (#buttons - 1) * gap
@@ -2323,8 +1932,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             BackgroundColor3 = T("Overlay"),
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
-            Active = true, -- chặn click xuyên xuống UI bên dưới
-            ZIndex = 300,
+            ZIndex = 300, BorderSizePixel = 0,
             Parent = ScreenGui,
         })
         local Card = New("CanvasGroup", {
@@ -2333,14 +1941,12 @@ MeizuLibrary.CreateWindow = function(a, b)
             Size = UDim2.fromOffset(DW, cardH),
             BackgroundColor3 = T("Window"),
             GroupTransparency = 1,
-            ZIndex = 301,
+            ZIndex = 301, BorderSizePixel = 0,
             Parent = Overlay,
         })
         Register(Card, {BackgroundColor3 = "Window"})
         New("UICorner", {CornerRadius = UDim.new(0, 12), Parent = Card})
-        local DStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.3, Parent = Card})
-        Register(DStroke, {Color = "Stroke"})
-        local scale = New("UIScale", {Scale = 0.88, Parent = Card})
+        local scale = New("UIScale", {Scale = 0.9, Parent = Card})
 
         local DTitle = New("TextLabel", {
             BackgroundTransparency = 1,
@@ -2348,8 +1954,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             Size = UDim2.new(1, -PAD * 2, 0, titleH),
             Font = Enum.Font.GothamBold, TextSize = 15,
             TextColor3 = T("Text"), TextXAlignment = Enum.TextXAlignment.Left,
-            Text = Resolve(cfg.Title ~= nil and cfg.Title or S("dialog")),
-            ZIndex = 302, Parent = Card,
+            Text = cfg.Title or "Dialog", ZIndex = 302, Parent = Card,
         })
         Register(DTitle, {TextColor3 = "Text"})
 
@@ -2361,35 +1966,31 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Font = Enum.Font.Gotham, TextSize = 12,
                 TextColor3 = T("SubText"), TextXAlignment = Enum.TextXAlignment.Left,
                 TextYAlignment = Enum.TextYAlignment.Top,
-                TextWrapped = true, RichText = true, Text = contentText,
+                TextWrapped = true, RichText = true, Text = cfg.Content,
                 ZIndex = 302, Parent = Card,
             })
             Register(DContent, {TextColor3 = "SubText"})
         end
 
-        local dismissed = false
         local function Dismiss()
-            if dismissed then return end
-            dismissed = true
-            Tween(Overlay, 0.22, {BackgroundTransparency = 1})
-            Tween(scale, 0.22, {Scale = 0.92}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-            Tween(Card, 0.2, {GroupTransparency = 1})
-            task.delay(0.24, function() if Overlay then Overlay:Destroy() end end)
+            Tween(Overlay, 0.2, {BackgroundTransparency = 1})
+            Tween(scale, 0.18, {Scale = 0.92}, Enum.EasingStyle.Quint)
+            Tween(Card, 0.18, {GroupTransparency = 1})
+            task.delay(0.2, function() if Overlay then Overlay:Destroy() end end)
         end
 
         for i, bn in ipairs(buttons) do
             local isPrimary = (bn.Variant == "Primary")
             local B = New("TextButton", {
-                Text = Resolve(bn.Title ~= nil and bn.Title or S("btn_ok")),
+                Text = bn.Title or "OK", AutoButtonColor = false,
                 Position = UDim2.new(0, DW - PAD - rowW + (i - 1) * (btnW + gap), 0, cardH - PAD - btnH),
                 Size = UDim2.fromOffset(btnW, btnH),
                 BackgroundColor3 = isPrimary and MeizuLibrary.Accent or T("Input"),
                 Font = Enum.Font.GothamBold, TextSize = 12,
                 TextColor3 = isPrimary and Color3.fromRGB(255, 255, 255) or T("SubText"),
-                ZIndex = 302, Parent = Card,
+                ZIndex = 302, BorderSizePixel = 0, Parent = Card,
             })
             New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = B})
-            local bsc = New("UIScale", {Scale = 1, Parent = B})
             if not isPrimary then
                 Register(B, {BackgroundColor3 = "Input"})
                 Register(B, {TextColor3 = "SubText"})
@@ -2399,38 +2000,37 @@ MeizuLibrary.CreateWindow = function(a, b)
                 B.MouseEnter:Connect(function() Tween(B, 0.15, {BackgroundTransparency = 0.12}) end)
                 B.MouseLeave:Connect(function() Tween(B, 0.2, {BackgroundTransparency = 0}) end)
             end
-            B.InputBegan:Connect(function(input) if IsPointer(input) then Tween(bsc, 0.08, {Scale = 0.94}) end end)
-            B.InputEnded:Connect(function(input) if IsPointer(input) then Tween(bsc, 0.25, {Scale = 1}, Enum.EasingStyle.Back) end end)
             B.Activated:Connect(function()
                 Dismiss()
                 SafeCall(bn.Callback)
             end)
         end
 
-        Tween(Overlay, 0.25, {BackgroundTransparency = 0.4})
-        Tween(scale, 0.4, {Scale = 1}, Enum.EasingStyle.Back)
-        Tween(Card, 0.28, {GroupTransparency = 0})
+        Tween(Overlay, 0.2, {BackgroundTransparency = 0.4})
+        Tween(scale, 0.3, {Scale = 1}, Enum.EasingStyle.Back)
+        Tween(Card, 0.25, {GroupTransparency = 0})
     end
 
-    --// ==================== NÚT NỔI (HÌNH CỐ ĐỊNH: meizuxp.png) ====================
-    local ShowToggleButton = function() end
+    --// ==================== NÚT NỔI (v2.2 — bo góc kiểu testintro + PNG mặc định) ====================
     if config.ToggleUIButton ~= false then
-        local RADIUS = TOGGLE_BUTTON_RADIUS
+        local RADIUS = TOGGLE_BUTTON_RADIUS or 12
 
         local ToggleBtn = New("Frame", {
             Name = "ToggleButton",
             Size = TOGGLE_BUTTON_SIZE,
             Position = TOGGLE_BUTTON_POSITION,
-            BackgroundColor3 = Color3.fromRGB(0, 0, 0), -- nền đen giống testtintro
+            BackgroundColor3 = T("Sidebar"),
+            BorderSizePixel = 0,
             Active = true,
-            Visible = false,
             ZIndex = 150,
             Parent = ScreenGui,
         })
-        New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = ToggleBtn})
-        local BtnStroke = New("UIStroke", {Color = MeizuLibrary.Accent, Thickness = 1.5, Transparency = 0.35, Parent = ToggleBtn})
+        Register(ToggleBtn, {BackgroundColor3 = "Sidebar"})
+        New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = ToggleBtn}) -- BO GÓC KIỂU TESTINTRO
+        local BtnStroke = New("UIStroke", {Color = MeizuLibrary.Accent, Thickness = 1.5, Transparency = 0.25, Parent = ToggleBtn})
         RegisterAccent(BtnStroke, "Color")
 
+        -- Bóng đổ mềm
         New("ImageLabel", {
             Name = "Shadow", BackgroundTransparency = 1,
             AnchorPoint = Vector2.new(0.5, 0.5),
@@ -2444,105 +2044,75 @@ MeizuLibrary.CreateWindow = function(a, b)
             ZIndex = 148, Parent = ToggleBtn,
         })
 
-        -- Hình cố định (lấp đầy nút, bo góc theo nút)
+        -- Khung chứa hình (bo góc để PNG vuông tự bo theo khung)
+        IconWrap = New("Frame", {
+            Name = "IconWrap",
+            BackgroundTransparency = 1,
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.new(1, -10, 1, -10),
+            ClipsDescendants = true,
+            ZIndex = 153, Parent = ToggleBtn,
+        })
+        New("UICorner", {CornerRadius = UDim.new(0, math.max(RADIUS - 4, 4)), Parent = IconWrap})
+
         local ToggleImageL = New("ImageLabel", {
             Name = "ToggleImage",
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
             Visible = false,
-            ScaleType = Enum.ScaleType.Crop,
-            ImageTransparency = 1,
-            ZIndex = 153, Parent = ToggleBtn,
+            ScaleType = Enum.ScaleType.Fit,
+            ImageTransparency = 0,
+            ZIndex = 153, Parent = IconWrap,
         })
-        New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = ToggleImageL})
+        New("UICorner", {CornerRadius = UDim.new(0, math.max(RADIUS - 4, 4)), Parent = ToggleImageL})
 
-        -- Chữ dự phòng (chỉ hiện khi executor không tải được hình)
         local ToggleLetter = New("TextLabel", {
             Name = "ToggleLetter",
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
-            Font = Enum.Font.GothamBlack, TextSize = 22,
-            Text = config.ToggleText or "M",
-            TextXAlignment = Enum.TextXAlignment.Center,
+            Font = Enum.Font.GothamBlack, TextSize = 20,
+            Text = "M",
             TextColor3 = MeizuLibrary.Accent,
-            ZIndex = 153, Parent = ToggleBtn,
+            Visible = true,
+            ZIndex = 153, Parent = IconWrap,
         })
         RegisterAccent(ToggleLetter, "TextColor3")
 
-        OnLogo(function(asset)
-            if not ToggleBtn.Parent then return end
-            if asset ~= "" then
+        -- Fixed Meizu launcher image: deliberately no public image changer.
+        task.spawn(function()
+            local asset = ResolveImageAsset(TOGGLE_BUTTON_IMAGE)
+            if asset and ToggleImageL and ToggleImageL.Parent then
                 ToggleImageL.Image = asset
                 ToggleImageL.Visible = true
-                Tween(ToggleImageL, 0.4, {ImageTransparency = 0})
-                Tween(ToggleLetter, 0.3, {TextTransparency = 1})
+                ToggleLetter.Visible = false
+                MeizuLibrary._ToggleImage = TOGGLE_BUTTON_IMAGE
             end
         end)
+
+        -- Click vs Drag
+        local pressedPos = nil
+        ToggleBtn.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                pressedPos = input.Position
+            end
+        end)
+        ToggleBtn.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                if pressedPos and (input.Position - pressedPos).Magnitude < 6 then
+                    Window:Toggle()
+                end
+                pressedPos = nil
+            end
+        end)
+        MakeDraggable(ToggleBtn, ToggleBtn)
 
         local BtnScale = New("UIScale", {Scale = 0, Parent = ToggleBtn})
+        Tween(BtnScale, 0.5, {Scale = 1}, Enum.EasingStyle.Back)
+        ToggleBtn.MouseEnter:Connect(function() Tween(BtnScale, 0.2, {Scale = 1.08}) end)
+        ToggleBtn.MouseLeave:Connect(function() Tween(BtnScale, 0.25, {Scale = 1}) end)
 
-        -- Bấm = mở/đóng, kéo = di chuyển (tự kéo lại vào trong màn hình)
-        local pressed, moved, activeInput, dragStart, startPos = false, false, nil, nil, nil
-        local DRAG_THRESHOLD = 6
-
-        local function ClampIntoScreen()
-            if not ToggleBtn.Parent then return end
-            local screen = ScreenGui.AbsoluteSize
-            local size = ToggleBtn.AbsoluteSize
-            local pos = ToggleBtn.AbsolutePosition
-            local cx = math.clamp(pos.X, 8, math.max(screen.X - size.X - 8, 8))
-            local cy = math.clamp(pos.Y, 8, math.max(screen.Y - size.Y - 8, 8))
-            if math.abs(cx - pos.X) > 0.5 or math.abs(cy - pos.Y) > 0.5 then
-                Tween(ToggleBtn, 0.35, {Position = UDim2.fromOffset(cx, cy)}, Enum.EasingStyle.Back)
-            end
-        end
-
-        local function FinishPress()
-            if not pressed then return end
-            pressed = false
-            Tween(BtnScale, 0.3, {Scale = 1}, Enum.EasingStyle.Back)
-            if moved then
-                ClampIntoScreen()
-            else
-                Window:Toggle()
-            end
-            activeInput = nil
-        end
-
-        ToggleBtn.InputBegan:Connect(function(input)
-            if IsPointer(input) and not pressed then
-                pressed = true
-                moved = false
-                activeInput = input
-                dragStart = input.Position
-                startPos = ToggleBtn.Position
-                Tween(BtnScale, 0.1, {Scale = 0.9}, Enum.EasingStyle.Quad)
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then FinishPress() end
-                end)
-            end
-        end)
-        table.insert(MeizuLibrary._Connections, UserInputService.InputChanged:Connect(function(input)
-            if not pressed then return end
-            if input.UserInputType == Enum.UserInputType.MouseMovement or input == activeInput then
-                local delta = input.Position - dragStart
-                if delta.Magnitude >= DRAG_THRESHOLD then moved = true end
-                if moved then
-                    ToggleBtn.Position = UDim2.new(
-                        startPos.X.Scale, startPos.X.Offset + delta.X,
-                        startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-                end
-            end
-        end))
-
-        ToggleBtn.MouseEnter:Connect(function()
-            if not pressed then Tween(BtnScale, 0.22, {Scale = 1.08}, Enum.EasingStyle.Back) end
-        end)
-        ToggleBtn.MouseLeave:Connect(function()
-            if not pressed then Tween(BtnScale, 0.25, {Scale = 1}) end
-        end)
-
-        -- Sóng lan khi UI đang ẩn
+        -- Pulse sóng lan khi UI ẩn
         local PulseRing = New("Frame", {
             Name = "PulseRing",
             BackgroundColor3 = MeizuLibrary.Accent,
@@ -2550,35 +2120,23 @@ MeizuLibrary.CreateWindow = function(a, b)
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(0.5, 0.5),
             Size = UDim2.fromOffset(50, 50),
-            ZIndex = 149, Parent = ToggleBtn,
+            ZIndex = 149, BorderSizePixel = 0, Parent = ToggleBtn,
         })
         RegisterAccent(PulseRing, "BackgroundColor3")
         New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = PulseRing})
 
         task.spawn(function()
-            while Alive() and ToggleBtn.Parent do
-                if not isOpen and ToggleBtn.Visible and PulseRing.Parent then
-                    PulseRing.Size = UDim2.fromOffset(50, 50)
-                    PulseRing.BackgroundTransparency = 0.65
-                    Tween(PulseRing, 1.2, {Size = UDim2.fromOffset(90, 90), BackgroundTransparency = 1}, Enum.EasingStyle.Quad)
+            while ToggleBtn.Parent and not MeizuLibrary.Destroyed do
+                if not isOpen then
+                    if PulseRing.Parent then
+                        PulseRing.Size = UDim2.fromOffset(50, 50)
+                        PulseRing.BackgroundTransparency = 0.65
+                        Tween(PulseRing, 1.1, {Size = UDim2.fromOffset(88, 88), BackgroundTransparency = 1}, Enum.EasingStyle.Quad)
+                    end
                 end
-                task.wait(1.8)
+                task.wait(1.6)
             end
         end)
-
-        SetToggleVisual = function(open)
-            if not ToggleBtn.Parent then return end
-            Tween(BtnStroke, 0.35, {
-                Transparency = open and 0 or 0.35,
-                Thickness = open and 2.2 or 1.5,
-            })
-        end
-
-        ShowToggleButton = function()
-            if not ToggleBtn.Parent then return end
-            ToggleBtn.Visible = true
-            Tween(BtnScale, 0.6, {Scale = 1}, Enum.EasingStyle.Back)
-        end
     end
 
     --// ==================== SEARCH FILTER ====================
@@ -2598,344 +2156,103 @@ MeizuLibrary.CreateWindow = function(a, b)
     for k in pairs(MeizuLibrary.Themes) do table.insert(themeNames, k) end
     table.sort(themeNames)
 
-    SettingsTab = MakeTab(S("tab_settings"), nil, 9999, true)
-
+    local SettingsTab = Window:CreateTab("Settings", nil, 9999)
     SettingsTab:CreateParagraph({
         Title = "Meizu Library v" .. MeizuLibrary.Version,
-        Content = S("about_content"),
+        Content = "Modern UI Library — Inspired by Fluent Design.\nCảm ơn bạn đã sử dụng!",
     })
-
-    local SecInterface = SettingsTab:CreateSection(S("sec_interface"))
-
-    -- Chọn ngôn ngữ
-    local LANG_NAMES = {vi = "Tiếng Việt", en = "English"}
-    local LANG_CODES = {["Tiếng Việt"] = "vi", ["English"] = "en"}
-    local LanguageDropdown
-    LanguageDropdown = SecInterface:CreateDropdown({
-        Title = S("language"),
-        Description = S("language_desc"),
-        Options = {"Tiếng Việt", "English"},
-        Default = LANG_NAMES[MeizuLibrary.Language] or "Tiếng Việt",
-        Callback = function(v)
-            local code = LANG_CODES[v]
-            if code and code ~= MeizuLibrary.Language then
-                MeizuLibrary:SetLanguage(code)
-                MeizuLibrary:Notify({
-                    Title = S("language"),
-                    Content = S("language_changed"),
-                    Duration = 3,
-                })
-            end
-        end,
+    SettingsTab:CreateKeybind({
+        Title = "Toggle UI Keybind",
+        Default = MeizuLibrary.ToggleKeybind,
+        Callback = function() Window:Toggle() end,
+        ChangedCallback = function(key) MeizuLibrary.ToggleKeybind = key end,
     })
-    -- Nếu đổi ngôn ngữ bằng code (Library:SetLanguage) thì dropdown cũng cập nhật theo
-    OnLangChange(function()
-        local want = LANG_NAMES[MeizuLibrary.Language]
-        if want and LanguageDropdown.Get() ~= want then LanguageDropdown.Set(want) end
-    end)
-
-    SecInterface:CreateDropdown({
-        Title = S("theme"),
+    SettingsTab:CreateDropdown({
+        Title = "Theme",
         Options = themeNames,
         Default = MeizuLibrary.Theme,
         Callback = function(v) MeizuLibrary:ApplyTheme(v) end,
     })
-    SecInterface:CreateColorPicker({
-        Title = S("accent"),
+    SettingsTab:CreateColorPicker({
+        Title = "Accent Color",
         Default = MeizuLibrary.Accent,
         Callback = function(c)
             MeizuLibrary._UserAccent = c
             MeizuLibrary:ApplyAccent(c)
         end,
     })
-    SecInterface:CreateToggle({
-        Title = S("rainbow"),
+    SettingsTab:CreateToggle({
+        Title = "Rainbow Accent",
         Default = false,
         Callback = function(v) MeizuLibrary:SetRainbow(v) end,
     })
-    SecInterface:CreateToggle({
-        Title = S("sound"),
+    SettingsTab:CreateToggle({
+        Title = "Sound Effects",
         Default = MeizuLibrary.SoundEnabled,
         Callback = function(v) MeizuLibrary.SoundEnabled = v end,
     })
-    -- LƯU Ý: không gắn Callback ở đây, phím bật/tắt đã được xử lý toàn cục (tránh bật rồi tắt ngay)
-    SecInterface:CreateKeybind({
-        Title = S("keybind_toggle"),
-        Default = MeizuLibrary.ToggleKeybind,
-        ChangedCallback = function(key) MeizuLibrary.ToggleKeybind = key end,
+
+    local LanguageNames = {"Tiếng Việt", "English"}
+    SettingsTab:CreateDropdown({
+        Title = "Language",
+        Options = LanguageNames,
+        Default = (MeizuLibrary.Language == "vi") and "Tiếng Việt" or "English",
+        Callback = function(v)
+            MeizuLibrary:SetLanguage(v == "Tiếng Việt" and "vi" or "en")
+        end,
     })
 
-    local SecConfig = SettingsTab:CreateSection(S("sec_config"))
-    local nameInput = SecConfig:CreateInput({
-        Title = S("config_name"),
+    local nameInput = SettingsTab:CreateInput({
+        Title = "Config Name",
         Placeholder = "config",
         Default = "config",
     })
-    SecConfig:CreateButton({
-        Title = S("save_config"),
+    SettingsTab:CreateButton({
+        Title = "Save Config",
         Callback = function()
             local v = nameInput.Get()
             local ok = MeizuLibrary:SaveSettings(v)
             MeizuLibrary:Notify({
-                Title = S("config_title"),
-                Content = ok and LS("config_saved", v) or S("config_nosave"),
+                Title = "Config",
+                Content = ok and ("Đã lưu config '<b>" .. v .. "</b>'!") or "Executor không hỗ trợ writefile!",
                 Duration = 4,
             })
         end,
     })
-    SecConfig:CreateButton({
-        Title = S("load_config"),
+    SettingsTab:CreateButton({
+        Title = "Load Config",
         Callback = function()
             local v = nameInput.Get()
             local ok = MeizuLibrary:LoadSettings(v)
             MeizuLibrary:Notify({
-                Title = S("config_title"),
-                Content = ok and LS("config_loaded", v) or S("config_notfound"),
+                Title = "Config",
+                Content = ok and ("Đã load config '<b>" .. v .. "</b>'!") or "Không tìm thấy config!",
                 Duration = 4,
             })
         end,
     })
-
-    local SecSystem = SettingsTab:CreateSection(S("sec_system"))
-    SecSystem:CreateButton({
-        Title = S("unload"),
-        Description = S("unload_desc"),
+    SettingsTab:CreateButton({
+        Title = "Unload Library",
+        Description = "Xoá toàn bộ UI khỏi game",
         Callback = function()
             Window:Dialog({
-                Title = S("unload_title"),
-                Content = S("unload_content"),
+                Title = "Unload",
+                Content = "Bạn có chắc muốn gỡ UI?",
                 Buttons = {
-                    {Title = S("btn_cancel")},
-                    {Title = S("btn_unload"), Variant = "Primary", Callback = function() MeizuLibrary:Destroy() end},
+                    {Title = "Cancel"},
+                    {Title = "Unload", Variant = "Primary", Callback = function() MeizuLibrary:Destroy() end},
                 },
             })
         end,
     })
 
-    --// ==================== LOADING SCREEN (giống testtintro.lua) ====================
-    local function RunLoader()
-        local LC = {
-            Main   = Color3.fromRGB(0, 0, 0),
-            Topic  = Color3.fromRGB(200, 200, 200),
-            Title  = Color3.fromRGB(255, 255, 255),
-            Bar    = Color3.fromRGB(40, 40, 40),
-            Splash = (typeof(config.LoaderColor) == "Color3") and config.LoaderColor or Color3.fromRGB(3, 252, 3),
-        }
-
-        local Frame = New("Frame", {
-            Name = "MeizuLoader",
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromOffset(0, 0),
-            BackgroundColor3 = LC.Main,
-            ClipsDescendants = true,
-            ZIndex = 500,
-            Parent = ScreenGui,
-        })
-        New("UICorner", {CornerRadius = UDim.new(0, 12), Parent = Frame})
-        local FStroke = New("UIStroke", {Color = Color3.fromRGB(60, 60, 60), Thickness = 1, Transparency = 1, Parent = Frame})
-
-        -- Logo (tròn) + chữ M dự phòng
-        local LogoHolder = New("Frame", {
-            Position = UDim2.fromOffset(15, 10),
-            Size = UDim2.fromOffset(50, 50),
-            BackgroundColor3 = Color3.fromRGB(26, 26, 26),
-            BackgroundTransparency = 1,
-            ZIndex = 501, Parent = Frame,
-        })
-        New("UICorner", {CornerRadius = UDim.new(0, 25), Parent = LogoHolder})
-        local LogoLetter = New("TextLabel", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromScale(1, 1),
-            Font = Enum.Font.GothamBlack, TextSize = 22,
-            Text = config.ToggleText or "M",
-            TextXAlignment = Enum.TextXAlignment.Center,
-            TextColor3 = LC.Splash, TextTransparency = 1,
-            ZIndex = 502, Parent = LogoHolder,
-        })
-        local LogoImage = New("ImageLabel", {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromScale(1, 1),
-            ScaleType = Enum.ScaleType.Crop,
-            ImageTransparency = 1, Visible = false,
-            ZIndex = 503, Parent = LogoHolder,
-        })
-        New("UICorner", {CornerRadius = UDim.new(0, 25), Parent = LogoImage})
-
-        local HubName = New("TextLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(75, 10),
-            Size = UDim2.fromOffset(190, 50),
-            Font = Enum.Font.GothamBold, TextSize = 16,
-            TextColor3 = LC.Title, TextTransparency = 1,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-            ZIndex = 501, Parent = Frame,
-        })
-        BindText(HubName, "Text", config.Title or "Meizu Library")
-
-        local Percent = New("TextLabel", {
-            BackgroundTransparency = 1,
-            AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -15, 0, 10),
-            Size = UDim2.fromOffset(60, 50),
-            Font = Enum.Font.GothamBold, TextSize = 14,
-            Text = "0%",
-            TextColor3 = LC.Splash, TextTransparency = 1,
-            TextXAlignment = Enum.TextXAlignment.Right,
-            ZIndex = 501, Parent = Frame,
-        })
-
-        local LoaderTitle = New("TextLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(15, 66),
-            Size = UDim2.new(1, -30, 0, 18),
-            Font = Enum.Font.Gotham, TextSize = 13,
-            RichText = true,
-            TextColor3 = LC.Title, TextTransparency = 1,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 501, Parent = Frame,
-        })
-        local function TitleText()
-            local t = config.LoaderTitle ~= nil and Resolve(config.LoaderTitle) or Resolve(S("loader_title"))
-            return "<b>" .. t .. "</b>"
-        end
-        LoaderTitle.Text = TitleText()
-
-        local ProgressBG = New("Frame", {
-            AnchorPoint = Vector2.new(0.5, 0),
-            Position = UDim2.new(0.5, 0, 0, 90),
-            Size = UDim2.new(0.9, 0, 0, 14),
-            BackgroundColor3 = LC.Bar, BackgroundTransparency = 1,
-            ZIndex = 501, Parent = Frame,
-        })
-        New("UICorner", {CornerRadius = UDim.new(0, 7), Parent = ProgressBG})
-        local ProgressBar = New("Frame", {
-            Size = UDim2.new(0, 0, 1, 0),
-            BackgroundColor3 = LC.Splash, BackgroundTransparency = 1,
-            ZIndex = 502, Parent = ProgressBG,
-        })
-        New("UICorner", {CornerRadius = UDim.new(0, 7), Parent = ProgressBar})
-
-        local StepLabel = New("TextLabel", {
-            BackgroundTransparency = 1,
-            AnchorPoint = Vector2.new(0.5, 0),
-            Position = UDim2.new(0.5, 0, 0, 108),
-            Size = UDim2.new(1, -20, 0, 18),
-            Font = Enum.Font.Gotham, TextSize = 12,
-            TextColor3 = LC.Topic, TextTransparency = 1,
-            TextXAlignment = Enum.TextXAlignment.Center,
-            ZIndex = 501, Parent = Frame,
-        })
-
-        -- Logo thật: nhận khi tải xong
-        local Revealed = false
-        OnLogo(function(asset)
-            if not LogoImage.Parent then return end
-            if asset ~= "" then
-                LogoImage.Image = asset
-                LogoImage.Visible = true
-                if Revealed then
-                    Tween(LogoImage, 0.35, {ImageTransparency = 0})
-                    Tween(LogoLetter, 0.25, {TextTransparency = 1})
-                end
-            end
-        end)
-
-        -- Số % chạy theo thanh tiến trình
-        local pctConn = RunService.Heartbeat:Connect(function()
-            if Percent.Parent then
-                Percent.Text = tostring(math.floor(ProgressBar.Size.X.Scale * 100 + 0.5)) .. "%"
-            end
-        end)
-
-        local function SetStep(index, pct)
-            Tween(ProgressBar, 0.5, {Size = UDim2.new(pct / 100, 0, 1, 0)}, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
-            StepLabel.Text = Resolve(S("loader_step_" .. index))
-            StepLabel.TextTransparency = 0.7
-            Tween(StepLabel, 0.3, {TextTransparency = 0})
-        end
-
-        local ok, err = pcall(function()
-            -- 1) Khung mở rộng
-            Tween(Frame, 0.5, {Size = UDim2.fromOffset(346, 132)}, Enum.EasingStyle.Quint)
-            Tween(FStroke, 0.5, {Transparency = 0.4})
-            task.wait(0.45)
-            if not Alive() then return end
-
-            -- 2) Hiện nội dung
-            Revealed = true
-            if LogoImage.Visible then
-                Tween(LogoImage, 0.45, {ImageTransparency = 0})
-            else
-                Tween(LogoLetter, 0.45, {TextTransparency = 0})
-            end
-            Tween(LogoHolder, 0.45, {BackgroundTransparency = LogoImage.Visible and 1 or 0})
-            Tween(HubName, 0.5, {TextTransparency = 0})
-            Tween(Percent, 0.5, {TextTransparency = 0})
-            Tween(LoaderTitle, 0.5, {TextTransparency = 0})
-            Tween(ProgressBG, 0.5, {BackgroundTransparency = 0})
-            Tween(ProgressBar, 0.5, {BackgroundTransparency = 0})
-            Tween(StepLabel, 0.5, {TextTransparency = 0})
-            task.wait(0.35)
-
-            -- 3) Các bước tải
-            local keyframes = {
-                {0.25, 12}, {0.4, 38}, {0.4, 72}, {0.35, 100},
-            }
-            for i, kf in ipairs(keyframes) do
-                task.wait(kf[1])
-                if not Alive() then return end
-                SetStep(i, kf[2])
-                if i == 2 then
-                    -- chờ logo tải xong (tối đa 4 giây) để nút nổi có hình ngay từ đầu
-                    local waited = 0
-                    while not LogoState.Ready and waited < 4 and Alive() do
-                        task.wait(0.05)
-                        waited = waited + 0.05
-                    end
-                end
-            end
-            task.wait(0.8)
-            if not Alive() then return end
-
-            -- 4) Ẩn dần rồi thu nhỏ
-            Tween(LoaderTitle, 0.4, {TextTransparency = 1})
-            Tween(ProgressBG, 0.4, {BackgroundTransparency = 1})
-            Tween(ProgressBar, 0.4, {BackgroundTransparency = 1})
-            Tween(StepLabel, 0.4, {TextTransparency = 1})
-            Tween(Percent, 0.4, {TextTransparency = 1})
-            Tween(HubName, 0.4, {TextTransparency = 1})
-            Tween(LogoImage, 0.4, {ImageTransparency = 1})
-            Tween(LogoLetter, 0.4, {TextTransparency = 1})
-            Tween(LogoHolder, 0.4, {BackgroundTransparency = 1})
-            task.wait(0.45)
-            Tween(FStroke, 0.35, {Transparency = 1})
-            Tween(Frame, 0.4, {Size = UDim2.fromOffset(0, 0)}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-            task.wait(0.42)
-        end)
-
-        pctConn:Disconnect()
-        if Frame and Frame.Parent then Frame:Destroy() end
-        if not ok then warn("[MeizuLibrary] Loader error: " .. tostring(err)) end
-    end
-
-    --// ==================== KHỞI ĐỘNG ====================
-    task.defer(function()
-        if not Alive() then return end
-        if config.Loader ~= false then
-            RunLoader()
-        end
-        if not Alive() then return end
-        Window._Ready = true
+    --// Intro animation
+    task.delay(0.15, function()
         Window:Toggle(true)
-        ShowToggleButton()
-        for _, fn in ipairs(Window._ReadyCbs) do SafeCall(fn) end
-        Window._ReadyCbs = {}
     end)
 
-    Window.Root = Root
     Window.Main = Main
+    task.defer(function() MeizuLibrary:_ApplyLocalization() end)
     return Window
 end
 
