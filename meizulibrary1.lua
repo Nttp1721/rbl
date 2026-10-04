@@ -2227,7 +2227,7 @@ MeizuLibrary.CreateWindow = function(a, b)
     local SettingsTab = Window:CreateTab("Settings", nil, 9999)
     SettingsTab:CreateParagraph({
         Title = "Meizu Library v" .. MeizuLibrary.Version,
-        Content = "Modern UI Library — Inspired by Fluent Design.\nCảm ơn bạn đã sử dụng!",
+        Content = "Modern UI Library — Design by NTTP1721.\nCảm ơn bạn đã sử dụng!",
     })
     SettingsTab:CreateKeybind({
         Title = "Toggle UI Keybind",
