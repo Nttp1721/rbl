@@ -8,7 +8,7 @@
       hãy đổi LIBRARY_URL thành URL raw chứa bản mới của bạn.
 ]]
 
-local LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/auu.lua"
+local LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua"
 
 local function safeLoadLibrary(url)
     local ok, source = pcall(function()
