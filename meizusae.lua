@@ -539,64 +539,79 @@ RunService:BindToRenderStep("AimbotSystem", Enum.RenderPriority.Camera.Value + 1
     end
 end)
 
-LoaderStage(4)
-
 local function CreateESP(player)
     if player == LocalPlayer then return end
 
     local function SetupCharacter(char)
         if not char then return end
-        local head = char:WaitForChild("Head", 5)
-        local humanoid = char:WaitForChild("Humanoid", 5)
-        if not head or not humanoid then return end
 
-        if head:FindFirstChild("PlayerESP") then
-            head.PlayerESP:Destroy()
-        end
+        -- Không chặn thread load bằng WaitForChild.
+        -- Character có thể chưa có Head/Humanoid ngay khi CharacterAdded.
+        task.spawn(function()
+            local deadline = os.clock() + 8
+            local head = char:FindFirstChild("Head")
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
 
-        local bgui = Instance.new("BillboardGui")
-        bgui.Name = "PlayerESP"
-        bgui.Adornee = head
-        bgui.Size = UDim2.new(0, 200, 0, 50)
-        bgui.StudsOffset = Vector3.new(0, 2.5, 0)
-        bgui.AlwaysOnTop = true
-        bgui.Parent = head
-
-        local textLabel = Instance.new("TextLabel")
-        textLabel.Size = UDim2.new(1, 0, 1, 0)
-        textLabel.BackgroundTransparency = 1
-        textLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
-        textLabel.TextStrokeTransparency = 0
-        textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-        textLabel.Font = Enum.Font.GothamBold
-        textLabel.TextSize = 13
-        textLabel.Parent = bgui
-
-        RunService.RenderStepped:Connect(function()
-            if not char or not char.Parent or not humanoid or humanoid.Health <= 0 or not EspSettings.Enabled then
-                bgui.Enabled = false
-                return
+            while char.Parent and os.clock() < deadline and (not head or not humanoid) do
+                head = head or char:FindFirstChild("Head")
+                humanoid = humanoid or char:FindFirstChildOfClass("Humanoid")
+                if head and humanoid then break end
+                task.wait(0.1)
             end
 
-            bgui.Enabled = true
-            local textParts = {}
+            if not char.Parent or not head or not humanoid then return end
 
-            if EspSettings.ShowName then
-                table.insert(textParts, player.DisplayName)
+            if head:FindFirstChild("PlayerESP") then
+                head.PlayerESP:Destroy()
             end
 
-            if EspSettings.ShowHealth then
-                local hp = math.floor(humanoid.Health)
-                local maxHp = math.floor(humanoid.MaxHealth)
-                table.insert(textParts, string.format("[%d/%d HP]", hp, maxHp))
-            end
+            local bgui = Instance.new("BillboardGui")
+            bgui.Name = "PlayerESP"
+            bgui.Adornee = head
+            bgui.Size = UDim2.new(0, 200, 0, 50)
+            bgui.StudsOffset = Vector3.new(0, 2.5, 0)
+            bgui.AlwaysOnTop = true
+            bgui.Parent = head
 
-            if EspSettings.ShowDistance and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - head.Position).Magnitude)
-                table.insert(textParts, string.format("[%dm]", dist))
-            end
+            local textLabel = Instance.new("TextLabel")
+            textLabel.Size = UDim2.new(1, 0, 1, 0)
+            textLabel.BackgroundTransparency = 1
+            textLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+            textLabel.TextStrokeTransparency = 0
+            textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            textLabel.Font = Enum.Font.GothamBold
+            textLabel.TextSize = 13
+            textLabel.Parent = bgui
 
-            textLabel.Text = table.concat(textParts, " | ")
+            -- Một connection riêng cho ESP này; việc tạo nó không cản quá trình load chính.
+            RunService.RenderStepped:Connect(function()
+                if not char.Parent or not humanoid.Parent or humanoid.Health <= 0 or not EspSettings.Enabled then
+                    if bgui.Parent then bgui.Enabled = false end
+                    return
+                end
+
+                bgui.Enabled = true
+                local textParts = {}
+
+                if EspSettings.ShowName then
+                    table.insert(textParts, player.DisplayName)
+                end
+
+                if EspSettings.ShowHealth then
+                    local hp = math.floor(humanoid.Health)
+                    local maxHp = math.floor(humanoid.MaxHealth)
+                    table.insert(textParts, string.format("[%d/%d HP]", hp, maxHp))
+                end
+
+                local myChar = LocalPlayer.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                if EspSettings.ShowDistance and myHRP then
+                    local dist = math.floor((myHRP.Position - head.Position).Magnitude)
+                    table.insert(textParts, string.format("[%dm]", dist))
+                end
+
+                textLabel.Text = table.concat(textParts, " | ")
+            end)
         end)
     end
 
@@ -611,6 +626,8 @@ for _, p in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(CreateESP)
 
+-- Stage 4 chỉ xác nhận hệ thống ESP đã được đăng ký.
+-- Không đợi từng Character spawn xong mới cho script chạy tiếp.
 LoaderStage(4)
 
 local flyEnabled = false
@@ -699,16 +716,11 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
+LoaderStage(5)
+
 ----------------------------------------------------
 -- 4. KHỞI TẠO TABS VÀ CHỨC NĂNG
 ----------------------------------------------------
-local MovementTab = CreateTab("Di Chuyen", "⚡")
-local TeleportTab = CreateTab("Dich Chuyen", "📍")
-local EspTab = CreateTab("Nhin Xuyen", "👁️")
-local PvpTab = CreateTab("PVP", "⚔")
-local FossilsTab = CreateTab("Fossils", "🦴")
-local VisualsTab = CreateTab("Cai Dat", "⚙️")
-
 local targetWalkSpeed = 16
 RunService.Stepped:Connect(function()
     pcall(function()
@@ -872,6 +884,7 @@ local EspTab = Window:CreateTab("Nhin Xuyen", nil, 3)
 local PvpTab = Window:CreateTab("PVP", nil, 4)
 local FossilsTab = Window:CreateTab("Fossils", nil, 5)
 local VisualsTab = Window:CreateTab("Cai Dat", nil, 6)
+LoaderStage(6)
 
 ----------------------------------------------------
 -- TAB DI CHUYEN
@@ -993,8 +1006,6 @@ Players.PlayerRemoving:Connect(function()
     RefreshPlayerList()
 end)
 task.defer(RefreshPlayerList)
-
-LoaderStage(6)
 
 ----------------------------------------------------
 -- TAB ESP
@@ -1145,12 +1156,6 @@ CreateParagraph(VisualsTab, {
 LoaderStage(7)
 
 ----------------------------------------------------
--- MỞ UI CHỈ SAU KHI TOÀN BỘ CONTROL ĐÃ ĐƯỢC DỰNG
-----------------------------------------------------
--- Không để UI lộ từng phần: lúc này loader vẫn nằm trên cùng.
-Window:Toggle(true)
-
-
 -- 5. LOGIC CHẠY NGẦM (AUTO ATTACK, NHẶT ĐẠN, FOSSILS, AUTO ĂN THỊT/CỎ & ANTI-AFK)
 LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
@@ -1554,7 +1559,8 @@ LoaderStage(9)
 
 LoaderComplete = true
 
--- Fade-out ngắn chỉ là animation đóng HUD, không dùng để giả thời gian load.
+-- Loader vẫn là lớp trên cùng cho tới khi animation kết thúc.
+-- Meizu Window đã được dựng hoàn chỉnh và vẫn đang đóng trong giai đoạn này.
 LoaderTween(LoaderTitle, 0.22, {TextTransparency = 1})
 LoaderTween(ProgressBG, 0.22, {BackgroundTransparency = 1})
 LoaderTween(ProgressBar, 0.22, {BackgroundTransparency = 1})
@@ -1566,6 +1572,10 @@ closeTween.Completed:Wait()
 if LoaderGui and LoaderGui.Parent then
     LoaderGui:Destroy()
 end
+
+-- Chỉ bây giờ mới cho Meizu UI xuất hiện.
+-- Main/controls đã được dựng đầy đủ từ trước nên không có hiện tượng menu load từng phần.
+Window:Toggle(true)
 
 pcall(function()
     MeizuLibrary:Notify({
