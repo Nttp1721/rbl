@@ -1,4 +1,11 @@
--- Primeval Earth Hub UI (Cập nhật: Tích hợp Auto Ăn Thịt & Auto Ăn Cỏ vào Tab Fossils)
+-- Primeval Earth Hub x MeizuLibrary
+--
+-- UI migration:
+--   * Giữ nguyên logic/feature gốc của UpdatePrimeval.
+--   * Loại bỏ toàn bộ UI tự dựng cũ của Primeval.
+--   * Dùng trực tiếp API của meizulibrary1.lua.
+--   * FOV/ESP vẫn là overlay chức năng, không phải menu UI.
+
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -8,65 +15,38 @@ local VirtualUser = game:GetService("VirtualUser")
 local Camera = workspace.CurrentCamera
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
 
-
--- ============================================================
--- MEIZU LIBRARY UI
--- Chỉ thay giao diện; logic Primeval bên dưới được giữ nguyên.
--- ============================================================
+----------------------------------------------------
+-- 1. LOAD MEIZU LIBRARY
+----------------------------------------------------
 local MEIZU_LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua"
 
-local MeizuLibrary = loadstring(game:HttpGet(MEIZU_LIBRARY_URL, true))()
+local function LoadMeizuLibrary()
+    local okHttp, source = pcall(function()
+        return game:HttpGet(MEIZU_LIBRARY_URL, true)
+    end)
+    if not okHttp or type(source) ~= "string" or source == "" then
+        error("[Primeval] Không thể tải MeizuLibrary: " .. tostring(source))
+    end
 
-local Window = MeizuLibrary:CreateWindow({
-    Title = "PRIMEVAL EARTH",
-    SubTitle = "Primeval Earth Hub",
-    Theme = "Dark",
-    Accent = Color3.fromRGB(88, 101, 242),
-    ToggleKeybind = Enum.KeyCode.RightControl,
-    ToggleUIButton = true,
-    Language = "vi",
-    Size = UDim2.fromOffset(650, 460),
-})
+    local loader, compileErr = loadstring(source)
+    if type(loader) ~= "function" then
+        error("[Primeval] MeizuLibrary compile error: " .. tostring(compileErr))
+    end
 
--- FOV giữ nguyên cơ chế cũ, chỉ dùng ScreenGui của Meizu.
-local ScreenGui = MeizuLibrary._ScreenGui
+    local okLoad, library = pcall(loader)
+    if not okLoad or type(library) ~= "table" then
+        error("[Primeval] MeizuLibrary load error: " .. tostring(library))
+    end
 
-----------------------------------------------------
--- VÒNG TRÒN FOV AIMBOT
-----------------------------------------------------
-local AimSettings = {
-    Enabled = false,
-    ShowFOV = false,
-    FOVRadius = 150,
-    Smoothness = 0.2,
-    MaxDistance = 150
-}
+    return library
+end
 
-local hasTargetInFOV = false
-
-local FOVCircle = Instance.new("Frame")
-FOVCircle.Name = "PrimevalFOVCircle"
-FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-FOVCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-FOVCircle.Size = UDim2.new(0, AimSettings.FOVRadius * 2, 0, AimSettings.FOVRadius * 2)
-FOVCircle.BackgroundTransparency = 1
-FOVCircle.Visible = false
-FOVCircle.ZIndex = 0
-FOVCircle.Parent = ScreenGui
-
-local UICornerCircle = Instance.new("UICorner")
-UICornerCircle.CornerRadius = UDim.new(1, 0)
-UICornerCircle.Parent = FOVCircle
-
-local UIStroke = Instance.new("UIStroke")
-UIStroke.Color = Color3.fromRGB(255, 255, 255)
-UIStroke.Thickness = 1
-UIStroke.Transparency = 0.2
-UIStroke.Parent = FOVCircle
+local MeizuLibrary = LoadMeizuLibrary()
 
 ----------------------------------------------------
--- PRIMEVAL STATE
+-- 2. PRIMEVAL GLOBAL STATE / CORE SETTINGS
 ----------------------------------------------------
 _G.AutoDrinkRunning = false
 _G.AutoRestRunning = false
@@ -77,342 +57,152 @@ _G.AutoEatActive = false
 _G.AutoHerbActive = false
 _G.CurrentQuest = "None"
 
+local AimSettings = {
+    Enabled = false,
+    ShowFOV = false,
+    FOVRadius = 150,
+    Smoothness = 0.2,
+    MaxDistance = 150,
+}
+
 local EspSettings = {
     Enabled = false,
     ShowName = true,
     ShowHealth = true,
-    ShowDistance = true
+    ShowDistance = true,
 }
 
--- Meizu CreateButton/CreateParagraph trả object có Frame.
--- Helper này chỉ lấy TextLabel bên trong để giữ các label trạng thái
--- mà logic Primeval bên dưới đang cập nhật bằng .Text/.TextColor3.
-local function FindTextLabel(root, textValue, fallbackIndex)
-    local found = {}
-    if root then
-        for _, obj in ipairs(root:GetDescendants()) do
-            if obj:IsA("TextLabel") then
-                table.insert(found, obj)
-                if textValue ~= nil and obj.Text == textValue then
-                    return obj
-                end
-            end
-        end
-    end
-    return found[fallbackIndex or 1]
+local hasTargetInFOV = false
+
+----------------------------------------------------
+-- 3. MEIZU WINDOW
+----------------------------------------------------
+local Window = MeizuLibrary:CreateWindow({
+    Title = "Primeval Earth Hub",
+    SubTitle = "UpdatePrimeval • Meizu UI",
+    Theme = "Dark",
+    Accent = Color3.fromRGB(99, 102, 241),
+    ToggleKeybind = Enum.KeyCode.RightControl,
+    ToggleUIButton = true,
+    Size = UDim2.fromOffset(650, 470),
+    Language = "vi",
+})
+
+if not Window then
+    error("[Primeval] MeizuLibrary không trả về Window.")
 end
 
 ----------------------------------------------------
--- 4. KHỞI TẠO TABS VÀ CHỨC NĂNG
+-- 4. FOV OVERLAY (CHỨC NĂNG AIM, KHÔNG PHẢI MENU UI)
 ----------------------------------------------------
-local MovementTab = Window:CreateTab("⚡ Di Chuyen", nil, 1)
-local TeleportTab = Window:CreateTab("📍 Dich Chuyen", nil, 2)
-local EspTab = Window:CreateTab("👁️ Nhin Xuyen", nil, 3)
-local PvpTab = Window:CreateTab("⚔ PVP", nil, 4)
-local FossilsTab = Window:CreateTab("🦴 Fossils", nil, 5)
-local VisualsTab = Window:CreateTab("⚙️ Cai Dat", nil, 6)
-
--- Adapter nhỏ để phần logic bên dưới không phải thay toàn bộ callback.
-local function AddButton(tab, text, callback)
-    return tab:CreateButton({
-        Title = text,
-        Callback = callback,
-    })
-end
-
-local function AddToggle(tab, text, default, callback)
-    return tab:CreateToggle({
-        Title = text,
-        Default = default,
-        Callback = callback,
-    })
-end
-
-local function AddSlider(tab, text, min, max, default, callback)
-    return tab:CreateSlider({
-        Title = text,
-        Min = min,
-        Max = max,
-        Default = default,
-        Callback = callback,
-    })
-end
-
-local function AddStatus(tab, title, content)
-    local el = tab:CreateParagraph({
-        Title = title,
-        Content = content,
-    })
-
-    local label = FindTextLabel(el.Frame, content, 2)
-    if not label then
-        label = el.Frame:FindFirstChildWhichIsA("TextLabel", true)
+local function GetGuiParent()
+    if type(gethui) == "function" then
+        local ok, ui = pcall(gethui)
+        if ok and ui then return ui end
     end
-
-    return label
+    return game:GetService("CoreGui")
 end
 
-local targetWalkSpeed = 16
+local oldFovGui = GetGuiParent():FindFirstChild("PrimevalFOVOverlay")
+if oldFovGui then
+    pcall(function() oldFovGui:Destroy() end)
+end
 
-AddSlider(MovementTab, "Toc Do Di Chuyen", 16, 200, 16, function(value)
-    targetWalkSpeed = value
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then hum.WalkSpeed = value end
-end)
+local FOVGui = Instance.new("ScreenGui")
+FOVGui.Name = "PrimevalFOVOverlay"
+FOVGui.ResetOnSpawn = false
+FOVGui.IgnoreGuiInset = true
+FOVGui.DisplayOrder = 9998
+FOVGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+FOVGui.Parent = GetGuiParent()
 
-AddSlider(MovementTab, "Suc Nhay (Jump Power)", 50, 300, 50, function(value)
-    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.UseJumpPower = true
-        hum.JumpPower = value
-    end
-end)
+local FOVCircle = Instance.new("Frame")
+FOVCircle.Name = "FOVCircle"
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
+FOVCircle.Size = UDim2.fromOffset(AimSettings.FOVRadius * 2, AimSettings.FOVRadius * 2)
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.Visible = false
+FOVCircle.ZIndex = 2
+FOVCircle.Parent = FOVGui
 
-AddToggle(MovementTab, "Bat/Tat Fly (Bay)", false, function(state)
-    if state then startFly() else stopFly() end
-end)
+local FOVCorner = Instance.new("UICorner")
+FOVCorner.CornerRadius = UDim.new(1, 0)
+FOVCorner.Parent = FOVCircle
 
-AddSlider(MovementTab, "Toc Do Fly (Speed)", 10, 150, 50, function(value)
-    flySpeed = value
-end)
+local FOVStroke = Instance.new("UIStroke")
+FOVStroke.Color = Color3.fromRGB(255, 255, 255)
+FOVStroke.Thickness = 1
+FOVStroke.Transparency = 0.2
+FOVStroke.Parent = FOVCircle
 
-local noclipConn = nil
-AddToggle(MovementTab, "Xuyen Tuong (Noclip)", false, function(state)
-    if state then
-        if noclipConn then
-            noclipConn:Disconnect()
-            noclipConn = nil
-        end
-
-        noclipConn = RunService.Stepped:Connect(function()
-            if LocalPlayer.Character then
-                for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
-                    end
-                end
-            end
-        end)
-    else
-        if noclipConn then
-            noclipConn:Disconnect()
-            noclipConn = nil
+----------------------------------------------------
+-- UI ADAPTERS
+-- Meizu trả element object thay vì trả TextButton trực tiếp.
+-- Các adapter dưới đây chỉ dùng API/frame mà library đã expose.
+----------------------------------------------------
+local function SetButtonTitle(element, text)
+    if not element or not element.Frame or not element.Frame.Parent then return end
+    local title
+    for _, obj in ipairs(element.Frame:GetDescendants()) do
+        if obj:IsA("TextLabel") then
+            title = obj
+            break
         end
     end
-end)
+    if title then title.Text = tostring(text) end
+end
 
--- Tab Teleport
-TeleportTab:CreateSection("Nguoi Choi")
-
-local PlayerButtonElements = {}
-
-local function RefreshPlayerList()
-    for _, element in ipairs(PlayerButtonElements) do
-        pcall(function()
-            if element and element.Frame then
-                element.Frame:Destroy()
-            end
-        end)
-    end
-    table.clear(PlayerButtonElements)
-
-    local count = 0
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            count += 1
-
-            local displayName = plr.DisplayName
-            local userName = plr.Name
-            local btnText = "📍 " .. displayName .. " (@" .. userName .. ")"
-
-            local element = AddButton(TeleportTab, btnText, function()
-                if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                    local myChar = LocalPlayer.Character
-                    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-
-                    if myHRP then
-                        myHRP.CFrame = plr.Character.HumanoidRootPart.CFrame * CFrame.new(0, 2, 2)
-                    end
-                end
-            end)
-
-            table.insert(PlayerButtonElements, element)
+local function SetParagraphContent(element, text, textColor)
+    if not element or not element.Frame or not element.Frame.Parent then return end
+    local labels = {}
+    for _, obj in ipairs(element.Frame:GetDescendants()) do
+        if obj:IsA("TextLabel") then
+            table.insert(labels, obj)
         end
     end
-
-    if count == 0 then
-        table.insert(PlayerButtonElements, TeleportTab:CreateParagraph({
-            Title = "Danh sach nguoi choi",
-            Content = "Chua co nguoi choi khac trong server.",
-        }))
+    local content = labels[2] or labels[1]
+    if content then
+        content.Text = tostring(text)
+        if textColor then
+            content.TextColor3 = textColor
+        end
     end
 end
 
-Players.PlayerAdded:Connect(RefreshPlayerList)
-Players.PlayerRemoving:Connect(RefreshPlayerList)
-task.spawn(RefreshPlayerList)
-
--- Tab ESP
-EspTab:CreateSection("ESP")
-
-AddToggle(EspTab, "Bat ESP Tong", EspSettings.Enabled, function(state)
-    EspSettings.Enabled = state
-end)
-
-AddToggle(EspTab, "Hien Ten Nguoi Choi", EspSettings.ShowName, function(state)
-    EspSettings.ShowName = state
-end)
-
-AddToggle(EspTab, "Hien Thanh Mau (HP)", EspSettings.ShowHealth, function(state)
-    EspSettings.ShowHealth = state
-end)
-
-AddToggle(EspTab, "Hien Khoang Cach (m)", EspSettings.ShowDistance, function(state)
-    EspSettings.ShowDistance = state
-end)
-
--- Tab PVP
-PvpTab:CreateSection("Combat")
-
-AddToggle(PvpTab, "Bat Auto Attack (Chi Bắn Khi FOV Đỏ)", false, function(state)
-    _G.AutoAttackRunning = state
-end)
-
-AddToggle(PvpTab, "Bat Aimbot (Auto Lock)", false, function(state)
-    AimSettings.Enabled = state
-    FOVCircle.Visible = AimSettings.Enabled and AimSettings.ShowFOV
-end)
-
-AddToggle(PvpTab, "Hien Vong FOV", false, function(state)
-    AimSettings.ShowFOV = state
-    FOVCircle.Visible = AimSettings.Enabled and AimSettings.ShowFOV
-end)
-
-AddSlider(PvpTab, "Kich Thuoc FOV", 30, 200, 150, function(value)
-    AimSettings.FOVRadius = value
-    FOVCircle.Size = UDim2.new(0, value * 2, 0, value * 2)
-end)
-
-AddSlider(PvpTab, "Do Muot Aim (Smooth)", 1, 10, 2, function(value)
-    AimSettings.Smoothness = value / 10
-end)
-
-local AmmoStatusLabel = AddStatus(PvpTab, "Trạng thái đạn", "Trạng thái đạn: Đang chờ...")
-
-AddToggle(PvpTab, "Auto Nhat Dan (Nhat 2 Lan)", false, function(state)
-    _G.AutoFarmAmmo = state
-
-    if not state then
-        if AmmoStatusLabel then
-            AmmoStatusLabel.Text = "Trạng thái đạn: Đã TẮT"
-        end
-
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            LocalPlayer.Character.HumanoidRootPart.Anchored = false
+local function RemoveDestroyedElements(tab)
+    if not tab or type(tab._Elements) ~= "table" then return end
+    for i = #tab._Elements, 1, -1 do
+        local element = tab._Elements[i]
+        if not element or not element.Frame or not element.Frame.Parent then
+            table.remove(tab._Elements, i)
         end
     end
-end)
+end
 
--- Tab Fossils
-FossilsTab:CreateSection("Fossils")
-
-local QuestStatusLabel = AddStatus(FossilsTab, "Quest Hiện Tại", "Quest Hiện Tại: Đang chờ...")
-
-AddToggle(FossilsTab, "Auto Ăn Thịt (Toggle Meat)", false, function(state)
-    _G.AutoEatActive = state
-end)
-
-AddToggle(FossilsTab, "Auto Ăn Cỏ (Toggle Herb)", false, function(state)
-    _G.AutoHerbActive = state
-end)
-
-AddToggle(FossilsTab, "Auto Drink (Uong Lien Tuc)", false, function(state)
-    _G.AutoDrinkRunning = state
-end)
-
-AddToggle(FossilsTab, "Auto Rest (Nghi Noi)", false, function(state)
-    _G.AutoRestRunning = state
-end)
-
-AddToggle(FossilsTab, "Auto Zone (Chiem Zone)", false, function(state)
-    _G.AutoZoneRunning = state
-end)
-
--- Tab Cài Đặt
-VisualsTab:CreateSection("Tiện Ích")
-
-AddToggle(VisualsTab, "Bat Sang Ban Dem (Fullbright)", false, function(state)
-    if state then
-        game:GetService("Lighting").Brightness = 2
-        game:GetService("Lighting").ClockTime = 14
-        game:GetService("Lighting").GlobalShadows = false
-    else
-        game:GetService("Lighting").Brightness = 1
-        game:GetService("Lighting").GlobalShadows = true
-    end
-end)
-
-local lowServerElement
-local lowServerBtn
-
-lowServerElement = AddButton(VisualsTab, "Vao Server It Nguoi (Low Server)", function()
-    local HttpService = game:GetService("HttpService")
-    local TeleportService = game:GetService("TeleportService")
-    local placeId = game.PlaceId
-    local jobId = game.JobId
-
-    if lowServerBtn then
-        lowServerBtn.Text = "Dang Tim Server..."
-    end
-
-    local success, result = pcall(function()
-        return game:HttpGet("https://games.roblox.com/v1/games/" .. placeId .. "/servers/0?sortOrder=Asc&limit=100")
+local function SafeFeatureNotify(title, content)
+    pcall(function()
+        MeizuLibrary:Notify({
+            Title = title,
+            Content = content,
+            Duration = 3,
+        })
     end)
+end
 
-    if success and result then
-        local decoded = HttpService:JSONDecode(result)
-
-        if decoded and decoded.data then
-            for _, server in ipairs(decoded.data) do
-                if server.id ~= jobId and server.playing < server.maxPlayers and server.playing > 0 then
-                    if lowServerBtn then
-                        lowServerBtn.Text = "Dang Chuyen Server (" .. server.playing .. " nguoi)..."
-                    end
-
-                    TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
-                    return
-                end
-            end
-        end
+-- Đồng bộ trạng thái FOV khi UI/library bị đóng hoàn toàn.
+task.spawn(function()
+    while FOVGui and FOVGui.Parent and not MeizuLibrary.Destroyed do
+        task.wait(0.5)
     end
-
-    if lowServerBtn then
-        lowServerBtn.Text = "Khong Tim Thay Server!"
-    end
-
-    task.wait(2)
-
-    if lowServerBtn and lowServerBtn.Parent then
-        lowServerBtn.Text = "Vao Server It Nguoi (Low Server)"
+    if FOVGui and FOVGui.Parent then
+        FOVGui:Destroy()
     end
 end)
 
-lowServerBtn = lowServerElement and FindTextLabel(lowServerElement.Frame, nil, 1)
-
-AddButton(VisualsTab, "Hoi Sinh Nhan Vat (Reset)", function()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-        LocalPlayer.Character:FindFirstChildOfClass("Humanoid").Health = 0
-    end
-end)
-
--- Meizu tự có intro/open animation; không cần loading UI cũ nữa.
-task.defer(function()
-    Window:SelectTab(1)
-end)
-
+----------------------------------------------------
+-- 5. LOGIC ESP, AIMBOT, AUTO ATTACK & AUTO NHẶT ĐẠN
+----------------------------------------------------
 -- 3. LOGIC ESP, AIMBOT, AUTO ATTACK & AUTO NHẶT ĐẠN
 ----------------------------------------------------
 local targetAmmoCFrame = CFrame.new(637.3, 94.3, -56.5)
@@ -564,7 +354,7 @@ end
 
 RunService:BindToRenderStep("AimbotSystem", Enum.RenderPriority.Camera.Value + 100, function()
     if not AimSettings.Enabled then
-        UIStroke.Color = Color3.fromRGB(255, 255, 255)
+        FOVStroke.Color = Color3.fromRGB(255, 255, 255)
         hasTargetInFOV = false
         return
     end
@@ -573,7 +363,7 @@ RunService:BindToRenderStep("AimbotSystem", Enum.RenderPriority.Camera.Value + 1
     if target then
         hasTargetInFOV = true
         local targetTorso = getTorso(target)
-        UIStroke.Color = Color3.fromRGB(255, 50, 50)
+        FOVStroke.Color = Color3.fromRGB(255, 50, 50)
 
         if targetTorso then
             local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, targetTorso.Position)
@@ -581,7 +371,7 @@ RunService:BindToRenderStep("AimbotSystem", Enum.RenderPriority.Camera.Value + 1
         end
     else
         hasTargetInFOV = false
-        UIStroke.Color = Color3.fromRGB(255, 255, 255)
+        FOVStroke.Color = Color3.fromRGB(255, 255, 255)
     end
 end)
 
@@ -612,7 +402,7 @@ local function CreateESP(player)
         textLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
         textLabel.TextStrokeTransparency = 0
         textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-        textLabel.Font = Theme.FontBold
+        textLabel.Font = Enum.Font.GothamBold
         textLabel.TextSize = 13
         textLabel.Parent = bgui
 
@@ -741,6 +531,16 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
+----------------------------------------------------
+----------------------------------------------------
+-- 6. KHỞI TẠO TABS VÀ CHỨC NĂNG QUA MEIZULIBRARY
+----------------------------------------------------
+local MovementTab = Window:CreateTab("Di Chuyen", nil, 1)
+local TeleportTab = Window:CreateTab("Dich Chuyen", nil, 2)
+local EspTab = Window:CreateTab("Nhin Xuyen", nil, 3)
+local PvpTab = Window:CreateTab("PVP", nil, 4)
+local FossilsTab = Window:CreateTab("Fossils", nil, 5)
+local VisualsTab = Window:CreateTab("Cai Dat", nil, 6)
 
 local targetWalkSpeed = 16
 RunService.Stepped:Connect(function()
@@ -755,8 +555,373 @@ RunService.Stepped:Connect(function()
     end)
 end)
 
+MovementTab:CreateSection("Movement")
+MovementTab:CreateSlider({
+    Title = "Toc Do Di Chuyen",
+    Min = 16,
+    Max = 200,
+    Default = 16,
+    Callback = function(value)
+        targetWalkSpeed = value
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = value end
+    end,
+})
+
+MovementTab:CreateSlider({
+    Title = "Suc Nhay (Jump Power)",
+    Min = 50,
+    Max = 300,
+    Default = 50,
+    Callback = function(value)
+        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.UseJumpPower = true
+            hum.JumpPower = value
+        end
+    end,
+})
+
+MovementTab:CreateToggle({
+    Title = "Bat/Tat Fly (Bay)",
+    Default = false,
+    Callback = function(state)
+        if state then startFly() else stopFly() end
+    end,
+})
+
+MovementTab:CreateSlider({
+    Title = "Toc Do Fly (Speed)",
+    Min = 10,
+    Max = 150,
+    Default = 50,
+    Callback = function(value)
+        flySpeed = value
+    end,
+})
+
+local noclipConn = nil
+MovementTab:CreateToggle({
+    Title = "Xuyen Tuong (Noclip)",
+    Default = false,
+    Callback = function(state)
+        if state then
+            if noclipConn then
+                pcall(function() noclipConn:Disconnect() end)
+                noclipConn = nil
+            end
+            noclipConn = RunService.Stepped:Connect(function()
+                if LocalPlayer.Character then
+                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        else
+            if noclipConn then
+                noclipConn:Disconnect()
+                noclipConn = nil
+            end
+        end
+    end,
+})
+
+MovementTab:CreateParagraph({
+    Title = "Meizu UI",
+    Content = "Menu đã được chuyển hoàn toàn sang MeizuLibrary. Logic Primeval phía sau vẫn giữ nguyên.",
+})
+
 ----------------------------------------------------
--- 5. LOGIC CHẠY NGẦM (AUTO ATTACK, NHẶT ĐẠN, FOSSILS, AUTO ĂN THỊT/CỎ & ANTI-AFK)
+-- TAB TELEPORT
+----------------------------------------------------
+TeleportTab:CreateSection("Teleport nguoi choi")
+TeleportTab:CreateParagraph({
+    Title = "Danh sach nguoi choi",
+    Content = "Chọn người chơi bên dưới để dịch chuyển. Danh sách tự refresh khi người chơi vào/rời server.",
+})
+
+local PlayerButtonElements = {}
+
+local function ClearPlayerButtons()
+    for i = #PlayerButtonElements, 1, -1 do
+        local element = PlayerButtonElements[i]
+        if element and element.Frame then
+            pcall(function() element.Frame:Destroy() end)
+        end
+        PlayerButtonElements[i] = nil
+    end
+    RemoveDestroyedElements(TeleportTab)
+end
+
+local function AddPlayerButton(plr)
+    if plr == LocalPlayer then return end
+
+    local displayName = plr.DisplayName
+    local userName = plr.Name
+    local btnText = "📍 " .. displayName .. " (@" .. userName .. ")"
+
+    local element = TeleportTab:CreateButton({
+        Title = btnText,
+        Callback = function()
+            if plr and plr.Parent == Players and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local myChar = LocalPlayer.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    myHRP.CFrame = plr.Character.HumanoidRootPart.CFrame * CFrame.new(0, 2, 2)
+                end
+            end
+        end,
+    })
+
+    table.insert(PlayerButtonElements, element)
+end
+
+local function RefreshPlayerList()
+    ClearPlayerButtons()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        AddPlayerButton(plr)
+    end
+end
+
+Players.PlayerAdded:Connect(function()
+    task.wait(0.15)
+    RefreshPlayerList()
+end)
+
+Players.PlayerRemoving:Connect(function()
+    task.wait()
+    RefreshPlayerList()
+end)
+
+task.defer(RefreshPlayerList)
+
+----------------------------------------------------
+-- TAB ESP
+----------------------------------------------------
+EspTab:CreateSection("ESP")
+EspTab:CreateToggle({
+    Title = "Bat ESP Tong",
+    Default = EspSettings.Enabled,
+    Callback = function(state)
+        EspSettings.Enabled = state
+    end,
+})
+EspTab:CreateToggle({
+    Title = "Hien Ten Nguoi Choi",
+    Default = EspSettings.ShowName,
+    Callback = function(state)
+        EspSettings.ShowName = state
+    end,
+})
+EspTab:CreateToggle({
+    Title = "Hien Thanh Mau (HP)",
+    Default = EspSettings.ShowHealth,
+    Callback = function(state)
+        EspSettings.ShowHealth = state
+    end,
+})
+EspTab:CreateToggle({
+    Title = "Hien Khoang Cach (m)",
+    Default = EspSettings.ShowDistance,
+    Callback = function(state)
+        EspSettings.ShowDistance = state
+    end,
+})
+
+----------------------------------------------------
+-- TAB PVP
+----------------------------------------------------
+PvpTab:CreateSection("Aim / FOV")
+PvpTab:CreateToggle({
+    Title = "Bat Auto Attack (Chi Ban Khi FOV Do)",
+    Default = false,
+    Callback = function(state)
+        _G.AutoAttackRunning = state
+    end,
+})
+
+PvpTab:CreateToggle({
+    Title = "Bat Aimbot (Auto Lock)",
+    Default = false,
+    Callback = function(state)
+        AimSettings.Enabled = state
+        FOVCircle.Visible = AimSettings.Enabled and AimSettings.ShowFOV
+    end,
+})
+
+PvpTab:CreateToggle({
+    Title = "Hien Vong FOV",
+    Default = false,
+    Callback = function(state)
+        AimSettings.ShowFOV = state
+        FOVCircle.Visible = AimSettings.Enabled and AimSettings.ShowFOV
+    end,
+})
+
+PvpTab:CreateSlider({
+    Title = "Kich Thuoc FOV",
+    Min = 30,
+    Max = 200,
+    Default = 150,
+    Callback = function(value)
+        AimSettings.FOVRadius = value
+        FOVCircle.Size = UDim2.fromOffset(value * 2, value * 2)
+    end,
+})
+
+PvpTab:CreateSlider({
+    Title = "Do Muot Aim (Smooth)",
+    Min = 1,
+    Max = 10,
+    Default = 2,
+    Callback = function(value)
+        AimSettings.Smoothness = value / 10
+    end,
+})
+
+local AmmoStatusLabel = PvpTab:CreateParagraph({
+    Title = "Trang thai dan",
+    Content = "Đang chờ...",
+})
+
+PvpTab:CreateToggle({
+    Title = "Auto Nhat Dan (Nhat 2 Lan)",
+    Default = false,
+    Callback = function(state)
+        _G.AutoFarmAmmo = state
+        if not state then
+            SetParagraphContent(AmmoStatusLabel, "Đã TẮT")
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.Anchored = false
+            end
+        end
+    end,
+})
+
+----------------------------------------------------
+-- TAB FOSSILS
+----------------------------------------------------
+FossilsTab:CreateSection("Fossils / Quest")
+local QuestStatusLabel = FossilsTab:CreateParagraph({
+    Title = "Quest Hiện Tại",
+    Content = "Đang chờ...",
+})
+
+FossilsTab:CreateToggle({
+    Title = "Auto Ăn Thịt (Toggle Meat)",
+    Default = false,
+    Callback = function(state) _G.AutoEatActive = state end,
+})
+FossilsTab:CreateToggle({
+    Title = "Auto Ăn Cỏ (Toggle Herb)",
+    Default = false,
+    Callback = function(state) _G.AutoHerbActive = state end,
+})
+FossilsTab:CreateToggle({
+    Title = "Auto Drink (Uong Lien Tuc)",
+    Default = false,
+    Callback = function(state) _G.AutoDrinkRunning = state end,
+})
+FossilsTab:CreateToggle({
+    Title = "Auto Rest (Nghi Noi)",
+    Default = false,
+    Callback = function(state) _G.AutoRestRunning = state end,
+})
+FossilsTab:CreateToggle({
+    Title = "Auto Zone (Chiem Zone)",
+    Default = false,
+    Callback = function(state) _G.AutoZoneRunning = state end,
+})
+
+----------------------------------------------------
+-- TAB CAI DAT / UTILITY
+----------------------------------------------------
+VisualsTab:CreateSection("Utility")
+VisualsTab:CreateToggle({
+    Title = "Bat Sang Ban Dem (Fullbright)",
+    Default = false,
+    Callback = function(state)
+        if state then
+            game:GetService("Lighting").Brightness = 2
+            game:GetService("Lighting").ClockTime = 14
+            game:GetService("Lighting").GlobalShadows = false
+        else
+            game:GetService("Lighting").Brightness = 1
+            game:GetService("Lighting").GlobalShadows = true
+        end
+    end,
+})
+
+local lowServerBtn = VisualsTab:CreateButton({
+    Title = "Vao Server It Nguoi (Low Server)",
+    Callback = function()
+        local teleportService = game:GetService("TeleportService")
+        local placeId = game.PlaceId
+        local jobId = game.JobId
+
+        SetButtonTitle(lowServerBtn, "Dang Tim Server...")
+
+        local success, result = pcall(function()
+            return game:HttpGet("https://games.roblox.com/v1/games/" .. placeId .. "/servers/0?sortOrder=Asc&limit=100")
+        end)
+
+        if success and result then
+            local decodedSuccess, decoded = pcall(function()
+                return HttpService:JSONDecode(result)
+            end)
+
+            if decodedSuccess and decoded and decoded.data then
+                for _, server in ipairs(decoded.data) do
+                    if server.id ~= jobId and server.playing < server.maxPlayers and server.playing > 0 then
+                        SetButtonTitle(lowServerBtn, "Dang Chuyen Server (" .. server.playing .. " nguoi)...")
+                        SafeFeatureNotify("Low Server", "Đang chuyển sang server " .. tostring(server.playing) .. " người.")
+                        teleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
+                        return
+                    end
+                end
+            end
+        end
+
+        SetButtonTitle(lowServerBtn, "Khong Tim Thay Server!")
+        SafeFeatureNotify("Low Server", "Không tìm thấy server phù hợp.")
+        task.delay(2, function()
+            SetButtonTitle(lowServerBtn, "Vao Server It Nguoi (Low Server)")
+        end)
+    end,
+})
+
+VisualsTab:CreateButton({
+    Title = "Hoi Sinh Nhan Vat (Reset)",
+    Callback = function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+            LocalPlayer.Character:FindFirstChildOfClass("Humanoid").Health = 0
+        end
+    end,
+})
+
+VisualsTab:CreateParagraph({
+    Title = "UI / Library",
+    Content = "RightControl: bật/tắt menu. Theme, Accent, Config và các thiết lập Library nằm trong tab Settings của MeizuLibrary.",
+})
+
+----------------------------------------------------
+-- PRIMEVAL READY
+----------------------------------------------------
+pcall(function()
+    MeizuLibrary:Notify({
+        Title = "Primeval Earth Hub",
+        Content = "Đã nạp thành công bằng MeizuLibrary.",
+        Duration = 4,
+    })
+end)
+
+----------------------------------------------------
+-- 7. LOGIC CHẠY NGẦM (GIỮ NGUYÊN UPDATEPRIMEVAL)
+----------------------------------------------------
 ----------------------------------------------------
 LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
@@ -793,10 +958,10 @@ task.spawn(function()
             local hrp = char.HumanoidRootPart
             local currentAmmo, reserveAmmo, infoMsg = checkAmmoStatus()
             
-            AmmoStatusLabel.Text = infoMsg
+            SetParagraphContent(AmmoStatusLabel, infoMsg)
             
             if currentAmmo == 0 and reserveAmmo == 0 then
-                AmmoStatusLabel.Text = "Hết đạn (00/0)! Đang tới chỗ nhặt..."
+                SetParagraphContent(AmmoStatusLabel, "Hết đạn (00/0)! Đang tới chỗ nhặt...")
                 local originalCFrame = hrp.CFrame
                 
                 hrp.AssemblyLinearVelocity = Vector3.zero
@@ -826,11 +991,11 @@ task.spawn(function()
                     return found
                 end
 
-                AmmoStatusLabel.Text = "Đang nhặt đạn (Lần 1)..."
+                SetParagraphContent(AmmoStatusLabel, "Đang nhặt đạn (Lần 1)...")
                 tryInteract()
                 task.wait(0.6)
 
-                AmmoStatusLabel.Text = "Đang nhặt đạn (Lần 2)..."
+                SetParagraphContent(AmmoStatusLabel, "Đang nhặt đạn (Lần 2)...")
                 tryInteract()
                 task.wait(0.6)
                 
@@ -841,7 +1006,7 @@ task.spawn(function()
                     task.wait(0.03)
                 end
                 
-                AmmoStatusLabel.Text = "Đã bơm đầy đạn! Đang quay lại..."
+                SetParagraphContent(AmmoStatusLabel, "Đã bơm đầy đạn! Đang quay lại...")
                 task.wait(2)
             end
         end
@@ -1044,14 +1209,11 @@ task.spawn(function()
             _G.CurrentQuest = detectedQuest
             
             if detectedQuest == "Drink" then
-                QuestStatusLabel.Text = "Quest Hiện Tại: Uống Nước (Drink)"
-                QuestStatusLabel.TextColor3 = Color3.fromRGB(50, 150, 255)
+                SetParagraphContent(QuestStatusLabel, "Uống Nước (Drink)", Color3.fromRGB(50, 150, 255))
             elseif detectedQuest == "Rest" then
-                QuestStatusLabel.Text = "Quest Hiện Tại: Nghỉ Nơi (Rest)"
-                QuestStatusLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
+                SetParagraphContent(QuestStatusLabel, "Nghỉ Nơi (Rest)", Color3.fromRGB(255, 165, 0))
             else
-                QuestStatusLabel.Text = "Quest Hiện Tại: Đang chờ..."
-                QuestStatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+                SetParagraphContent(QuestStatusLabel, "Đang chờ...", Color3.fromRGB(255, 255, 0))
             end
         end)
     end
@@ -1152,3 +1314,9 @@ task.spawn(function()
     end
 end)
 
+----------------------------------------------------
+----------------------------------------------------
+-- 8. KẾT THÚC
+----------------------------------------------------
+-- Không còn loading UI cũ của Primeval.
+-- MeizuLibrary tự xử lý intro/open animation, launcher và settings.
