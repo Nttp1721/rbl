@@ -10,7 +10,7 @@ local networking, fn2, tbl, v3, fn3, fn4, tbl2, fn5, fn6, tbl3
 local tbl4, fn7, tbl5, v4, v5, espSection, tbl6, color, sequence, palettes
 local sheen
 
-local MEIZU_LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/auu.lua"
+local MEIZU_LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua"
 local FIXED_TOGGLE_IMAGE = "https://i.ibb.co/S7rpHJJN/meizuxp.png"
 local HUB_VERSION = "3.0-clean"
 local __MeizuLib = nil
