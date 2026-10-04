@@ -1,112 +1,116 @@
---====================================================================--
---  PRIMEVAL EARTH HUB — Bản chuyển sang MeizuLibrary
---  (Giữ nguyên 100% logic gốc: Aimbot, ESP, Fly, Noclip, Auto Attack,
---   Auto Nhặt Đạn, Auto Ăn Thịt/Cỏ, Auto Drink/Rest/Zone, Anti-AFK...)
---  Chỉ thay phần dựng UI thủ công bằng MeizuLibrary v2.3
---====================================================================--
-
+-- Primeval Earth Hub UI (Cập nhật: Tích hợp Auto Ăn Thịt & Auto Ăn Cỏ vào Tab Fossils)
 local UserInputService = game:GetService("UserInputService")
-local TweenService     = game:GetService("TweenService")
-local RunService       = game:GetService("RunService")
-local Players          = game:GetService("Players")
-local LocalPlayer      = Players.LocalPlayer
-local VirtualUser      = game:GetService("VirtualUser")
-local Camera           = workspace.CurrentCamera
-local ReplicatedStorage= game:GetService("ReplicatedStorage")
-local Workspace        = game:GetService("Workspace")
-local HttpService      = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local VirtualUser = game:GetService("VirtualUser")
+local Camera = workspace.CurrentCamera
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
---//================================================================//--
---//  1. LOAD MEIZU LIBRARY (từ GitHub raw của bạn)
---//================================================================//--
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua"))()
+----------------------------------------------------
+-- 1. LOAD MEIZU LIBRARY
+----------------------------------------------------
+local MEIZU_LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua"
 
-local Window = Library:CreateWindow({
-    Title         = "PRIMEVAL EARTH HUB",
-    SubTitle      = "Primeval Earth · Powered by Meizu Library v" .. Library.Version,
-    Theme         = "Dark",
-    Accent        = Color3.fromRGB(99, 102, 241),
-    ToggleKeybind = Enum.KeyCode.RightShift, -- Phím bật/tắt UI (mặc định RightControl)
-    ToggleUIButton= true,                    -- Nút nổi Meizu (thay nút "Pn" cũ)
-    Size          = UDim2.fromOffset(600, 430),
-})
+local function LoadMeizuLibrary()
+    local ok, source = pcall(function()
+        return game:HttpGet(MEIZU_LIBRARY_URL, true)
+    end)
+    if not ok or type(source) ~= "string" or source == "" then
+        error("[Primeval] Khong the tai MeizuLibrary: " .. tostring(source))
+    end
+    local loader, compileErr = loadstring(source)
+    if type(loader) ~= "function" then
+        error("[Primeval] MeizuLibrary compile error: " .. tostring(compileErr))
+    end
+    local okLoad, library = pcall(loader)
+    if not okLoad or type(library) ~= "table" then
+        error("[Primeval] MeizuLibrary load error: " .. tostring(library))
+    end
+    return library
+end
 
--- Thông báo khởi tạo (thay cho màn hình loading cũ)
-Library:Notify({
-    Title   = "Primeval Earth Hub",
-    Content = "Giao diện MeizuLibrary đã sẵn sàng!\nNhấn <b>RightShift</b> hoặc nút nổi để bật/tắt UI.",
-    Duration= 4,
-})
+local MeizuLibrary = LoadMeizuLibrary()
 
---//================================================================//--
---//  2. VÒNG TRÒN FOV AIMBOT (dựng trên ScreenGui của library)
---//================================================================//--
+----------------------------------------------------
+-- 2. PRIMEVAL STATE (GIU NGUYEN)
+----------------------------------------------------
+_G.AutoDrinkRunning = false
+_G.AutoRestRunning = false
+_G.AutoZoneRunning = false
+_G.AutoFarmAmmo = false
+_G.AutoAttackRunning = false
+_G.AutoEatActive = false
+_G.AutoHerbActive = false
+_G.CurrentQuest = "None"
+
 local AimSettings = {
-    Enabled    = false,
-    ShowFOV    = false,
-    FOVRadius  = 150,
+    Enabled = false,
+    ShowFOV = false,
+    FOVRadius = 150,
     Smoothness = 0.2,
-    MaxDistance= 150,
+    MaxDistance = 150
+}
+
+local EspSettings = {
+    Enabled = false,
+    ShowName = true,
+    ShowHealth = true,
+    ShowDistance = true
 }
 
 local hasTargetInFOV = false
 
-local FovGuiParent = Library._ScreenGui
-if not FovGuiParent then
-    local fallback = Instance.new("ScreenGui")
-    fallback.Name = "PrimevalFOV"
-    fallback.ResetOnSpawn = false
-    fallback.IgnoreGuiInset = true
-    if gethui then
-        fallback.Parent = gethui()
-    else
-        fallback.Parent = LocalPlayer:WaitForChild("PlayerGui")
+----------------------------------------------------
+-- 3. FOV OVERLAY (CHUC NANG, KHONG PHAI MENU)
+----------------------------------------------------
+local function GetGuiParent()
+    if type(gethui) == "function" then
+        local ok, gui = pcall(gethui)
+        if ok and gui then return gui end
     end
-    FovGuiParent = fallback
+    return game:GetService("CoreGui")
 end
+
+local FOVParent = GetGuiParent()
+local oldFovGui = FOVParent:FindFirstChild("PrimevalFOVOverlay")
+if oldFovGui then pcall(function() oldFovGui:Destroy() end) end
+
+local FOVGui = Instance.new("ScreenGui")
+FOVGui.Name = "PrimevalFOVOverlay"
+FOVGui.ResetOnSpawn = false
+FOVGui.IgnoreGuiInset = true
+FOVGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+FOVGui.DisplayOrder = 9998
+FOVGui.Parent = FOVParent
 
 local FOVCircle = Instance.new("Frame")
 FOVCircle.Name = "FOVCircle"
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-FOVCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-FOVCircle.Size = UDim2.new(0, AimSettings.FOVRadius * 2, 0, AimSettings.FOVRadius * 2)
+FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
+FOVCircle.Size = UDim2.fromOffset(AimSettings.FOVRadius * 2, AimSettings.FOVRadius * 2)
 FOVCircle.BackgroundTransparency = 1
 FOVCircle.Visible = false
-FOVCircle.ZIndex = 500
-FOVCircle.Parent = FovGuiParent
+FOVCircle.ZIndex = 2
+FOVCircle.Parent = FOVGui
 
-local UICornerCircle = Instance.new("UICorner")
-UICornerCircle.CornerRadius = UDim.new(1, 0)
-UICornerCircle.Parent = FOVCircle
+local FOVCorner = Instance.new("UICorner")
+FOVCorner.CornerRadius = UDim.new(1, 0)
+FOVCorner.Parent = FOVCircle
 
-local UIStroke = Instance.new("UIStroke")
-UIStroke.Color = Color3.fromRGB(255, 255, 255)
-UIStroke.Thickness = 1
-UIStroke.Transparency = 0.2
-UIStroke.Parent = FOVCircle
+local FOVStroke = Instance.new("UIStroke")
+FOVStroke.Color = Color3.fromRGB(255, 255, 255)
+FOVStroke.Thickness = 1
+FOVStroke.Transparency = 0.2
+FOVStroke.Parent = FOVCircle
 
---//================================================================//--
---//  3. BIẾN TOÀN CỤC & CÀI ĐẶT ESP (giữ nguyên bản cũ)
---//================================================================//--
-_G.AutoDrinkRunning = false
-_G.AutoRestRunning  = false
-_G.AutoZoneRunning  = false
-_G.AutoFarmAmmo     = false
-_G.AutoAttackRunning= false
-_G.AutoEatActive    = false -- Auto Ăn Thịt
-_G.AutoHerbActive   = false -- Auto Ăn Cỏ
-_G.CurrentQuest     = "None"
+-- 3. LOGIC ESP, AIMBOT, AUTO ATTACK & AUTO NHẶT ĐẠN
+----------------------------------------------------
+local targetAmmoCFrame = CFrame.new(637.3, 94.3, -56.5)
+local ammoMaxDistance = 15
 
-local EspSettings = {
-    Enabled     = false,
-    ShowName    = true,
-    ShowHealth  = true,
-    ShowDistance= true,
-}
-
---//================================================================//--
---//  4. HÀM TIỆN ÍCH (giữ nguyên logic gốc)
---//================================================================//--
 local function triggerAttack()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return end
@@ -114,11 +118,11 @@ local function triggerAttack()
     for _, gui in pairs(playerGui:GetDescendants()) do
         if (gui:IsA("ImageButton") or gui:IsA("TextButton")) and gui.Name == "Attack" then
             if getconnections then
-                for _, conn in pairs(getconnections(gui.Activated)) do
-                    conn:Fire()
+                for _, conn in pairs(getconnections(gui.Activated)) do 
+                    conn:Fire() 
                 end
-                for _, conn in pairs(getconnections(gui.MouseButton1Click)) do
-                    conn:Fire()
+                for _, conn in pairs(getconnections(gui.MouseButton1Click)) do 
+                    conn:Fire() 
                 end
             end
         end
@@ -138,14 +142,14 @@ end
 local function isFullyVisible(gui)
     if not gui or not gui:IsDescendantOf(game) then return false end
     if gui.AbsoluteSize.X <= 0 or gui.AbsoluteSize.Y <= 0 then return false end
-
+    
     local current = gui
     while current and current:IsA("GuiObject") do
         if not current.Visible then return false end
         if current:IsA("CanvasGroup") and current.GroupTransparency >= 0.9 then return false end
         current = current.Parent
     end
-
+    
     if current and current:IsA("ScreenGui") and not current.Enabled then
         return false
     end
@@ -164,13 +168,13 @@ local function checkAmmoStatus()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not playerGui then return nil, nil, "Không thấy PlayerGui" end
 
-    local screenWidth  = Camera and Camera.ViewportSize.X or 1000
+    local screenWidth = Camera and Camera.ViewportSize.X or 1000
     local screenHeight = Camera and Camera.ViewportSize.Y or 1000
-    local rightSideX   = screenWidth * 0.5
-    local bottomSideY  = screenHeight * 0.5
+    local rightSideX = screenWidth * 0.5
+    local bottomSideY = screenHeight * 0.5
 
-    local currentAmmo  = nil
-    local reserveAmmo  = nil
+    local currentAmmo = nil
+    local reserveAmmo = nil
 
     for _, gui in pairs(playerGui:GetDescendants()) do
         if (gui:IsA("TextLabel") or gui:IsA("TextBox") or gui:IsA("TextButton")) and isFullyVisible(gui) then
@@ -210,8 +214,8 @@ end
 
 local function getTorso(character)
     if not character then return nil end
-    return character:FindFirstChild("UpperTorso")
-        or character:FindFirstChild("Torso")
+    return character:FindFirstChild("UpperTorso") 
+        or character:FindFirstChild("Torso") 
         or character:FindFirstChild("HumanoidRootPart")
         or character:FindFirstChild("Head")
 end
@@ -231,12 +235,12 @@ local function getClosestEnemyInFOV()
 
             if humanoid and humanoid.Health > 0 and torso then
                 local worldDistance = (Camera.CFrame.Position - torso.Position).Magnitude
-
+                
                 if worldDistance <= AimSettings.MaxDistance then
                     local screenPos, onScreen = Camera:WorldToViewportPoint(torso.Position)
                     if onScreen and screenPos.Z > 0 then
                         local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-
+                        
                         if screenDist <= AimSettings.FOVRadius then
                             if worldDistance < shortestWorldDist then
                                 shortestWorldDist = worldDistance
@@ -251,7 +255,6 @@ local function getClosestEnemyInFOV()
     return closestChar
 end
 
--- Aimbot loop (giữ nguyên)
 RunService:BindToRenderStep("AimbotSystem", Enum.RenderPriority.Camera.Value + 100, function()
     if not AimSettings.Enabled then
         UIStroke.Color = Color3.fromRGB(255, 255, 255)
@@ -275,7 +278,6 @@ RunService:BindToRenderStep("AimbotSystem", Enum.RenderPriority.Camera.Value + 1
     end
 end)
 
--- ESP (giữ nguyên logic, đổi font sang GothamBold cho khớp Meizu)
 local function CreateESP(player)
     if player == LocalPlayer then return end
 
@@ -303,7 +305,7 @@ local function CreateESP(player)
         textLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
         textLabel.TextStrokeTransparency = 0
         textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-        textLabel.Font = Enum.Font.GothamBold
+        textLabel.Font = Theme.FontBold
         textLabel.TextSize = 13
         textLabel.Parent = bgui
 
@@ -346,7 +348,6 @@ for _, p in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(CreateESP)
 
--- Fly (giữ nguyên hoàn toàn)
 local flyEnabled = false
 local flySpeed = 50
 local flyAtt, flyLV, flyAG
@@ -433,35 +434,7 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
---//================================================================//--
---//  5. TẠO CÁC TAB TRÊN MEIZU LIBRARY
---//================================================================//--
-local MovementTab  = Window:CreateTab("Di Chuyen",  nil, 1)
-local TeleportTab  = Window:CreateTab("Dich Chuyen", nil, 2)
-local EspTab       = Window:CreateTab("Nhin Xuyen", nil, 3)
-local PvpTab       = Window:CreateTab("PVP",       nil, 4)
-local FossilsTab   = Window:CreateTab("Fossils",   nil, 5)
-local VisualsTab   = Window:CreateTab("Cai Dat",   nil, 6)
 
--- Helper: tạo dòng trạng thái (thay UI.AddLabel cũ) có thể cập nhật text/màu
-local function CreateStatusLabel(tab, text)
-    local para = tab:CreateParagraph({ Title = text })
-    local label
-    for _, d in ipairs(para.Frame:GetDescendants()) do
-        if d:IsA("TextLabel") then
-            label = d
-            break
-        end
-    end
-    return {
-        SetText  = function(t) if label then label.Text = t end end,
-        SetColor = function(c) if label then label.TextColor3 = c end end,
-    }
-end
-
---//================================================================//--
---//  TAB 1: DI CHUYỂN
---//================================================================//--
 local targetWalkSpeed = 16
 RunService.Stepped:Connect(function()
     pcall(function()
@@ -475,9 +448,37 @@ RunService.Stepped:Connect(function()
     end)
 end)
 
+
+----------------------------------------------------
+-- 4. MEIZU UI — GIAO DIEN THAY THE HOAN TOAN
+--    Khong dung lai ScreenGui/MainFrame/Sidebar cua Primeval cu.
+----------------------------------------------------
+local Window = MeizuLibrary:CreateWindow({
+    Title = "Primeval Earth Hub",
+    SubTitle = "UpdatePrimeval • MeizuLibrary",
+    Theme = "Dark",
+    Accent = Color3.fromRGB(99, 102, 241),
+    ToggleKeybind = Enum.KeyCode.RightControl,
+    ToggleUIButton = true,
+    ToggleImage = "https://i.ibb.co/S7rpHJJN/meizuxp.png",
+    Size = UDim2.fromOffset(650, 470),
+})
+
+local MovementTab = Window:CreateTab("Di Chuyen", nil, 1)
+local TeleportTab = Window:CreateTab("Dich Chuyen", nil, 2)
+local EspTab = Window:CreateTab("Nhin Xuyen", nil, 3)
+local PvpTab = Window:CreateTab("PVP", nil, 4)
+local FossilsTab = Window:CreateTab("Fossils", nil, 5)
+local VisualsTab = Window:CreateTab("Cai Dat", nil, 6)
+
+----------------------------------------------------
+-- TAB DI CHUYEN
+----------------------------------------------------
+MovementTab:CreateSection("Movement")
 MovementTab:CreateSlider({
     Title = "Toc Do Di Chuyen",
-    Min = 16, Max = 200, Default = 16, Rounding = 0,
+    Description = "WalkSpeed",
+    Min = 16, Max = 200, Default = 16,
     Callback = function(value)
         targetWalkSpeed = value
         local char = LocalPlayer.Character
@@ -485,10 +486,10 @@ MovementTab:CreateSlider({
         if hum then hum.WalkSpeed = value end
     end,
 })
-
 MovementTab:CreateSlider({
     Title = "Suc Nhay (Jump Power)",
-    Min = 50, Max = 300, Default = 50, Rounding = 0,
+    Description = "JumpPower",
+    Min = 50, Max = 300, Default = 50,
     Callback = function(value)
         local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
         local hum = char:FindFirstChildOfClass("Humanoid")
@@ -498,7 +499,6 @@ MovementTab:CreateSlider({
         end
     end,
 })
-
 MovementTab:CreateToggle({
     Title = "Bat/Tat Fly (Bay)",
     Default = false,
@@ -506,246 +506,252 @@ MovementTab:CreateToggle({
         if state then startFly() else stopFly() end
     end,
 })
-
 MovementTab:CreateSlider({
     Title = "Toc Do Fly (Speed)",
-    Min = 10, Max = 150, Default = 50, Rounding = 0,
-    Callback = function(value)
-        flySpeed = value
-    end,
+    Description = "Fly speed",
+    Min = 10, Max = 150, Default = 50,
+    Callback = function(value) flySpeed = value end,
 })
-
 local noclipConn = nil
 MovementTab:CreateToggle({
     Title = "Xuyen Tuong (Noclip)",
     Default = false,
     Callback = function(state)
         if state then
+            if noclipConn then
+                pcall(function() noclipConn:Disconnect() end)
+            end
             noclipConn = RunService.Stepped:Connect(function()
-                if LocalPlayer.Character then
-                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                local char = LocalPlayer.Character
+                if char then
+                    for _, part in pairs(char:GetDescendants()) do
                         if part:IsA("BasePart") then part.CanCollide = false end
                     end
                 end
             end)
-        else
-            if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+        elseif noclipConn then
+            noclipConn:Disconnect()
+            noclipConn = nil
         end
     end,
 })
+MovementTab:CreateParagraph({
+    Title = "Thong tin",
+    Content = "Toc do di chuyen, Jump Power, Fly va Noclip.",
+})
 
---//================================================================//--
---//  TAB 2: DỊCH CHUYỂN (Teleport tới ngườichơi)
---//================================================================//--
-local function RefreshPlayerList()
-    -- Xoá các nút ngườichơi cũ (nhận diện bằng attribute)
-    for _, t in ipairs(Window._Tabs) do
-        if t._Name == "Dich Chuyen" then
-            for _, e in ipairs(t._Elements) do
-                if e.Frame and e.Frame:GetAttribute("PlayerTPBtn") then
-                    e.Frame:Destroy()
-                end
-            end
-        end
-    end
+----------------------------------------------------
+-- TAB TELEPORT
+----------------------------------------------------
+TeleportTab:CreateSection("Teleport nguoi choi")
+TeleportTab:CreateParagraph({
+    Title = "Danh sach nguoi choi",
+    Content = "Chon nguoi choi ben duoi de dich chuyen. Danh sach tu refresh khi nguoi choi vao/rời server.",
+})
 
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            local displayName = plr.DisplayName
-            local userName = plr.Name
-            local el = TeleportTab:CreateButton({
-                Title = "📍 " .. displayName .. " (@" .. userName .. ")",
-                Callback = function()
-                    if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                        local myChar = LocalPlayer.Character
-                        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                        if myHRP then
-                            myHRP.CFrame = plr.Character.HumanoidRootPart.CFrame * CFrame.new(0, 2, 2)
-                        end
-                    end
-                end,
-            })
-            el.Frame:SetAttribute("PlayerTPBtn", true)
+local PlayerButtonElements = {}
+local function ClearPlayerButtons()
+    for i = #PlayerButtonElements, 1, -1 do
+        local element = PlayerButtonElements[i]
+        if element and element.Frame then
+            pcall(function() element.Frame:Destroy() end)
         end
+        PlayerButtonElements[i] = nil
     end
 end
 
-Players.PlayerAdded:Connect(RefreshPlayerList)
-Players.PlayerRemoving:Connect(RefreshPlayerList)
-task.spawn(RefreshPlayerList)
+local function AddPlayerButton(plr)
+    if plr == LocalPlayer then return end
+    local element = TeleportTab:CreateButton({
+        Title = "📍 " .. plr.DisplayName .. " (@" .. plr.Name .. ")",
+        Callback = function()
+            if plr and plr.Parent == Players and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local myChar = LocalPlayer.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    myHRP.CFrame = plr.Character.HumanoidRootPart.CFrame * CFrame.new(0, 2, 2)
+                end
+            end
+        end,
+    })
+    table.insert(PlayerButtonElements, element)
+end
 
---//================================================================//--
---//  TAB 3: NHÌN XUYÊN (ESP)
---//================================================================//--
-EspTab:CreateToggle({
-    Title = "Bat ESP Tong", Default = EspSettings.Enabled,
-    Callback = function(state) EspSettings.Enabled = state end,
-})
+local function RefreshPlayerList()
+    ClearPlayerButtons()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        AddPlayerButton(plr)
+    end
+end
+Players.PlayerAdded:Connect(function()
+    task.wait(0.15)
+    RefreshPlayerList()
+end)
+Players.PlayerRemoving:Connect(function()
+    task.wait()
+    RefreshPlayerList()
+end)
+task.defer(RefreshPlayerList)
 
-EspTab:CreateToggle({
-    Title = "Hien Ten Nguoi Choi", Default = EspSettings.ShowName,
-    Callback = function(state) EspSettings.ShowName = state end,
-})
+----------------------------------------------------
+-- TAB ESP
+----------------------------------------------------
+EspTab:CreateSection("ESP")
+EspTab:CreateToggle({Title="Bat ESP Tong", Default=EspSettings.Enabled, Callback=function(v) EspSettings.Enabled=v end})
+EspTab:CreateToggle({Title="Hien Ten Nguoi Choi", Default=EspSettings.ShowName, Callback=function(v) EspSettings.ShowName=v end})
+EspTab:CreateToggle({Title="Hien Thanh Mau (HP)", Default=EspSettings.ShowHealth, Callback=function(v) EspSettings.ShowHealth=v end})
+EspTab:CreateToggle({Title="Hien Khoang Cach (m)", Default=EspSettings.ShowDistance, Callback=function(v) EspSettings.ShowDistance=v end})
 
-EspTab:CreateToggle({
-    Title = "Hien Thanh Mau (HP)", Default = EspSettings.ShowHealth,
-    Callback = function(state) EspSettings.ShowHealth = state end,
-})
-
-EspTab:CreateToggle({
-    Title = "Hien Khoang Cach (m)", Default = EspSettings.ShowDistance,
-    Callback = function(state) EspSettings.ShowDistance = state end,
-})
-
---//================================================================//--
---//  TAB 4: PVP (Aimbot, FOV, Auto Attack, Auto Nhặt Đạn)
---//================================================================//--
-local AmmoStatusLabel = CreateStatusLabel(PvpTab, "Trạng thái đạn: Đang chờ...")
-
+----------------------------------------------------
+-- TAB PVP
+----------------------------------------------------
+PvpTab:CreateSection("Aim / FOV")
 PvpTab:CreateToggle({
-    Title = "Bat Auto Attack (Chi Bắn Khi FOV Đỏ)", Default = false,
-    Callback = function(state) _G.AutoAttackRunning = state end,
+    Title="Bat Auto Attack (Chi Bắn Khi FOV Đỏ)", Default=false,
+    Callback=function(state) _G.AutoAttackRunning=state end,
 })
-
 PvpTab:CreateToggle({
-    Title = "Bat Aimbot (Auto Lock)", Default = false,
-    Callback = function(state)
-        AimSettings.Enabled = state
-        FOVCircle.Visible = AimSettings.Enabled and AimSettings.ShowFOV
+    Title="Bat Aimbot (Auto Lock)", Default=false,
+    Callback=function(state)
+        AimSettings.Enabled=state
+        FOVCircle.Visible=AimSettings.Enabled and AimSettings.ShowFOV
     end,
 })
-
 PvpTab:CreateToggle({
-    Title = "Hien Vong FOV", Default = false,
-    Callback = function(state)
-        AimSettings.ShowFOV = state
-        FOVCircle.Visible = AimSettings.Enabled and AimSettings.ShowFOV
+    Title="Hien Vong FOV", Default=false,
+    Callback=function(state)
+        AimSettings.ShowFOV=state
+        FOVCircle.Visible=AimSettings.Enabled and AimSettings.ShowFOV
     end,
 })
-
 PvpTab:CreateSlider({
-    Title = "Kich Thuoc FOV", Min = 30, Max = 200, Default = 150, Rounding = 0,
-    Callback = function(value)
-        AimSettings.FOVRadius = value
-        FOVCircle.Size = UDim2.new(0, value * 2, 0, value * 2)
+    Title="Kich Thuoc FOV", Min=30, Max=200, Default=150,
+    Callback=function(value)
+        AimSettings.FOVRadius=value
+        FOVCircle.Size=UDim2.fromOffset(value*2, value*2)
     end,
 })
-
 PvpTab:CreateSlider({
-    Title = "Do Muot Aim (Smooth)", Min = 1, Max = 10, Default = 2, Rounding = 0,
-    Callback = function(value)
-        AimSettings.Smoothness = value / 10
-    end,
+    Title="Do Muot Aim (Smooth)", Min=1, Max=10, Default=2,
+    Callback=function(value) AimSettings.Smoothness=value/10 end,
 })
-
+local AmmoStatusLabel = PvpTab:CreateParagraph({
+    Title="Trạng thái đạn",
+    Content="Đang chờ...",
+})
 PvpTab:CreateToggle({
-    Title = "Auto Nhat Dan (Nhat 2 Lan)", Default = false,
-    Callback = function(state)
-        _G.AutoFarmAmmo = state
+    Title="Auto Nhat Dan (Nhat 2 Lan)", Default=false,
+    Callback=function(state)
+        _G.AutoFarmAmmo=state
         if not state then
-            AmmoStatusLabel.SetText("Trạng thái đạn: Đã TẮT")
+            AmmoStatusLabel:SetContent("Trạng thái đạn: Đã TẮT")
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                LocalPlayer.Character.HumanoidRootPart.Anchored=false
             end
         end
     end,
 })
 
---//================================================================//--
---//  TAB 5: FOSSILS (Auto Ăn Thịt, Auto Ăn Cỏ, Auto Drink/Rest/Zone)
---//================================================================//--
-local QuestStatusLabel = CreateStatusLabel(FossilsTab, "Quest Hiện Tại: Đang chờ...")
-
-FossilsTab:CreateToggle({
-    Title = "Auto Ăn Thịt (Toggle Meat)", Default = false,
-    Callback = function(state) _G.AutoEatActive = state end,
+----------------------------------------------------
+-- TAB FOSSILS
+----------------------------------------------------
+FossilsTab:CreateSection("Fossils / Quest")
+local QuestStatusLabel = FossilsTab:CreateParagraph({
+    Title="Quest Hiện Tại",
+    Content="Đang chờ...",
 })
+FossilsTab:CreateToggle({Title="Auto Ăn Thịt (Toggle Meat)", Default=false, Callback=function(v) _G.AutoEatActive=v end})
+FossilsTab:CreateToggle({Title="Auto Ăn Cỏ (Toggle Herb)", Default=false, Callback=function(v) _G.AutoHerbActive=v end})
+FossilsTab:CreateToggle({Title="Auto Drink (Uong Lien Tuc)", Default=false, Callback=function(v) _G.AutoDrinkRunning=v end})
+FossilsTab:CreateToggle({Title="Auto Rest (Nghi Noi)", Default=false, Callback=function(v) _G.AutoRestRunning=v end})
+FossilsTab:CreateToggle({Title="Auto Zone (Chiem Zone)", Default=false, Callback=function(v) _G.AutoZoneRunning=v end})
 
-FossilsTab:CreateToggle({
-    Title = "Auto Ăn Cỏ (Toggle Herb)", Default = false,
-    Callback = function(state) _G.AutoHerbActive = state end,
-})
-
-FossilsTab:CreateToggle({
-    Title = "Auto Drink (Uong Lien Tuc)", Default = false,
-    Callback = function(state) _G.AutoDrinkRunning = state end,
-})
-
-FossilsTab:CreateToggle({
-    Title = "Auto Rest (Nghi Noi)", Default = false,
-    Callback = function(state) _G.AutoRestRunning = state end,
-})
-
-FossilsTab:CreateToggle({
-    Title = "Auto Zone (Chiem Zone)", Default = false,
-    Callback = function(state) _G.AutoZoneRunning = state end,
-})
-
---//================================================================//--
---//  TAB 6: CÀI ĐẶT (Fullbright, Low Server, Reset)
---//================================================================//--
+----------------------------------------------------
+-- TAB CAI DAT / UTILITY
+----------------------------------------------------
+VisualsTab:CreateSection("Utility")
 VisualsTab:CreateToggle({
-    Title = "Bat Sang Ban Dem (Fullbright)", Default = false,
-    Callback = function(state)
+    Title="Bat Sang Ban Dem (Fullbright)", Default=false,
+    Callback=function(state)
+        local Lighting=game:GetService("Lighting")
         if state then
-            game:GetService("Lighting").Brightness = 2
-            game:GetService("Lighting").ClockTime = 14
-            game:GetService("Lighting").GlobalShadows = false
+            Lighting.Brightness=2
+            Lighting.ClockTime=14
+            Lighting.GlobalShadows=false
         else
-            game:GetService("Lighting").Brightness = 1
-            game:GetService("Lighting").GlobalShadows = true
+            Lighting.Brightness=1
+            Lighting.GlobalShadows=true
         end
     end,
 })
 
-VisualsTab:CreateButton({
-    Title = "Vao Server It Nguoi (Low Server)",
-    Callback = function()
-        local TeleportService = game:GetService("TeleportService")
-        local placeId = game.PlaceId
-        local jobId = game.JobId
+local lowServerBtn = VisualsTab:CreateButton({
+    Title="Vao Server It Nguoi (Low Server)",
+    Callback=function()
+        local teleportService=game:GetService("TeleportService")
+        local placeId=game.PlaceId
+        local jobId=game.JobId
 
-        Library:Notify({Title = "Low Server", Content = "Đang tìm server ít ngườichơi...", Duration = 3})
-        local success, result = pcall(function()
-            return game:HttpGet("https://games.roblox.com/v1/games/" .. placeId .. "/servers/0?sortOrder=Asc&limit=100")
+        local function SetLowServerText(text)
+            if not lowServerBtn or not lowServerBtn.Frame then return end
+            local label = lowServerBtn.Frame:FindFirstChild("Title", true) or lowServerBtn.Frame:FindFirstChildWhichIsA("TextLabel", true)
+            if label then label.Text=tostring(text) end
+        end
+
+        SetLowServerText("Dang Tim Server...")
+        local success,result=pcall(function()
+            return game:HttpGet("https://games.roblox.com/v1/games/"..placeId.."/servers/0?sortOrder=Asc&limit=100")
         end)
-
         if success and result then
-            local decoded = HttpService:JSONDecode(result)
-            if decoded and decoded.data then
-                for _, server in ipairs(decoded.data) do
-                    if server.id ~= jobId and server.playing < server.maxPlayers and server.playing > 0 then
-                        Library:Notify({Title = "Low Server", Content = "Đang chuyển server (" .. server.playing .. " ngườichơi)...", Duration = 3})
-                        TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
+            local ok,decoded=pcall(function() return HttpService:JSONDecode(result) end)
+            if ok and decoded and decoded.data then
+                for _,server in ipairs(decoded.data) do
+                    if server.id~=jobId and server.playing<server.maxPlayers and server.playing>0 then
+                        SetLowServerText("Dang Chuyen Server ("..server.playing.." nguoi)...")
+                        teleportService:TeleportToPlaceInstance(placeId,server.id,LocalPlayer)
                         return
                     end
                 end
             end
         end
-        Library:Notify({Title = "Low Server", Content = "Không tìm thấy server phù hợp!", Duration = 3})
+        SetLowServerText("Khong Tim Thay Server!")
+        task.delay(2,function()
+            if lowServerBtn and lowServerBtn.Frame and lowServerBtn.Frame.Parent then
+                SetLowServerText("Vao Server It Nguoi (Low Server)")
+            end
+        end)
     end,
 })
 
 VisualsTab:CreateButton({
-    Title = "Hoi Sinh Nhan Vat (Reset)",
-    Callback = function()
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-            LocalPlayer.Character:FindFirstChildOfClass("Humanoid").Health = 0
-        end
+    Title="Hoi Sinh Nhan Vat (Reset)",
+    Callback=function()
+        local hum=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.Health=0 end
     end,
 })
+VisualsTab:CreateParagraph({
+    Title="Primeval Earth Hub",
+    Content="Giao dien dung MeizuLibrary. Cac logic chay ngam cua UpdatePrimeval duoc giu lai.",
+})
 
---//================================================================//--
---//  7. CÁC VÒNG LẶP CHẠY NGẦM (GIỮ NGUYÊN 100% BẢN CŨ)
---//================================================================//--
+pcall(function()
+    MeizuLibrary:Notify({
+        Title="Primeval Earth Hub",
+        Content="Da nap thanh cong bang MeizuLibrary.",
+        Duration=4,
+    })
+end)
 
--- Anti-AFK
+
+----------------------------------------------------
+-- 5. LOGIC CHẠY NGẦM (AUTO ATTACK, NHẶT ĐẠN, FOSSILS, AUTO ĂN THỊT/CỎ & ANTI-AFK)
+----------------------------------------------------
 LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end)
 
--- Ctrl + Click để dịch chuyển
 local Mouse = LocalPlayer:GetMouse()
 Mouse.Button1Down:Connect(function()
     if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
@@ -757,7 +763,7 @@ Mouse.Button1Down:Connect(function()
     end
 end)
 
--- Vòng lặp Auto Attack
+-- Vòng lặp Auto Attack (PVP)
 task.spawn(function()
     while true do
         if _G.AutoAttackRunning and hasTargetInFOV then
@@ -767,33 +773,31 @@ task.spawn(function()
     end
 end)
 
--- Vòng lặp Auto Nhặt Đạn
+-- Vòng lặp Auto Nhặt Đạn (PVP)
 task.spawn(function()
     while true do
         task.wait(0.3)
         if _G.AutoFarmAmmo and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local char = LocalPlayer.Character
             local hrp = char.HumanoidRootPart
-            local targetAmmoCFrame = CFrame.new(637.3, 94.3, -56.5)
-            local ammoMaxDistance = 15
             local currentAmmo, reserveAmmo, infoMsg = checkAmmoStatus()
-
-            AmmoStatusLabel.SetText(infoMsg)
-
+            
+            AmmoStatusLabel:SetContent(infoMsg)
+            
             if currentAmmo == 0 and reserveAmmo == 0 then
-                AmmoStatusLabel.SetText("Hết đạn (00/0)! Đang tới chỗ nhặt...")
+                AmmoStatusLabel:SetContent("Hết đạn (00/0)! Đang tới chỗ nhặt...")
                 local originalCFrame = hrp.CFrame
-
+                
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.Anchored = false
-
+                
                 for i = 1, 5 do
                     hrp.CFrame = targetAmmoCFrame
                     task.wait(0.03)
                 end
-
+                
                 hrp.Anchored = true
-
+                
                 local function tryInteract()
                     local found = false
                     for _, v in pairs(workspace:GetDescendants()) do
@@ -811,29 +815,29 @@ task.spawn(function()
                     return found
                 end
 
-                AmmoStatusLabel.SetText("Đang nhặt đạn (Lần 1)...")
+                AmmoStatusLabel:SetContent("Đang nhặt đạn (Lần 1)...")
                 tryInteract()
                 task.wait(0.6)
 
-                AmmoStatusLabel.SetText("Đang nhặt đạn (Lần 2)...")
+                AmmoStatusLabel:SetContent("Đang nhặt đạn (Lần 2)...")
                 tryInteract()
                 task.wait(0.6)
-
+                
                 hrp.Anchored = false
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 for i = 1, 5 do
                     hrp.CFrame = originalCFrame
                     task.wait(0.03)
                 end
-
-                AmmoStatusLabel.SetText("Đã bơm đầy đạn! Đang quay lại...")
+                
+                AmmoStatusLabel:SetContent("Đã bơm đầy đạn! Đang quay lại...")
                 task.wait(2)
             end
         end
     end
 end)
 
--- LOGIC AUTO ĂN THỊT & ĂN CỎ (giữ nguyên)
+-- LOGIC AUTO ĂN THỊT & ĂN CỎ CHUNG MỘT HỆ THỐNG BLINK
 local EAT_CONFIG = {
     SEARCH_RADIUS = 350.0,
     STAY_DURATION = 0.35,
@@ -844,7 +848,7 @@ local EAT_CONFIG = {
 
 local IsExecutingEatOrHerb = false
 
-local function IsLivingEntityOrMapDecor(instance)
+local function IsLivingEntityOrMapDecor(instance: Instance): boolean
     local ancestorModel = instance:FindFirstAncestorOfClass("Model")
     if ancestorModel then
         if Players:GetPlayerFromCharacter(ancestorModel) then return true end
@@ -860,8 +864,8 @@ local function IsLivingEntityOrMapDecor(instance)
     return false
 end
 
-local function ScanNearbyTarget(keywordsList)
-    local targetNode = nil
+local function ScanNearbyTarget(keywordsList): BasePart?
+    local targetNode: BasePart? = nil
     local minDistance = EAT_CONFIG.SEARCH_RADIUS
 
     pcall(function()
@@ -896,11 +900,11 @@ local function ScanNearbyTarget(keywordsList)
     return targetNode
 end
 
-local function TriggerInteraction(targetPart)
+local function TriggerInteraction(targetPart: BasePart)
     pcall(function()
-        local prompt = targetPart:FindFirstChildOfClass("ProximityPrompt")
+        local prompt = targetPart:FindFirstChildOfClass("ProximityPrompt") 
             or (targetPart.Parent and targetPart.Parent:FindFirstChildOfClass("ProximityPrompt"))
-
+        
         if prompt and typeof(fireproximityprompt) == "function" then
             fireproximityprompt(prompt)
         end
@@ -908,9 +912,9 @@ local function TriggerInteraction(targetPart)
         for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
             if remote:IsA("RemoteEvent") then
                 local rName = string.lower(remote.Name)
-                if rName:find("eat") or rName:find("bite") or rName:find("interact")
+                if rName:find("eat") or rName:find("bite") or rName:find("interact") 
                    or rName:find("feed") or rName:find("consume") or rName:find("herb") or rName:find("graze") then
-
+                    
                     remote:FireServer(targetPart)
                     remote:FireServer(targetPart.Parent)
                     remote:FireServer("Eat", targetPart)
@@ -921,7 +925,7 @@ local function TriggerInteraction(targetPart)
     end)
 end
 
-local function PerformBlink(targetPart)
+local function PerformBlink(targetPart: BasePart)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if IsExecutingEatOrHerb or not root or not char then return end
@@ -999,14 +1003,14 @@ task.spawn(function()
     end
 end)
 
--- Vòng lặp Quét Quest
+-- Vòng lặp Quét Quest (Fossils)
 task.spawn(function()
     while task.wait(0.2) do
         pcall(function()
             local playerGui = LocalPlayer:WaitForChild("PlayerGui")
             local questsFrame = playerGui:FindFirstChild("GameUI") and playerGui.GameUI:FindFirstChild("QuestsFrame")
             local detectedQuest = "None"
-
+            
             if questsFrame then
                 for _, child in pairs(questsFrame:GetChildren()) do
                     local textContent = ""
@@ -1015,7 +1019,7 @@ task.spawn(function()
                             textContent = textContent .. " " .. string.lower(desc.Text)
                         end
                     end
-
+                    
                     if string.find(textContent, "drink water") then
                         detectedQuest = "Drink"
                         break
@@ -1025,29 +1029,25 @@ task.spawn(function()
                     end
                 end
             end
-
+            
             _G.CurrentQuest = detectedQuest
-
+            
             if detectedQuest == "Drink" then
-                QuestStatusLabel.SetText("Quest Hiện Tại: Uống Nước (Drink)")
-                QuestStatusLabel.SetColor(Color3.fromRGB(50, 150, 255))
+                QuestStatusLabel:SetContent("Quest Hiện Tại: Uống Nước (Drink)", Color3.fromRGB(50, 150, 255))
             elseif detectedQuest == "Rest" then
-                QuestStatusLabel.SetText("Quest Hiện Tại: Nghỉ Nơi (Rest)")
-                QuestStatusLabel.SetColor(Color3.fromRGB(255, 165, 0))
+                QuestStatusLabel:SetContent("Quest Hiện Tại: Nghỉ Nơi (Rest)", Color3.fromRGB(255, 165, 0))
             else
-                QuestStatusLabel.SetText("Quest Hiện Tại: Đang chờ...")
-                QuestStatusLabel.SetColor(Color3.fromRGB(255, 255, 0))
+                QuestStatusLabel:SetContent("Quest Hiện Tại: Đang chờ...", Color3.fromRGB(255, 255, 0))
             end
         end)
     end
 end)
 
--- Auto Drink
 task.spawn(function()
     while true do
         if _G.AutoDrinkRunning then
-            pcall(function()
-                game:GetService("ReplicatedStorage").Remotes.Character.CharacterFunctions:InvokeServer("Drink")
+            pcall(function() 
+                game:GetService("ReplicatedStorage").Remotes.Character.CharacterFunctions:InvokeServer("Drink") 
             end)
             task.wait(0.8)
         else
@@ -1056,7 +1056,6 @@ task.spawn(function()
     end
 end)
 
--- Auto Rest
 task.spawn(function()
     local restRemote = game:GetService("ReplicatedStorage").Remotes.Character.Rest
     local isRestingActive = false
@@ -1073,7 +1072,6 @@ task.spawn(function()
     end
 end)
 
--- Auto Zone
 local function IsThisZoneGreen(targetPos)
     local isGreen = false
     pcall(function()
@@ -1113,7 +1111,7 @@ task.spawn(function()
                     if not _G.AutoZoneRunning then break end
                     local zonePos = ZonesList[i]
                     local targetCFrame = CFrame.new(zonePos.X, zonePos.Y + 5, zonePos.Z)
-
+                    
                     if not IsThisZoneGreen(zonePos) then
                         hrp.CFrame = targetCFrame
                         task.wait(0.05)
@@ -1139,12 +1137,3 @@ task.spawn(function()
         end
     end
 end)
-
---//================================================================//--
---//  HOÀN TẤT
---//================================================================//--
-Library:Notify({
-    Title   = "Primeval Earth Hub",
-    Content = "Tất cả chức năng đã được nạp thành công 100%!",
-    Duration= 4,
-})
