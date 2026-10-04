@@ -1,6 +1,3 @@
--- Primeval Earth Hub
--- UI layer: MeizuLibrary
--- Core logic: giữ nguyên từ UpdatePrimeval gốc, chỉ thay lớp giao diện.
 game:GetService("StarterGui"):SetCore("SendNotification", {
     Title = "Meizu Hub";
     Text = "Loading..."; -- what the text says (ofc)
@@ -10,20 +7,19 @@ game:GetService("StarterGui"):SetCore("SendNotification", {
 shared.LoaderTitle = "Thanks For Using Meizu";
 shared.LoaderKeyFrames = {
     [1] = {
-        0.15,
+        1,
         10
     },
-    
     [2] = {
-        0.3,
+        2,
         30
     },
     [3] = {
-        0.3,
+        3,
         60
     },
     [4] = {
-        0.2,
+        2,
         100
     }
 };
@@ -591,9 +587,6 @@ FOVStroke.Parent = FOVCircle
 
 LoaderStage(3)
 
-----------------------------------------------------
--- 3. LOGIC ESP, AIMBOT, AUTO ATTACK & AUTO NHẶT ĐẠN
-----------------------------------------------------
 
 -- 3. LOGIC ESP, AIMBOT, AUTO ATTACK & AUTO NHẶT ĐẠN
 ----------------------------------------------------
@@ -968,8 +961,8 @@ end)
 -- 4. MEIZU UI — dựng hoàn chỉnh phía sau Loader HUD
 ----------------------------------------------------
 local Window = MeizuLibrary:CreateWindow({
-    Title = "Primeval Earth Hub",
-    SubTitle = "UpdatePrimeval • MeizuLibrary",
+    Title = "Meizu Hub",
+    SubTitle = "Primeval Earth • NTTP1721",
     Theme = "Dark",
     Accent = Color3.fromRGB(99, 102, 241),
     ToggleKeybind = Enum.KeyCode.RightControl,
@@ -1106,12 +1099,12 @@ local function SetQuestStatus(text, color)
     SetParagraphContent(QuestStatusLabel, text, color)
 end
 
-local MovementTab = Window:CreateTab("Di Chuyen", "rbxassetid://10747382750", 1)
-local TeleportTab = Window:CreateTab("Dich Chuyen", "rbxassetid://10734886004", 2)
-local EspTab = Window:CreateTab("Nhin Xuyen", "rbxassetid://10747375132", 3)
+local MovementTab = Window:CreateTab("Misc", "rbxassetid://10747382750", 5)
+local TeleportTab = Window:CreateTab("Teleport ", "rbxassetid://10734886004", 2)
+local EspTab = Window:CreateTab("ESP", "rbxassetid://10747375132", 3)
 local PvpTab = Window:CreateTab("PVP", "rbxassetid://10734975692", 4)
-local FossilsTab = Window:CreateTab("Fossils", "rbxassetid://10709781605", 5)
-local VisualsTab = Window:CreateTab("Cai Dat", "rbxassetid://10734950309", 6)
+local FossilsTab = Window:CreateTab("Main", "rbxassetid://10709781605", 1)
+local VisualsTab = Window:CreateTab("Setting", "rbxassetid://10734950309", 6)
 LoaderStage(6)
 
 ----------------------------------------------------
@@ -1119,7 +1112,7 @@ LoaderStage(6)
 ----------------------------------------------------
 MovementTab:CreateSection("Movement")
 MovementTab:CreateSlider({
-    Title = "Toc Do Di Chuyen",
+    Title = "Tốc Độ Chạy",
     Description = "WalkSpeed",
     Min = 16, Max = 200, Default = 16,
     Callback = function(value)
@@ -1130,7 +1123,7 @@ MovementTab:CreateSlider({
     end,
 })
 MovementTab:CreateSlider({
-    Title = "Suc Nhay (Jump Power)",
+    Title = "Nhảy",
     Description = "JumpPower",
     Min = 50, Max = 300, Default = 50,
     Callback = function(value)
@@ -1143,20 +1136,22 @@ MovementTab:CreateSlider({
     end,
 })
 MovementTab:CreateToggle({
-    Title = "Bat/Tat Fly (Bay)",
+    Title = "Bật/Tắt Bay",
+    Description = "Fly",
     Default = false,
     Callback = function(state)
         if state then startFly() else stopFly() end
     end,
 })
 MovementTab:CreateSlider({
-    Title = "Toc Do Fly (Speed)",
-    Description = "Fly speed",
+    Title = "Tốc Độ Bay",
+    Description = "Fly Speed",
     Min = 10, Max = 150, Default = 50,
     Callback = function(value) flySpeed = value end,
 })
 MovementTab:CreateToggle({
-    Title = "Xuyen Tuong (Noclip)",
+    Title = "Xuyên Tường",
+    Description = "NoClip",
     Default = false,
     Callback = function(state)
         if state then
@@ -1175,18 +1170,15 @@ MovementTab:CreateToggle({
         end
     end,
 })
-CreateParagraph(MovementTab, {
-    Title = "Thong tin",
-    Content = "Toc do di chuyen, Jump Power, Fly va Noclip.",
-}, 58)
+
 
 ----------------------------------------------------
 -- TAB TELEPORT
 ----------------------------------------------------
-TeleportTab:CreateSection("Teleport nguoi choi")
+TeleportTab:CreateSection("Teleport Player")
 CreateParagraph(TeleportTab, {
-    Title = "Danh sach nguoi choi",
-    Content = "Chon nguoi choi ben duoi de dich chuyen. Danh sach tu refresh khi nguoi choi vao/rời server.",
+    Title = "Danh Sách Người Chơi",
+    Content = "Chọn người chơi để dịch chuyển đến người chơi đó",
 }, 72)
 
 local PlayerButtonElements = {}
@@ -1239,42 +1231,42 @@ task.defer(RefreshPlayerList)
 -- TAB ESP
 ----------------------------------------------------
 EspTab:CreateSection("ESP")
-EspTab:CreateToggle({Title="Bat ESP Tong", Default=EspSettings.Enabled, Callback=function(v) EspSettings.Enabled=v end})
-EspTab:CreateToggle({Title="Hien Ten Nguoi Choi", Default=EspSettings.ShowName, Callback=function(v) EspSettings.ShowName=v end})
-EspTab:CreateToggle({Title="Hien Thanh Mau (HP)", Default=EspSettings.ShowHealth, Callback=function(v) EspSettings.ShowHealth=v end})
-EspTab:CreateToggle({Title="Hien Khoang Cach (m)", Default=EspSettings.ShowDistance, Callback=function(v) EspSettings.ShowDistance=v end})
+EspTab:CreateToggle({Title="Bật/Tắt ESP", Default=EspSettings.Enabled, Callback=function(v) EspSettings.Enabled=v end})
+EspTab:CreateToggle({Title="Hiện Tên", Default=EspSettings.ShowName, Callback=function(v) EspSettings.ShowName=v end})
+EspTab:CreateToggle({Title="Hiện Máu (HP)", Default=EspSettings.ShowHealth, Callback=function(v) EspSettings.ShowHealth=v end})
+EspTab:CreateToggle({Title="Hiện Khoảng Cách (m)", Default=EspSettings.ShowDistance, Callback=function(v) EspSettings.ShowDistance=v end})
 
 ----------------------------------------------------
 -- TAB PVP
 ----------------------------------------------------
 PvpTab:CreateSection("Aim / FOV")
 PvpTab:CreateToggle({
-    Title="Bat Auto Attack (Chi Bắn Khi FOV Đỏ)", Default=false,
+    Title="Auto Attack (Chi Bắn Khi FOV Đỏ)", Default=false,
     Callback=function(state) _G.AutoAttackRunning=state end,
 })
 PvpTab:CreateToggle({
-    Title="Bat Aimbot (Auto Lock)", Default=false,
+    Title="Aimbot (Auto Lock)", Default=false,
     Callback=function(state)
         AimSettings.Enabled=state
         FOVCircle.Visible=AimSettings.Enabled and AimSettings.ShowFOV
     end,
 })
 PvpTab:CreateToggle({
-    Title="Hien Vong FOV", Default=false,
+    Title="Hiện Vòng FOV", Default=false,
     Callback=function(state)
         AimSettings.ShowFOV=state
         FOVCircle.Visible=AimSettings.Enabled and AimSettings.ShowFOV
     end,
 })
 PvpTab:CreateSlider({
-    Title="Kich Thuoc FOV", Min=30, Max=200, Default=150,
+    Title="Kích Thước FOV", Min=30, Max=200, Default=150,
     Callback=function(value)
         AimSettings.FOVRadius=value
         FOVCircle.Size=UDim2.fromOffset(value*2, value*2)
     end,
 })
 PvpTab:CreateSlider({
-    Title="Do Muot Aim (Smooth)", Min=1, Max=10, Default=2,
+    Title="Độ Mượt Aim (Smooth)", Min=1, Max=10, Default=2,
     Callback=function(value) AimSettings.Smoothness=value/10 end,
 })
 AmmoStatusLabel = CreateParagraph(PvpTab, {
@@ -1282,11 +1274,11 @@ AmmoStatusLabel = CreateParagraph(PvpTab, {
     Content="Đang chờ...",
 }, 60)
 PvpTab:CreateToggle({
-    Title="Auto Nhat Dan (Nhat 2 Lan)", Default=false,
+    Title="Auto Nhặt Đạn (Nhặt 2 Lần)", Default=false,
     Callback=function(state)
         _G.AutoFarmAmmo=state
         if not state then
-            SetAmmoStatus("Trạng thái đạn: Đã TẮT")
+            SetAmmoStatus("Trạng Thái Đạn: Đã TẮT")
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 LocalPlayer.Character.HumanoidRootPart.Anchored=false
             end
@@ -1297,27 +1289,24 @@ PvpTab:CreateToggle({
 ----------------------------------------------------
 -- TAB FOSSILS
 ----------------------------------------------------
-FossilsTab:CreateSection("Fossils / Quest")
+FossilsTab:CreateSection("Main / Quest")
 QuestStatusLabel = CreateParagraph(FossilsTab, {
     Title="Quest Hiện Tại",
     Content="Đang chờ...",
 }, 60)
 FossilsTab:CreateToggle({Title="Auto Ăn Thịt (Toggle Meat)", Default=false, Callback=function(v) _G.AutoEatActive=v end})
 FossilsTab:CreateToggle({Title="Auto Ăn Cỏ (Toggle Herb)", Default=false, Callback=function(v) _G.AutoHerbActive=v end})
-FossilsTab:CreateToggle({Title="Auto Drink (Uong Lien Tuc)", Default=false, Callback=function(v) _G.AutoDrinkRunning=v end})
-FossilsTab:CreateToggle({Title="Auto Rest (Nghi Noi)", Default=false, Callback=function(v) _G.AutoRestRunning=v end})
-FossilsTab:CreateToggle({Title="Auto Zone (Chiem Zone)", Default=false, Callback=function(v) _G.AutoZoneRunning=v end})
-CreateParagraph(FossilsTab, {
-    Title = "Primeval Core",
-    Content = "Auto Ăn Thịt/Cỏ, Drink, Rest, Zone và Quest được giữ nguyên từ UpdatePrimeval.",
-}, 64)
+FossilsTab:CreateToggle({Title="Auto Drink (Uống Liên Tục)", Default=false, Callback=function(v) _G.AutoDrinkRunning=v end})
+FossilsTab:CreateToggle({Title="Auto Rest (Nghỉ Ngơi)", Default=false, Callback=function(v) _G.AutoRestRunning=v end})
+FossilsTab:CreateToggle({Title="Auto Zone (Chiếm Zone)", Default=false, Callback=function(v) _G.AutoZoneRunning=v end})
+
 
 ----------------------------------------------------
 -- TAB CAI DAT / UTILITY
 ----------------------------------------------------
 VisualsTab:CreateSection("Utility")
 VisualsTab:CreateToggle({
-    Title="Bat Sang Ban Dem (Fullbright)", Default=false,
+    Title="Trời Sáng (Fullbright)", Default=false,
     Callback=function(state)
         local Lighting=game:GetService("Lighting")
         if state then
@@ -1332,7 +1321,7 @@ VisualsTab:CreateToggle({
 })
 
 lowServerBtn = VisualsTab:CreateButton({
-    Title="Vao Server It Nguoi (Low Server)",
+    Title="HOP Server (Low Player)",
     Callback=function()
         local teleportService=game:GetService("TeleportService")
         local placeId=game.PlaceId
@@ -1344,7 +1333,7 @@ lowServerBtn = VisualsTab:CreateButton({
             if label then label.Text=tostring(text) end
         end
 
-        SetLowServerText("Dang Tim Server...")
+        SetLowServerText("Đang Tìm Server...")
         local success,result=pcall(function()
             return game:HttpGet("https://games.roblox.com/v1/games/"..placeId.."/servers/0?sortOrder=Asc&limit=100")
         end)
@@ -1360,17 +1349,17 @@ lowServerBtn = VisualsTab:CreateButton({
                 end
             end
         end
-        SetLowServerText("Khong Tim Thay Server!")
+        SetLowServerText("Không Tìm Thất Server!")
         task.delay(2,function()
             if lowServerBtn and lowServerBtn.Frame and lowServerBtn.Frame.Parent then
-                SetLowServerText("Vao Server It Nguoi (Low Server)")
+                SetLowServerText("Vào Server Ít Người (Low Player)")
             end
         end)
     end,
 })
 
 VisualsTab:CreateButton({
-    Title="Hoi Sinh Nhan Vat (Reset)",
+    Title="Hồi Sinh Nhân vật (Reset)",
     Callback=function()
         local hum=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.Health=0 end
@@ -1807,8 +1796,8 @@ Window:Toggle(true)
 
 pcall(function()
     MeizuLibrary:Notify({
-        Title = "Primeval Earth Hub",
-        Content = "Đã load hoàn tất. Meizu UI sẵn sàng.",
+        Title = "Meizu Hub",
+        Content = "Loading Succesfully!",
         Duration = 4,
     })
 end)
