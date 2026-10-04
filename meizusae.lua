@@ -1,182 +1,96 @@
---// MeizuLibrary1 - Simple Test Script
---// Library source:
---// https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua
+--[[
+    Meizu Library Edition - Basic Test
+    -----------------------------------
+    Test nhanh các API chính của bản MeizuLibrary Edition mới.
 
-local Library = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua"
-))()
+    LƯU Ý:
+    - Nếu bản Library Edition mới chưa được push lên GitHub,
+      hãy đổi LIBRARY_URL thành URL raw chứa bản mới của bạn.
+]]
 
---// Create Window
-local Window = Library:CreateWindow({
-    Title = "Meizu Test",
-    SubTitle = "Library v2.3 Test",
+local LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"
 
-    Theme = "Dark", -- Dark / Light / Midnight / Void
-    Accent = Color3.fromRGB(88, 101, 242),
+local function safeLoadLibrary(url)
+    local ok, source = pcall(function()
+        return game:HttpGet(url)
+    end)
 
-    ToggleKeybind = Enum.KeyCode.RightControl,
-    ToggleUIButton = true,
-    ToggleText = "M",
+    if not ok or type(source) ~= "string" then
+        warn("[Meizu Test] Không tải được MeizuLibrary.lua:", source)
+        return nil
+    end
 
-    Size = UDim2.fromOffset(620, 460),
-    Language = "vi",
+    local loader, err = loadstring(source)
+    if not loader then
+        warn("[Meizu Test] Library compile lỗi:", err)
+        return nil
+    end
 
-    -- Để false cho test nhanh.
-    -- Đổi thành true để test Loading Screen của library.
-    Loader = false,
-    LoaderTitle = "Meizu Test Loader",
-    LoaderColor = Color3.fromRGB(88, 101, 242),
+    local okRun, library = pcall(loader)
+    if not okRun or type(library) ~= "table" then
+        warn("[Meizu Test] Library trả về lỗi:", library)
+        return nil
+    end
+
+    return library
+end
+
+local Meizu = safeLoadLibrary(LIBRARY_URL)
+if not Meizu then
+    return
+end
+
+-- Tạo Window
+local Window = Meizu:CreateWindow({
+    Title = "Meizu Library Test",
+    SubTitle = "Edition Basic Test",
+    Theme = "Dark",
+    Accent = Color3.fromRGB(124, 92, 255),
+    Size = UDim2.fromOffset(620, 450),
 })
 
---// Main Tab
-local MainTab = Window:CreateTab("Test", "rbxassetid://6026568198", 1)
+-- =========================================================
+-- TAB 1: HOME
+-- =========================================================
+local Home = Window:CreateTab("Home")
 
-local MainSection = MainTab:CreateSection("Controls")
+Home:CreateSection("Welcome")
 
---// Button test
-MainSection:CreateButton({
-    Title = "Test Button",
-    Description = "Bấm nút này để test callback + notification.",
+Home:CreateParagraph({
+    Title = "Meizu Library Edition",
+    Content = "Nếu bạn thấy được tab này + các control bên dưới thì bộ khung Library đang hoạt động.",
+})
+
+Home:CreateButton({
+    Title = "Test Notification",
+    Description = "Bấm để kiểm tra hệ thống notification.",
     Callback = function()
-        print("[MEIZU TEST] Button clicked")
-
-        Library:Notify({
-            Title = "Button",
-            Content = "Bạn vừa bấm Test Button!",
+        Meizu:Notify({
+            Title = "Meizu Test",
+            Content = "Notification hoạt động bình thường!",
             Duration = 3,
         })
     end,
 })
 
---// Toggle test
-MainSection:CreateToggle({
-    Title = "Test Toggle",
-    Description = "Bật/tắt để kiểm tra trạng thái toggle.",
-    Default = false,
-    Flag = "TestToggle",
-    Callback = function(value)
-        print("[MEIZU TEST] Toggle =", value)
-
-        Library:Notify({
-            Title = "Toggle",
-            Content = "Trạng thái: " .. tostring(value),
-            Duration = 2,
-        })
-    end,
-})
-
---// Slider test
-MainSection:CreateSlider({
-    Title = "Test Slider",
-    Description = "Kéo từ 0 đến 100 để test slider.",
-    Min = 0,
-    Max = 100,
-    Default = 50,
-    Rounding = 0,
-    Flag = "TestSlider",
-    Callback = function(value)
-        print("[MEIZU TEST] Slider =", value)
-    end,
-})
-
---// Dropdown test
-MainSection:CreateDropdown({
-    Title = "Test Dropdown",
-    Description = "Chọn một option.",
-    Options = {"Option A", "Option B", "Option C", "Option D"},
-    Default = "Option A",
-    Flag = "TestDropdown",
-    Callback = function(value)
-        print("[MEIZU TEST] Dropdown =", value)
-    end,
-})
-
---// Multi Dropdown test
-MainSection:CreateMultiDropdown({
-    Title = "Test Multi Dropdown",
-    Description = "Chọn nhiều option cùng lúc.",
-    Options = {"Red", "Green", "Blue", "Yellow"},
-    Default = {"Red", "Blue"},
-    Flag = "TestMultiDropdown",
-    Callback = function(values)
-        print("[MEIZU TEST] MultiDropdown =", table.concat(values, ", "))
-    end,
-})
-
---// Input test
-MainSection:CreateInput({
-    Title = "Test Input",
-    Description = "Nhập text rồi Enter hoặc click ra ngoài.",
-    Placeholder = "Nhập gì đó...",
-    Default = "Hello Meizu",
-    Flag = "TestInput",
-    Callback = function(value)
-        print("[MEIZU TEST] Input =", value)
-
-        Library:Notify({
-            Title = "Input",
-            Content = "Bạn nhập: " .. tostring(value),
-            Duration = 3,
-        })
-    end,
-})
-
-local ExtraSection = MainTab:CreateSection("Extra")
-
---// Color Picker test
-ExtraSection:CreateColorPicker({
-    Title = "Test Color Picker",
-    Description = "Kéo ô màu để test HSV + callback.",
-    Default = Color3.fromRGB(255, 80, 120),
-    Flag = "TestColor",
-    Callback = function(color)
-        print("[MEIZU TEST] Color =", color)
-    end,
-})
-
---// Keybind test
-ExtraSection:CreateKeybind({
-    Title = "Test Keybind",
-    Description = "Bấm vào ô bên phải rồi nhấn một phím.",
-    Default = Enum.KeyCode.F,
-    Flag = "TestKeybind",
-    ChangedCallback = function(key)
-        print("[MEIZU TEST] Keybind changed =", key.Name)
-
-        Library:Notify({
-            Title = "Keybind",
-            Content = "Phím mới: " .. key.Name,
-            Duration = 2,
-        })
-    end,
-})
-
---// Paragraph test
-ExtraSection:CreateParagraph({
-    Title = "Paragraph Test",
-    Content = "Đây là paragraph dùng để kiểm tra text wrapping, kích thước tự động và giao diện của library.",
-})
-
---// Dialog test
-ExtraSection:CreateButton({
+Home:CreateButton({
     Title = "Test Dialog",
-    Description = "Mở hộp thoại xác nhận.",
+    Description = "Kiểm tra animation dialog.",
     Callback = function()
         Window:Dialog({
             Title = "Meizu Dialog",
-            Content = "Dialog hoạt động bình thường không? Hãy thử bấm từng nút.",
+            Content = "Đây là dialog test của Library Edition.",
             Buttons = {
                 {
-                    Title = "Cancel",
+                    Title = "Đóng",
                 },
                 {
                     Title = "OK",
                     Variant = "Primary",
                     Callback = function()
-                        print("[MEIZU TEST] Dialog OK")
-                        Library:Notify({
+                        Meizu:Notify({
                             Title = "Dialog",
-                            Content = "Bạn đã bấm OK.",
+                            Content = "Bạn vừa bấm OK.",
                             Duration = 2,
                         })
                     end,
@@ -186,80 +100,194 @@ ExtraSection:CreateButton({
     end,
 })
 
---// API test tab
-local APITab = Window:CreateTab("API", "rbxassetid://6022668898", 2)
-local APISection = APITab:CreateSection("Library API")
+-- =========================================================
+-- TAB 2: CONTROLS
+-- =========================================================
+local Controls = Window:CreateTab("Controls")
 
-APISection:CreateButton({
-    Title = "Theme: Light",
-    Callback = function()
-        Library:ApplyTheme("Light")
-    end,
-})
+local MainSection = Controls:CreateSection("Basic Controls")
 
-APISection:CreateButton({
-    Title = "Theme: Midnight",
-    Callback = function()
-        Library:ApplyTheme("Midnight")
-    end,
-})
-
-APISection:CreateButton({
-    Title = "Theme: Void",
-    Callback = function()
-        Library:ApplyTheme("Void")
-    end,
-})
-
-APISection:CreateButton({
-    Title = "Accent: Purple",
-    Callback = function()
-        Library:ApplyAccent(Color3.fromRGB(170, 85, 255))
-    end,
-})
-
-APISection:CreateButton({
-    Title = "Accent: Green",
-    Callback = function()
-        Library:ApplyAccent(Color3.fromRGB(60, 220, 120))
-    end,
-})
-
-APISection:CreateToggle({
-    Title = "Rainbow Accent",
+Controls:CreateToggle({
+    Title = "Test Toggle",
+    Description = "Kiểm tra toggle + callback.",
     Default = false,
+    Flag = "test_toggle",
     Callback = function(value)
-        Library:SetRainbow(value)
-    end,
-})
-
-APISection:CreateDropdown({
-    Title = "Language",
-    Options = {"Tiếng Việt", "English"},
-    Default = "Tiếng Việt",
-    Callback = function(value)
-        Library:SetLanguage(value == "English" and "en" or "vi")
-    end,
-})
-
-APISection:CreateButton({
-    Title = "Notify Test",
-    Callback = function()
-        Library:Notify({
-            Title = "Notification Test",
-            Content = "Notify API đang hoạt động.",
-            Duration = 4,
+        Meizu:Notify({
+            Title = "Toggle",
+            Content = "State = " .. tostring(value),
+            Duration = 1.5,
         })
     end,
 })
 
---// Ready callback
-Window:OnReady(function()
-    print("[MEIZU TEST] UI READY")
+Controls:CreateSlider({
+    Title = "Test Slider",
+    Description = "Kéo thanh này để kiểm tra slider.",
+    Min = 0,
+    Max = 100,
+    Default = 50,
+    Rounding = 0,
+    Flag = "test_slider",
+    Callback = function(value)
+        -- Test callback
+    end,
+})
 
-    Library:Notify({
-        Title = "Meizu Test",
-        Content = "UI đã load xong. Hãy test từng control.",
-        Duration = 4,
-    })
-end)
+Controls:CreateDropdown({
+    Title = "Test Dropdown",
+    Description = "Kiểm tra dropdown animation.",
+    Options = {
+        "Option A",
+        "Option B",
+        "Option C",
+        "Option D",
+    },
+    Default = "Option A",
+    Flag = "test_dropdown",
+    Callback = function(value)
+        print("[Meizu Test] Dropdown:", value)
+    end,
+})
+
+Controls:CreateMultiDropdown({
+    Title = "Test Multi Dropdown",
+    Description = "Kiểm tra chọn nhiều option.",
+    Options = {
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "Delta",
+    },
+    Default = {},
+    Flag = "test_multi",
+    Callback = function(values)
+        print("[Meizu Test] Multi:", values)
+    end,
+})
+
+Controls:CreateInput({
+    Title = "Test Input",
+    Description = "Nhập thử một đoạn text.",
+    Placeholder = "Gõ gì đó...",
+    Default = "",
+    Flag = "test_input",
+    Callback = function(value)
+        print("[Meizu Test] Input:", value)
+    end,
+})
+
+Controls:CreateKeybind({
+    Title = "Test Keybind",
+    Description = "Bấm nút rồi nhấn phím bất kỳ.",
+    Default = Enum.KeyCode.RightShift,
+    Callback = function()
+        Window:Toggle()
+    end,
+    ChangedCallback = function(key)
+        print("[Meizu Test] Keybind:", key)
+    end,
+})
+
+-- =========================================================
+-- TAB 3: SETTINGS TEST
+-- =========================================================
+local Settings = Window:CreateTab("Settings Test")
+
+Settings:CreateSection("Theme")
+
+local themes = {}
+for name in pairs(Meizu.Themes or {}) do
+    table.insert(themes, name)
+end
+table.sort(themes)
+
+Settings:CreateDropdown({
+    Title = "Theme",
+    Options = themes,
+    Default = Meizu.Theme,
+    Callback = function(theme)
+        Meizu:ApplyTheme(theme)
+    end,
+})
+
+Settings:CreateColorPicker({
+    Title = "Accent",
+    Default = Meizu.Accent,
+    Callback = function(color)
+        Meizu._UserAccent = color
+        Meizu:ApplyAccent(color)
+    end,
+})
+
+Settings:CreateToggle({
+    Title = "Rainbow Accent",
+    Default = false,
+    Callback = function(value)
+        Meizu:SetRainbow(value)
+    end,
+})
+
+Settings:CreateSection("Language")
+
+-- Bản Edition mới hỗ trợ vi/en qua SetLanguage()
+Settings:CreateDropdown({
+    Title = "Language",
+    Options = {
+        "Vietnamese",
+        "English",
+    },
+    Default = (Meizu.Language == "en") and "English" or "Vietnamese",
+    Callback = function(language)
+        if type(Meizu.SetLanguage) == "function" then
+            Meizu:SetLanguage(language == "English" and "en" or "vi")
+        end
+    end,
+})
+
+Settings:CreateSection("Window")
+
+Settings:CreateButton({
+    Title = "Toggle Window",
+    Description = "Ẩn / hiện cửa sổ để test animation.",
+    Callback = function()
+        Window:Toggle()
+    end,
+})
+
+Settings:CreateButton({
+    Title = "Test Save Config",
+    Description = "Lưu các flag test.",
+    Callback = function()
+        local ok = Meizu:SaveSettings("meizu_edition_test")
+        Meizu:Notify({
+            Title = "Config",
+            Content = ok and "Đã lưu config test." or "Executor không hỗ trợ writefile.",
+            Duration = 3,
+        })
+    end,
+})
+
+Settings:CreateButton({
+    Title = "Test Load Config",
+    Description = "Load lại các flag test.",
+    Callback = function()
+        local ok = Meizu:LoadSettings("meizu_edition_test")
+        Meizu:Notify({
+            Title = "Config",
+            Content = ok and "Đã load config test." or "Không tìm thấy config test.",
+            Duration = 3,
+        })
+    end,
+})
+
+-- =========================================================
+-- READY
+-- =========================================================
+Window:SelectTab(1)
+
+Meizu:Notify({
+    Title = "Meizu Library Test",
+    Content = "Basic test loaded thành công.",
+    Duration = 4,
+})
