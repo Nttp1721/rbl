@@ -46,9 +46,9 @@ local CONFIG = {
     Name       = "Meizu Hub",
     SubTitle   = "Steal An Eggs",
     Author     = "Nttphu1721",
-    Version    = "2.0",
+    Version    = "2.3",
     Discord    = "https://discord.gg/5GynHCJZXr",
-    ImageUrl   = "https://i.ibb.co/S7rpHJJN/meizuxp.png", -- ảnh dùng cho toàn bộ script
+    FixedLogoUrl = "https://i.ibb.co/S7rpHJJN/meizuxp.png",
     ImageFolder = "MeizuHub",
     ImageFile   = "MeizuHub/meizuxp.png",
     MenuKey    = Enum.KeyCode.End,
@@ -73,7 +73,7 @@ local function Try(fn, ...)
 end
 
 -- Ảnh sau khi tải sẽ nằm ở đây ("" = chưa có / không hỗ trợ)
-local Assets = { Logo = "" }
+local Assets = { Logo = "", Fixed = true }
 
 local function SystemNotify(text, duration)
     Try(function()
@@ -207,7 +207,7 @@ local LoaderLogo -- gán ở phần loader bên dưới
 local ImageReady = false
 
 task.spawn(function()
-    Assets.Logo = LoadImageAsset(CONFIG.ImageUrl, CONFIG.ImageFolder, CONFIG.ImageFile)
+    Assets.Logo = LoadImageAsset(CONFIG.FixedLogoUrl, CONFIG.ImageFolder, CONFIG.ImageFile)
     ImageReady = true
     if LoaderLogo and LoaderLogo.Parent and Assets.Logo ~= "" then
         LoaderLogo.Image = Assets.Logo
@@ -252,178 +252,81 @@ SystemNotify("Loading...", 4)
 -- 4. LOADER (HIỆU ỨNG TẢI - GIỮ NGUYÊN SKIN MEIZU)
 ----------------------------------------------------------------------
 local LoaderColors = {
-    Main             = Color3.fromRGB(0, 0, 0),
-    Topic            = Color3.fromRGB(200, 200, 200),
-    Title            = Color3.fromRGB(255, 255, 255),
-    LoaderBackground = Color3.fromRGB(40, 40, 40),
-    LoaderSplash     = Color3.fromRGB(3, 252, 3),
+    Main = Color3.fromRGB(7, 8, 11),
+    Card = Color3.fromRGB(13, 15, 20),
+    Text = Color3.fromRGB(246, 247, 250),
+    Muted = Color3.fromRGB(156, 162, 174),
+    Accent = Color3.fromRGB(3, 252, 3),
+    Stroke = Color3.fromRGB(45, 48, 56),
 }
 
--- {thời gian chờ (giây), phần trăm}
-local LoaderKeyframes = {
-    { 0.3, 10 },
-    { 0.5, 30 },
-    { 0.6, 60 },
-    { 0.5, 100 },
-}
-
-local StepMessages = {
-    [1] = "Meizu Hub",
-    [2] = "Meizu Hub",
-    [3] = "Meizu Hub.",
-    [4] = "Thanks For Using Meizu!",
-}
-
-local function Tween(object, duration, properties)
-    local tween = TweenService:Create(
-        object,
-        TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut),
-        properties
-    )
+local function SmoothTween(obj, time, props, style, direction)
+    local tween = TweenService:Create(obj, TweenInfo.new(
+        time, style or Enum.EasingStyle.Quint, direction or Enum.EasingDirection.Out
+    ), props)
     tween:Play()
     return tween
 end
 
-local function Create(className, properties)
-    local obj = Instance.new(className)
-    local parent
-    for prop, value in pairs(properties) do
-        if prop == "Parent" then
-            parent = value
-        else
-            obj[prop] = value
-        end
-    end
-    obj.Parent = parent
-    return obj
-end
-
-local function AddCorner(radius, parent)
-    return Create("UICorner", {
-        CornerRadius = UDim.new(0, radius),
-        Parent = parent,
-    })
-end
-
 local LoaderGui = Create("ScreenGui", {
-    Name = "MeizuLoader",
-    ResetOnSpawn = false,
-    IgnoreGuiInset = true,
-    DisplayOrder = 999,
-    Parent = GetGuiParent(),
+    Name = "MeizuLoader", ResetOnSpawn = false, IgnoreGuiInset = true,
+    DisplayOrder = 2000, Parent = GetGuiParent()
 })
 
+local Backdrop = Create("Frame", {Parent=LoaderGui, BackgroundColor3=Color3.fromRGB(0,0,0), BackgroundTransparency=1, Size=UDim2.fromScale(1,1), BorderSizePixel=0})
 local LoaderFrame = Create("Frame", {
-    Name = "Main",
-    Parent = LoaderGui,
-    BackgroundColor3 = LoaderColors.Main,
-    BorderSizePixel = 0,
-    ClipsDescendants = true,
-    AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.new(0.5, 0, 0.5, 0),
-    Size = UDim2.new(0, 0, 0, 0),
+    Parent=LoaderGui, AnchorPoint=Vector2.new(0.5,0.5), Position=UDim2.fromScale(0.5,0.5),
+    Size=UDim2.fromOffset(0,0), BackgroundColor3=LoaderColors.Main, BorderSizePixel=0, ClipsDescendants=true,
 })
-AddCorner(12, LoaderFrame)
+AddCorner(18, LoaderFrame)
+local loaderStroke=Instance.new("UIStroke"); loaderStroke.Color=LoaderColors.Stroke; loaderStroke.Thickness=1; loaderStroke.Transparency=1; loaderStroke.Parent=LoaderFrame
+local glow=Create("Frame", {Parent=LoaderFrame, BackgroundColor3=LoaderColors.Accent, BackgroundTransparency=1, BorderSizePixel=0, Position=UDim2.fromOffset(24,18), Size=UDim2.new(1,-48,0,2)})
+AddCorner(2,glow)
+LoaderLogo=Create("ImageLabel", {Name="Logo",Parent=LoaderFrame,BackgroundTransparency=1,Image=Assets.Logo,ImageTransparency=1,Position=UDim2.fromOffset(28,32),Size=UDim2.fromOffset(64,64)})
+AddCorner(32,LoaderLogo)
+local hubName=Create("TextLabel", {Parent=LoaderFrame,BackgroundTransparency=1,Text=CONFIG.Name,Font=Enum.Font.GothamBold,TextSize=21,TextColor3=LoaderColors.Text,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,Position=UDim2.fromOffset(110,32),Size=UDim2.new(1,-136,0,28)})
+local subName=Create("TextLabel", {Parent=LoaderFrame,BackgroundTransparency=1,Text="Steal An Eggs  •  Meizu Edition",Font=Enum.Font.Gotham,TextSize=12,TextColor3=LoaderColors.Muted,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,Position=UDim2.fromOffset(110,60),Size=UDim2.new(1,-136,0,18)})
+local status=Create("TextLabel", {Parent=LoaderFrame,BackgroundTransparency=1,Text="Preparing interface...",Font=Enum.Font.GothamMedium,TextSize=13,TextColor3=LoaderColors.Text,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,Position=UDim2.fromOffset(28,113),Size=UDim2.new(1,-56,0,22)})
+local progressBg=Create("Frame", {Parent=LoaderFrame,BackgroundColor3=LoaderColors.Card,BackgroundTransparency=1,BorderSizePixel=0,Position=UDim2.fromOffset(28,145),Size=UDim2.new(1,-56,0,8)})
+AddCorner(4,progressBg)
+local progress=Create("Frame", {Parent=progressBg,BackgroundColor3=LoaderColors.Accent,BackgroundTransparency=1,BorderSizePixel=0,Size=UDim2.new(0,0,1,0)})
+AddCorner(4,progress)
+local pct=Create("TextLabel", {Parent=LoaderFrame,BackgroundTransparency=1,Text="0%",Font=Enum.Font.GothamMedium,TextSize=11,TextColor3=LoaderColors.Muted,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Right,Position=UDim2.new(1,-72,0,160),Size=UDim2.fromOffset(44,16)})
+local footer=Create("TextLabel", {Parent=LoaderFrame,BackgroundTransparency=1,Text="Loading library • Please wait",Font=Enum.Font.Gotham,TextSize=10,TextColor3=LoaderColors.Muted,TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,Position=UDim2.fromOffset(28,184),Size=UDim2.new(1,-56,0,18)})
 
-LoaderLogo = Create("ImageLabel", {
-    Name = "Logo",
-    Parent = LoaderFrame,
-    BackgroundTransparency = 1,
-    Image = Assets.Logo, -- "" nếu không tải được
-    Position = UDim2.new(0, 15, 0, 10),
-    Size = UDim2.new(0, 50, 0, 50),
-})
-AddCorner(25, LoaderLogo)
+SmoothTween(Backdrop,.35,{BackgroundTransparency=.35})
+SmoothTween(LoaderFrame,.52,{Size=UDim2.fromOffset(430,220)},Enum.EasingStyle.Back)
+SmoothTween(loaderStroke,.42,{Transparency=.18})
+task.wait(.14)
+SmoothTween(glow,.38,{BackgroundTransparency=.10})
+SmoothTween(LoaderLogo,.38,{ImageTransparency=0})
+SmoothTween(hubName,.38,{TextTransparency=0})
+SmoothTween(subName,.38,{TextTransparency=0})
+SmoothTween(status,.38,{TextTransparency=0})
+SmoothTween(progressBg,.38,{BackgroundTransparency=0})
+SmoothTween(progress,.38,{BackgroundTransparency=0})
+SmoothTween(pct,.38,{TextTransparency=0})
+SmoothTween(footer,.38,{TextTransparency=0})
 
-Create("TextLabel", {
-    Name = "HubName",
-    Parent = LoaderFrame,
-    BackgroundTransparency = 1,
-    Text = CONFIG.Name,
-    Position = UDim2.new(0, 75, 0, 10),
-    Size = UDim2.new(0, 200, 0, 50),
-    Font = Enum.Font.GothamBold,
-    TextColor3 = LoaderColors.Title,
-    TextSize = 16,
-    TextXAlignment = Enum.TextXAlignment.Left,
-})
-
-local LoaderTitle = Create("TextLabel", {
-    Name = "Title",
-    Parent = LoaderFrame,
-    TextTransparency = 1,
-    BackgroundTransparency = 1,
-    Position = UDim2.new(0, 15, 0, 66),
-    Size = UDim2.new(1, -30, 0, 18),
-    Font = Enum.Font.Gotham,
-    RichText = true,
-    Text = "<b>Thanks For Using Meizu</b>",
-    TextColor3 = LoaderColors.Title,
-    TextSize = 13,
-    TextXAlignment = Enum.TextXAlignment.Left,
-})
-
-local ProgressBG = Create("Frame", {
-    Name = "BG",
-    Parent = LoaderFrame,
-    AnchorPoint = Vector2.new(0.5, 0),
-    BackgroundTransparency = 1,
-    BackgroundColor3 = LoaderColors.LoaderBackground,
-    BorderSizePixel = 0,
-    Position = UDim2.new(0.5, 0, 0, 90),
-    Size = UDim2.new(0.9, 0, 0, 14),
-})
-AddCorner(7, ProgressBG)
-
-local ProgressBar = Create("Frame", {
-    Name = "Progress",
-    Parent = ProgressBG,
-    BackgroundColor3 = LoaderColors.LoaderSplash,
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
-    Size = UDim2.new(0, 0, 1, 0),
-})
-AddCorner(7, ProgressBar)
-
-local StepLabel = Create("TextLabel", {
-    Name = "StepLabel",
-    Parent = LoaderFrame,
-    BackgroundTransparency = 1,
-    AnchorPoint = Vector2.new(0.5, 0),
-    Position = UDim2.new(0.5, 0, 0, 108),
-    Size = UDim2.new(1, -20, 0, 18),
-    Font = Enum.Font.Gotham,
-    Text = "",
-    TextColor3 = LoaderColors.Topic,
-    TextSize = 12,
-    TextXAlignment = Enum.TextXAlignment.Center,
-})
-
-local function UpdateLoader(percent, step)
-    Tween(ProgressBar, 0.5, { Size = UDim2.new(percent / 100, 0, 1, 0) })
-    StepLabel.Text = StepMessages[step] or ""
+local steps={
+    {.10,12,"Starting Meizu core..."},
+    {.14,28,"Preparing interface..."},
+    {.18,48,"Loading UI library..."},
+    {.20,68,"Building Chilli compatibility..."},
+    {.19,86,"Preparing game modules..."},
+    {.16,100,"Ready."},
+}
+for _, st in ipairs(steps) do
+    task.wait(st[1]); status.Text=st[3]; pct.Text=tostring(st[2]).."%"
+    SmoothTween(progress,.30,{Size=UDim2.new(st[2]/100,0,1,0)},Enum.EasingStyle.Quint)
 end
-
-Tween(LoaderFrame, 0.25, { Size = UDim2.new(0, 346, 0, 132) })
-task.wait(0.3)
-Tween(LoaderTitle, 0.5, { TextTransparency = 0 })
-Tween(ProgressBG, 0.5, { BackgroundTransparency = 0 })
-Tween(ProgressBar, 0.5, { BackgroundTransparency = 0 })
-
-for index, data in ipairs(LoaderKeyframes) do
-    task.wait(data[1])
-    UpdateLoader(data[2], index)
+task.wait(.30)
+for _, obj in ipairs({footer,pct,status,subName,hubName,LoaderLogo}) do
+    local prop=obj:IsA("ImageLabel") and {ImageTransparency=1} or {TextTransparency=1}
+    SmoothTween(obj,.22,prop,Enum.EasingStyle.Quint)
 end
-
-UpdateLoader(100, 4)
-task.wait(0.8)
-
-Tween(LoaderTitle, 0.5, { TextTransparency = 1 })
-Tween(ProgressBG, 0.5, { BackgroundTransparency = 1 })
-Tween(ProgressBar, 0.5, { BackgroundTransparency = 1 })
-task.wait(0.5)
-Tween(LoaderFrame, 0.25, { Size = UDim2.new(0, 0, 0, 0) })
-task.wait(0.3)
+SmoothTween(progressBg,.22,{BackgroundTransparency=1}); SmoothTween(progress,.22,{BackgroundTransparency=1}); SmoothTween(glow,.22,{BackgroundTransparency=1}); SmoothTween(LoaderFrame,.38,{Size=UDim2.fromOffset(0,0)},Enum.EasingStyle.Quint); SmoothTween(Backdrop,.32,{BackgroundTransparency=1})
+task.wait(.40)
 LoaderGui:Destroy()
 
 ----------------------------------------------------------------------
@@ -488,6 +391,30 @@ Logic của bộ não KHÔNG bị thay đổi - chỉ đổi lớp vỏ hiển t
 ]]
 
 local ChilliCompat = {}
+local BrainBuilding = true
+local PendingCallbacks = {}
+
+local function QueueBrainCallback(callback, ...)
+    if type(callback) ~= "function" then return end
+    local args = table.pack(...)
+    local job = function()
+        pcall(callback, table.unpack(args, 1, args.n))
+    end
+    if BrainBuilding then
+        PendingCallbacks[#PendingCallbacks + 1] = job
+    else
+        task.defer(job)
+    end
+end
+
+local function FlushBrainCallbacks()
+    local pending = PendingCallbacks
+    PendingCallbacks = {}
+    for _, job in ipairs(pending) do
+        task.defer(job)
+    end
+end
+
 
 -- Bảng màu của adapter (giása với theme Dark của Fluent + xanh Meizu)
 local CompatTheme = {
@@ -516,23 +443,6 @@ local FLUENT_ELEMENT_ORDER = 7
 
 local function RegisterCleanup(fn)
     table.insert(CompatCleanups, fn)
-end
-
--- Fluent elements trong các bản phát hành khác nhau có thể lưu GUI instance
--- ở .Instance hoặc .Frame. Chuẩn hoá lại để bộ não Chilli đọc được cả hai.
-local function GetFluentElementInstance(option)
-    if type(option) ~= "table" then
-        return nil
-    end
-
-    for _, key in ipairs({ "Instance", "Frame", "Container" }) do
-        local value = rawget(option, key)
-        if typeof(value) == "Instance" then
-            return value
-        end
-    end
-
-    return nil
 end
 ChilliCompat.RegisterCleanup = RegisterCleanup
 
@@ -614,63 +524,41 @@ end
 -- Dùng AddParagraph gốc của Fluent: đồng bộ theme, tự giãn cao, và Fluent
 -- trả về Element có SetTitle/SetDesc nên cập nhật nội dung động được.
 local function AddCompatRow(section, desc)
-    local ftab = section.FluentTab
-    local fsection = section.FluentSection
-    local target = fsection or ftab
+    desc = type(desc) == "table" and desc or {}
+    local target = section.FluentSection or section.FluentTab
     local isLabel = desc.__IsLabel == true
     local titleText = tostring(desc.Name or "")
     local bodyText = tostring(desc.Text or desc.Content or "")
-
     local handle = {}
-
-    -- Hiển thị bằng AddParagraph gốc của Fluent (đồng bộ theme, tự giãn cao).
-    -- Fluent trả về Element có SetTitle/SetDesc (đóng giá trị qua closure,
-    -- tham số đầu bị bỏ qua) nên gọi kiểu handle:Set(handle, "chữ") vẫn hoạt động.
     local para
+
     pcall(function()
-        if isLabel then
-            para = target:AddParagraph({
-                Title   = bodyText ~= "" and bodyText or titleText,
-                Content = "",
-            })
-        else
-            para = target:AddParagraph({
-                Title   = titleText,
-                Content = bodyText,
-            })
-        end
+        para = target:AddParagraph({
+            Title = isLabel and (bodyText ~= "" and bodyText or titleText) or titleText,
+            Content = isLabel and "" or bodyText,
+        })
     end)
 
     local lastText = isLabel and (bodyText ~= "" and bodyText or titleText) or bodyText
-
     if para then
-        function handle:Set(_, text)
-            local value = type(_) == "table" and text or _
+        function handle:Set(_, value)
             value = tostring(value or "")
             lastText = value
             if isLabel then
-                if value ~= "" then
-                    pcall(function() para:SetTitle(value) end)
-                end
+                if type(para.SetTitle) == "function" then pcall(para.SetTitle, para, value) end
             else
-                pcall(function() para:SetDesc(value) end)
+                if type(para.SetDesc) == "function" then pcall(para.SetDesc, para, value) end
             end
         end
-
         function handle:Get() return lastText end
-
         function handle:Destroy()
-            pcall(function() para:Destroy() end)
+            if type(para.Destroy) == "function" then pcall(para.Destroy, para) end
         end
         handle.Instance = (type(para) == "table" and para.Frame) or nil
         return handle
     end
 
-    -- dự phòng: Fluent không có AddParagraph (không xảy ra thực tế)
-    function handle:Set(_, text)
-        local value = type(_) == "table" and text or _
-        lastText = tostring(value or "")
-    end
+    function handle:Set(_, value) lastText = tostring(value or "") end
     function handle:Get() return lastText end
     function handle:Destroy() end
     handle.Instance = nil
@@ -756,7 +644,6 @@ end
 -- ===================== SECTION (nhóm element trong tab) =====================
 local function CreateCompatSection(tab, desc)
     desc = type(desc) == "table" and desc or {}
-
     local name = tostring(desc.Name or "Section")
     local path = tab.Path .. " > " .. name
 
@@ -764,21 +651,14 @@ local function CreateCompatSection(tab, desc)
         return SectionByPath[path]
     end
 
-    -- QUAN TRỌNG:
-    -- Phải giữ lại đối tượng Section thật của Fluent rồi thêm control vào
-    -- Section đó. Bản cũ tạo AddSection() nhưng sau đó lại AddToggle/
-    -- AddDropdown trực tiếp lên Tab => toàn bộ control không nằm trong
-    -- Section layout của Fluent, dẫn tới hiện tiêu đề section nhưng control
-    -- bị lệch/ẩn và đôi lúc chuỗi khởi tạo bị ngắt giữa chừng.
     local fluentSection
     local okSection, resultSection = pcall(function()
         return tab.FluentTab:AddSection(name)
     end)
-
     if okSection and type(resultSection) == "table" then
         fluentSection = resultSection
     else
-        warn("[Meizu Hub] CreateSection failed:", name, tostring(resultSection))
+        warn("[Meizu Hub] Section creation failed:", path, tostring(resultSection))
     end
 
     local section = {
@@ -790,409 +670,151 @@ local function CreateCompatSection(tab, desc)
         _subscriptions = {},
     }
 
-    local function GetTarget()
-        -- Ưu tiên Section thật của Fluent.
-        if fluentSection then
-            return fluentSection
-        end
-        -- Fallback để script không chết nếu một bản Fluent khác không trả
-        -- Section object.
-        return tab.FluentTab
-    end
-
-    local function RememberConnection(connection)
-        if connection then
-            table.insert(section._subscriptions, connection)
-            return connection
-        end
-    end
-
-    local function DestroyOption(option)
-        if type(option) == "table" and type(option.Destroy) == "function" then
-            pcall(option.Destroy, option)
-        end
-    end
-
-    -- ---------- TOGGLE ----------
-    function section:CreateToggle(desc2)
-        desc2 = type(desc2) == "table" and desc2 or {}
-
-        local name2 = tostring(desc2.Name or "Toggle")
-        local elementPath = path .. " > " .. name2
-        local flag = EnsureFlag(elementPath)
-        local userCallback = desc2.Callback
-        local handle = {
-            Path = elementPath,
-            Flag = flag,
-            _group = nil,
-            _Option = nil,
-        }
-
-        local option
+    local target = fluentSection or tab.FluentTab
+    local function safeOption(method, ...)
         local ok, result = pcall(function()
-            return GetTarget():AddToggle(flag, {
-                Title = desc2.SubOf and ("   └ " .. name2) or name2,
-                Description = desc2.Note,
-                Default = desc2.Default == true,
-                Callback = function(value)
-                    if value == true and handle._group then
-                        for _, other in ipairs(handle._group.Members) do
-                            if other ~= handle and other._Option then
-                                pcall(function()
-                                    other._Option:SetValue(false)
-                                end)
-                            end
-                        end
-                    end
-
-                    if type(userCallback) == "function" then
-                        -- Callback errors from the original brain must not
-                        -- abort the entire UI construction thread.
-                        pcall(userCallback, value == true)
-                    end
-                end,
-            })
+            return method(target, ...)
         end)
-
-        if ok then
-            option = result
-        else
-            warn("[Meizu Hub] Toggle failed:", elementPath, tostring(result))
-            option = {
-                Value = desc2.Default == true,
-                SetValue = function(self, value)
-                    self.Value = value == true
-                end,
-            }
+        if not ok then
+            warn("[Meizu Hub] UI element failed:", path, tostring(result))
+            return nil
         end
+        return result
+    end
 
-        handle._Option = option
-
-        function handle:Get(_self)
-            return option.Value == true
+    local function makeHandle(elementPath, flag, option)
+        local handle = { Path = elementPath, Flag = flag, _Option = option, State = nil }
+        function handle:Get() return option and option.Value end
+        function handle:Set(_, value)
+            if option and type(option.SetValue) == "function" then pcall(option.SetValue, option, value) end
         end
-
-        function handle:Set(_self, value)
-            pcall(function()
-                option:SetValue(value == true)
-            end)
+        function handle:Destroy()
+            if option and type(option.Destroy) == "function" then pcall(option.Destroy, option) end
         end
-
-        function handle:Subscribe(fn)
-            if type(fn) ~= "function" or type(option) ~= "table" then
-                return { Disconnect = function() end }
-            end
-
-            if type(option.OnChanged) == "function" then
-                local okChanged = pcall(option.OnChanged, option, function(value)
-                    pcall(fn, value == true)
-                end)
-                if okChanged then
-                    return { Disconnect = function() end }
-                end
-            end
-
-            return { Disconnect = function() end }
-        end
-
-        function handle:JoinExclusiveGroup(_self, group)
-            if type(group) ~= "table" or type(group.Members) ~= "table" then
-                return
-            end
+        function handle:JoinExclusiveGroup(_, group)
+            if type(group) ~= "table" or type(group.Members) ~= "table" then return end
             handle._group = group
-            table.insert(group.Members, handle)
+            group.Members[#group.Members+1] = handle
         end
-
-        function handle:GetQuickPath(_self)
-            return elementPath
-        end
-
-        function handle:Destroy()
-            DestroyOption(option)
-        end
-
-        -- Chilli's fn6() only needs a GuiObject for optional text fixing.
-        -- Fluent's public Toggle object does not expose Instance, so use the
-        -- real section container as a safe compatibility target.
-        handle.Instance = fluentSection and fluentSection.Container or nil
-
-        HandleByPath[elementPath] = handle
-        return handle
-    end
-
-    -- ---------- BUTTON ----------
-    function section:CreateButton(desc2)
-        desc2 = type(desc2) == "table" and desc2 or {}
-
-        local name2 = tostring(desc2.Name or "Button")
-        local buttonText = desc2.ButtonText
-        local userCallback = desc2.Callback
-        local displayTitle = buttonText and (tostring(buttonText) .. "  •  " .. name2) or name2
-        local handle = {}
-
-        local option
-        local ok, result = pcall(function()
-            return GetTarget():AddButton({
-                Title = displayTitle,
-                Description = desc2.Note,
-                Callback = function()
-                    if type(userCallback) == "function" then
-                        pcall(userCallback)
-                    end
-                end,
-            })
-        end)
-
-        if ok then
-            option = result
-        else
-            warn("[Meizu Hub] Button failed:", path .. " > " .. name2, tostring(result))
-            option = {}
-        end
-
-        function handle:SetActionText(_self, text)
-            if type(option) == "table" and type(option.SetTitle) == "function" then
-                pcall(option.SetTitle, option, tostring(text or ""))
-            end
-        end
-
-        function handle:Destroy()
-            DestroyOption(option)
-        end
-
-        handle.Instance = fluentSection and fluentSection.Container or nil
-        return handle
-    end
-
-    -- ---------- SLIDER ----------
-    function section:CreateSlider(desc2)
-        desc2 = type(desc2) == "table" and desc2 or {}
-
-        local name2 = tostring(desc2.Name or "Slider")
-        local elementPath = path .. " > " .. name2
-        local flag = EnsureFlag(elementPath)
-        local userCallback = desc2.Callback
-        local increment = tonumber(desc2.Increment) or 1
-        local rounding = 0
-
-        if increment < 0.1 then
-            rounding = 2
-        elseif increment < 1 then
-            rounding = 1
-        end
-
-        local minValue = tonumber(desc2.Min) or 0
-        local maxValue = tonumber(desc2.Max) or 100
-        local defaultValue = tonumber(desc2.Default)
-        if defaultValue == nil then
-            defaultValue = minValue
-        end
-
-        local handle = { Path = elementPath, Flag = flag }
-        local option
-
-        local ok, result = pcall(function()
-            return GetTarget():AddSlider(flag, {
-                Title = desc2.SubOf and ("   └ " .. name2) or name2,
-                Description = desc2.Note,
-                Min = minValue,
-                Max = maxValue,
-                Default = defaultValue,
-                Rounding = rounding,
-                Callback = function(value)
-                    if type(userCallback) == "function" then
-                        pcall(userCallback, tonumber(value) or 0)
-                    end
-                end,
-            })
-        end)
-
-        if ok then
-            option = result
-        else
-            warn("[Meizu Hub] Slider failed:", elementPath, tostring(result))
-            option = {
-                Value = defaultValue,
-                SetValue = function(self, value)
-                    self.Value = tonumber(value) or defaultValue
-                end,
-            }
-        end
-
-        function handle:Get(_self)
-            return tonumber(option.Value) or 0
-        end
-
-        function handle:Set(_self, value)
-            pcall(function()
-                option:SetValue(tonumber(value) or 0)
-            end)
-        end
-
-        function handle:Subscribe(fn)
-            if type(fn) == "function" and type(option) == "table" and type(option.OnChanged) == "function" then
-                pcall(option.OnChanged, option, function(value)
-                    pcall(fn, tonumber(value) or 0)
-                end)
-            end
-            return { Disconnect = function() end }
-        end
-
-        function handle:Destroy()
-            DestroyOption(option)
-        end
-
-        handle.Instance = fluentSection and fluentSection.Container or nil
-        HandleByPath[elementPath] = handle
-        return handle
-    end
-
-    -- ---------- DROPDOWN / MULTIDROPDOWN ----------
-    local function MakeDropdown(desc2, isMulti)
-        desc2 = type(desc2) == "table" and desc2 or {}
-
-        local name2 = tostring(desc2.Name or "Dropdown")
-        local elementPath = path .. " > " .. name2
-        local flag = EnsureFlag(elementPath)
-        local userCallback = desc2.Callback
-        local values = type(desc2.Options) == "table" and desc2.Options or {}
-        local handle = { Path = elementPath, Flag = flag }
-        local option
-
-        local ok, result = pcall(function()
-            return GetTarget():AddDropdown(flag, {
-                Title = desc2.SubOf and ("   └ " .. name2) or name2,
-                Description = desc2.Note,
-                Values = values,
-                Default = desc2.Default,
-                Multi = isMulti,
-                Callback = function(value)
-                    if type(userCallback) == "function" then
-                        if isMulti then
-                            pcall(userCallback, type(value) == "table" and value or {})
-                        else
-                            pcall(userCallback, value == nil and "" or tostring(value))
-                        end
-                    end
-                end,
-            })
-        end)
-
-        if ok then
-            option = result
-        else
-            warn("[Meizu Hub] Dropdown failed:", elementPath, tostring(result))
-            local initial
-            if isMulti then
-                initial = {}
-            else
-                initial = type(desc2.Default) == "string" and desc2.Default or nil
-            end
-
-            option = {
-                Value = initial,
-                SetValue = function(self, value)
-                    self.Value = value
-                end,
-            }
-        end
-
-        function handle:Get(_self)
-            return option.Value
-        end
-
-        function handle:Set(_self, value)
-            pcall(function()
-                option:SetValue(value)
-            end)
-        end
-
-        function handle:Destroy()
-            DestroyOption(option)
-        end
-
-        -- Compatibility target for Chilli's fn6(). It intentionally only
-        -- scans the Section container, never the whole window.
-        handle.Instance = fluentSection and fluentSection.Container or nil
-
-        HandleByPath[elementPath] = handle
-        return handle
-    end
-
-    function section:CreateDropdown(desc2)
-        return MakeDropdown(desc2, false)
-    end
-
-    function section:CreateMultiDropdown(desc2)
-        return MakeDropdown(desc2, true)
-    end
-
-    -- ---------- INPUT ----------
-    function section:CreateInput(desc2)
-        desc2 = type(desc2) == "table" and desc2 or {}
-
-        local name2 = tostring(desc2.Name or "Input")
-        local elementPath = path .. " > " .. name2
-        local flag = EnsureFlag(elementPath)
-        local userCallback = desc2.Callback
-        local handle = { Path = elementPath, Flag = flag }
-        local option
-
-        local ok, result = pcall(function()
-            return GetTarget():AddInput(flag, {
-                Title = desc2.SubOf and ("   └ " .. name2) or name2,
-                Description = desc2.Note,
-                Placeholder = desc2.Placeholder,
-                Default = desc2.Default,
-                MaxLength = tonumber(desc2.MaxLength),
-                Callback = function(value)
-                    if type(userCallback) == "function" then
-                        pcall(userCallback, tostring(value or ""))
-                    end
-                end,
-            })
-        end)
-
-        if ok then
-            option = result
-        else
-            warn("[Meizu Hub] Input failed:", elementPath, tostring(result))
-            option = {
-                Value = tostring(desc2.Default or ""),
-                SetValue = function(self, value)
-                    self.Value = tostring(value or "")
-                end,
-            }
-        end
-
-        function handle:Get(_self)
-            return tostring(option.Value or "")
-        end
-
-        function handle:Set(_self, value)
-            pcall(function()
-                option:SetValue(tostring(value or ""))
-            end)
-        end
-
-        function handle:Destroy()
-            DestroyOption(option)
-        end
-
+        function handle:GetQuickPath() return elementPath end
         handle.State = handle
         handle.Instance = fluentSection and fluentSection.Container or nil
         HandleByPath[elementPath] = handle
         return handle
     end
 
-    -- ---------- TEXT / LABEL ----------
-    function section:CreateText(desc2)
-        return AddCompatRow(section, desc2)
+    function section:CreateToggle(desc2)
+        desc2 = type(desc2) == "table" and desc2 or {}
+        local name2 = tostring(desc2.Name or "Toggle")
+        local elementPath = path .. " > " .. name2
+        local flag = EnsureFlag(elementPath)
+        local userCallback = desc2.Callback
+        local handle
+        local option = safeOption(target.AddToggle, flag, {
+            Title = desc2.SubOf and ("   └ " .. name2) or name2,
+            Description = desc2.Note,
+            Default = desc2.Default == true,
+            Callback = function(value)
+                if handle and value == true and handle._group then
+                    for _, other in ipairs(handle._group.Members) do
+                        if other ~= handle and other._Option and type(other._Option.SetValue) == "function" then
+                            pcall(other._Option.SetValue, other._Option, false)
+                        end
+                    end
+                end
+                QueueBrainCallback(userCallback, value == true)
+            end,
+        })
+        if not option then
+            option = { Value = desc2.Default == true, SetValue = function(self,v) self.Value = v==true end }
+        end
+        handle = makeHandle(elementPath, flag, option)
+        function handle:Subscribe(fn)
+            if option and type(option.OnChanged) == "function" then
+                local ok = pcall(option.OnChanged, option, function(v) QueueBrainCallback(fn, v==true) end)
+                if not ok then return {Disconnect=function() end} end
+            end
+            return {Disconnect=function() end}
+        end
+        return handle
     end
 
-    function section:CreateLabel(desc2)
+    function section:CreateButton(desc2)
         desc2 = type(desc2) == "table" and desc2 or {}
-        desc2.__IsLabel = true
+        local name2 = tostring(desc2.Name or "Button")
+        local displayTitle = desc2.ButtonText and (tostring(desc2.ButtonText) .. "  •  " .. name2) or name2
+        local userCallback = desc2.Callback
+        local option = safeOption(target.AddButton, {
+            Title = displayTitle,
+            Description = desc2.Note,
+            Callback = function() QueueBrainCallback(userCallback) end,
+        }) or {}
+        local handle = {}
+        function handle:SetActionText(_, value)
+            if type(option.SetTitle) == "function" then pcall(option.SetTitle, option, tostring(value or "")) end
+        end
+        function handle:Destroy() if type(option.Destroy)=="function" then pcall(option.Destroy,option) end end
+        handle.Instance = fluentSection and fluentSection.Container or nil
+        return handle
+    end
+
+    function section:CreateSlider(desc2)
+        desc2 = type(desc2) == "table" and desc2 or {}
+        local name2 = tostring(desc2.Name or "Slider")
+        local elementPath = path .. " > " .. name2
+        local flag = EnsureFlag(elementPath)
+        local userCallback = desc2.Callback
+        local increment = tonumber(desc2.Increment) or 1
+        local rounding = increment < 0.1 and 2 or (increment < 1 and 1 or 0)
+        local minV = tonumber(desc2.Min) or 0
+        local maxV = tonumber(desc2.Max) or 100
+        local defV = tonumber(desc2.Default)
+        if defV == nil then defV = minV end
+        local option = safeOption(target.AddSlider, flag, {
+            Title = desc2.SubOf and ("   └ " .. name2) or name2,
+            Description = desc2.Note,
+            Min = minV, Max = maxV, Default = defV, Rounding = rounding,
+            Callback = function(value) QueueBrainCallback(userCallback, tonumber(value) or 0) end,
+        }) or { Value=defV, SetValue=function(self,v) self.Value=tonumber(v) or defV end }
+        return makeHandle(elementPath, flag, option)
+    end
+
+    local function dropdown(desc2, multi)
+        desc2 = type(desc2) == "table" and desc2 or {}
+        local name2 = tostring(desc2.Name or "Dropdown")
+        local elementPath = path .. " > " .. name2
+        local flag = EnsureFlag(elementPath)
+        local userCallback = desc2.Callback
+        local values = type(desc2.Options)=="table" and desc2.Options or {}
+        local option = safeOption(target.AddDropdown, flag, {
+            Title = desc2.SubOf and ("   └ " .. name2) or name2,
+            Description = desc2.Note, Values = values, Default = desc2.Default, Multi = multi,
+            Callback = function(value)
+                QueueBrainCallback(userCallback, multi and (type(value)=="table" and value or {}) or tostring(value or ""))
+            end,
+        }) or { Value = multi and {} or desc2.Default, SetValue=function(self,v) self.Value=v end }
+        return makeHandle(elementPath, flag, option)
+    end
+    function section:CreateDropdown(desc2) return dropdown(desc2, false) end
+    function section:CreateMultiDropdown(desc2) return dropdown(desc2, true) end
+
+    function section:CreateInput(desc2)
+        desc2 = type(desc2) == "table" and desc2 or {}
+        local name2 = tostring(desc2.Name or "Input")
+        local elementPath = path .. " > " .. name2
+        local flag = EnsureFlag(elementPath)
+        local option = safeOption(target.AddInput, flag, {
+            Title = desc2.SubOf and ("   └ " .. name2) or name2,
+            Description = desc2.Note, Placeholder = desc2.Placeholder, Default = desc2.Default,
+            MaxLength = tonumber(desc2.MaxLength),
+            Callback = function(value) QueueBrainCallback(desc2.Callback, tostring(value or "")) end,
+        }) or {Value=tostring(desc2.Default or ""),SetValue=function(self,v)self.Value=tostring(v or "")end}
+        return makeHandle(elementPath, flag, option)
+    end
+
+    function section:CreateText(desc2) return AddCompatRow(section, desc2) end
+    function section:CreateLabel(desc2)
+        desc2 = type(desc2)=="table" and desc2 or {}; desc2.__IsLabel=true
         return AddCompatRow(section, desc2)
     end
 
@@ -1218,17 +840,7 @@ Engine bên dưới dựng lại toàn bộ hệ đó trên Fluent, quy đổi �
 
 local function CreateCompatCanvas(section, desc)
     desc = type(desc) == "table" and desc or {}
-    local container = nil
-    if type(section.FluentSection) == "table" then
-        for _, key in ipairs({ "Container", "ContainerFrame", "ScrollFrame", "Group" }) do
-            local value = rawget(section.FluentSection, key)
-            if typeof(value) == "Instance" and value:IsA("GuiObject") then
-                container = value
-                break
-            end
-        end
-    end
-    container = container or GetTabContainer(section.FluentTab)
+    local container = GetTabContainer(section.FluentTab)
 
     local handle = {
         Name = desc.Name,
@@ -1747,6 +1359,77 @@ do
         end
         return section
     end
+end
+
+-- ===================== LANGUAGE =====================
+local LanguageFile = "MeizuHub/language.json"
+local UILanguage = "vi"
+local LanguageMap = {
+    vi = {
+        ["Farm"]="Farm", ["Steal"]="Chiếm trứng", ["Event"]="Sự kiện", ["Player"]="Người chơi",
+        ["Predictor"]="Dự đoán", ["Progress"]="Tiến trình", ["Server"]="Máy chủ", ["Misc"]="Khác", ["Discord"]="Discord",
+        ["Dr Scramble Mech (New)"]="Dr Scramble Mech (Mới)", ["Auto Steal"]="Tự động lấy trứng", ["Auto Place Egg"]="Tự động đặt trứng",
+        ["Auto Treadmill"]="Tự động máy chạy", ["Auto Hatch & Equip"]="Tự động ấp & trang bị", ["Auto Sell"]="Tự động bán",
+        ["Auto Fuse Machine"]="Tự động hợp nhất", ["Auto Favorite"]="Tự động yêu thích", ["Performance"]="Hiệu năng",
+        ["Settings"]="Cài đặt", ["Language"]="Ngôn ngữ", ["Community"]="Cộng đồng", ["Auto Progression"]="Tự động tiến trình",
+        ["Movement"]="Di chuyển", ["Character"]="Nhân vật", ["Combat"]="Chiến đấu", ["ESP"]="ESP", ["English"]="Tiếng Anh", ["Vietnamese"]="Tiếng Việt",
+        ["FPS Cap"]="Giới hạn FPS", ["Server Hop"]="Đổi máy chủ", ["Auto Load Script"]="Tự tải lại script", ["Auto Claim"]="Tự động nhận",
+        ["Auto Claim Index"]="Tự động nhận phần thưởng", ["Auto Equip Best"]="Tự động trang bị tốt nhất", ["Auto Favorite Pet"]="Tự động yêu thích pet",
+        ["Favorite Pets Now"]="Yêu thích pet ngay", ["Favorite Rule"]="Quy tắc yêu thích", ["Favorite Min Rarity"]="Độ hiếm tối thiểu",
+        ["Favorite Mutations"]="Đột biến yêu thích", ["Always Favorite Species"]="Luôn yêu thích loài", ["Auto Favorite Equipped"]="Luôn yêu thích pet đang trang bị",
+        ["Auto Unfavorite Equipped"]="Tự bỏ yêu thích pet đang trang bị", ["Favorite Equipped Now"]="Yêu thích pet đang trang bị",
+        ["Unfavorite Equipped Now"]="Bỏ yêu thích pet đang trang bị", ["Egg Predictor"]="Dự đoán trứng", ["Fuse Predictor"]="Dự đoán hợp nhất",
+        ["Discord Webhook"]="Discord Webhook", ["Safe Carry"]="Mang an toàn", ["Target Areas"]="Khu vực mục tiêu",
+        ["Auto Buy Scrambled"]="Tự động mua Scrambled", ["Mutation Priority"]="Ưu tiên đột biến",
+        ["Mutation Target Eggs"]="Trứng mục tiêu đột biến", ["Mutation Min Rarity"]="Độ hiếm đột biến tối thiểu",
+        ["Mutation Min Value"]="Giá trị đột biến tối thiểu", ["Min Mutation Value"]="Giá trị đột biến tối thiểu",
+        ["Auto Sell Pet"]="Tự động bán pet", ["Sell Rule"]="Quy tắc bán", ["Min Sell Rarity"]="Độ hiếm bán tối thiểu",
+        ["Auto Upgrade Treadmill"]="Tự động nâng cấp máy chạy", ["Stay On Treadmill"]="Luôn ở trên máy chạy",
+        ["Place Egg Rule"]="Quy tắc đặt trứng", ["Place Egg Order"]="Thứ tự đặt trứng", ["Place Rarities"]="Độ hiếm trứng đặt",
+        ["Auto Hatch"]="Tự động ấp", ["Auto Equip"]="Tự động trang bị", ["Auto Equip Best"]="Tự động trang bị tốt nhất",
+        ["Chase Settings"]="Cài đặt truy đuổi", ["Steal Settings"]="Cài đặt lấy trứng", ["Anti Guard"]="Chống bảo vệ",
+        ["Sort By"]="Sắp xếp theo", ["Preview Card"]="Xem trước thẻ",
+    },
+    en = {},
+}
+for k,v in pairs(LanguageMap.vi) do LanguageMap.en[k]=k end
+local function LoadLanguagePreference()
+    if type(isfile)=="function" and type(readfile)=="function" and isfile(LanguageFile) then
+        local ok,data=pcall(readfile,LanguageFile)
+        if ok and type(data)=="string" then
+            local ok2,obj=pcall(function() return game:GetService("HttpService"):JSONDecode(data) end)
+            if ok2 and type(obj)=="table" and (obj.Language=="vi" or obj.Language=="en") then UILanguage=obj.Language end
+        end
+    end
+end
+LoadLanguagePreference()
+local function SaveLanguagePreference(value)
+    UILanguage=(value=="English") and "en" or "vi"
+    if type(writefile)=="function" then
+        pcall(function()
+            if type(isfolder)=="function" and type(makefolder)=="function" and not isfolder("MeizuHub") then makefolder("MeizuHub") end
+            writefile(LanguageFile,game:GetService("HttpService"):JSONEncode({Language=UILanguage}))
+        end)
+    end
+end
+local function ApplyLanguage(root)
+    if not root then return end
+    pcall(function()
+        for _,obj in ipairs(root:GetDescendants()) do
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+                local original=obj:GetAttribute("MeizuOriginalText")
+                if original==nil then original=obj.Text; obj:SetAttribute("MeizuOriginalText",original) end
+                local dict=LanguageMap[UILanguage] or LanguageMap.en
+                if dict[original] then
+                    obj.Text=dict[original]
+                elseif string.sub(original,1,5)=="   └ " and dict[string.sub(original,6)] then
+                    obj.Text="   └ "..dict[string.sub(original,6)]
+                else
+                    obj.Text=original
+                end
+            end
+        end
+    end)
 end
 
 -- ===================== TAB + WINDOW =====================
@@ -2427,8 +2110,8 @@ do
 		--   Steal -> Auto Steal
 		--   Event -> Dr Scramble Mech
 		--
-		-- defaultTab là Farm; Steal/Event là các tab thật riêng biệt.
-		-- Logic/handles phía dưới vẫn giữ nguyên, chỉ đổi parent UI.
+		-- defaultTab vẫn là tab Farm để SaveManager/Finalize và thứ tự tab
+		-- cũ không bị phá. Các tab Steal/Event chỉ là "vỏ" mới cho section.
 		-- ================================================================
 		local stealTab = v2:CreateTab({ Name = "Steal", SectionsExpanded = true })
 		local eventTab = v2:CreateTab({ Name = "Event", SectionsExpanded = true })
@@ -27067,7 +26750,18 @@ end
 
 local v9
 v9 = v2:CreateTab({ Name = "Misc", SectionsExpanded = true })
-local v10
+	local languageSection = v9:CreateSection({ Name = "Settings", Expanded = true })
+	languageSection:CreateDropdown({
+		Name = "Language",
+		Note = "Choose interface language",
+		Options = { "Vietnamese", "English" },
+		Default = UILanguage == "en" and "English" or "Vietnamese",
+		Callback = function(value)
+			SaveLanguagePreference(value)
+			ApplyLanguage(Fluent.GUI)
+		end,
+	})
+	local v10
 v10 = v9:CreateSection({ Name = "Performance", Expanded = true })
 local flag = false
 
@@ -31643,6 +31337,9 @@ do
 	end)
 end
 
+BrainBuilding = false
+FlushBrainCallbacks()
+
 ----------------------------------------------------------------------
 -- [PHẦN D] KẾT THÚC MEIZU
 ----------------------------------------------------------------------
@@ -31843,24 +31540,19 @@ do
             BorderSizePixel = 0,
             Position = lastPosition,
             Size = TOGGLE_SIZE,
-            Image = Assets.Logo, -- ảnh PNG từ link
+            Image = Assets.Logo, -- icon cố định Meizu
             AutoButtonColor = true,
         })
         Create("UICorner", { Parent = ToggleButton })
-
-        -- Nếu không tải được ảnh thì hiện chữ "M" để nút vẫn nhìn thấy và bấm được
-        if Assets.Logo == "" then
-            Create("TextLabel", {
-                Name = "Fallback",
-                Parent = ToggleButton,
-                BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 1, 0),
-                Font = Enum.Font.GothamBold,
-                Text = "M",
-                TextColor3 = Color3.fromRGB(255, 255, 255),
-                TextSize = 24,
-            })
-        end
+        local launcherScale = Instance.new("UIScale")
+        launcherScale.Scale = 1
+        launcherScale.Parent = ToggleButton
+        table.insert(ToggleConnections, ToggleButton.MouseEnter:Connect(function()
+            SmoothTween(launcherScale, 0.18, {Scale = 1.06}, Enum.EasingStyle.Quint)
+        end))
+        table.insert(ToggleConnections, ToggleButton.MouseLeave:Connect(function()
+            SmoothTween(launcherScale, 0.22, {Scale = 1}, Enum.EasingStyle.Quint)
+        end))
 
         -- Bấm = mở/đóng menu; kéo = di chuyển nút
         local dragging, dragStart, startPos, moved = false, nil, nil, false
@@ -31999,6 +31691,11 @@ do
     ------------------------------------------------------------------
     -- 10. FLUENT NOTIFY: BÁO ĐÃ TẢI XONG, SẴN SÀNG CHẠY
     ------------------------------------------------------------------
+    task.defer(function()
+        task.wait(0.15)
+        ApplyLanguage(Fluent.GUI)
+    end)
+
     Fluent:Notify({
         Title      = CONFIG.Name,
         Content    = "Loading Successfully! Meizu Hub.",
