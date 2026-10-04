@@ -1,3 +1,6 @@
+-- Primeval Earth Hub
+-- UI layer: MeizuLibrary
+-- Core logic: giữ nguyên từ UpdatePrimeval gốc, chỉ thay lớp giao diện.
 
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -9,26 +12,270 @@ local Camera = workspace.CurrentCamera
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
+local TextService = game:GetService("TextService")
+
+local MEIZU_LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua"
 
 ----------------------------------------------------
--- 1. LOAD MEIZU LIBRARY
+-- LOAD HUD LOADER — đồng bộ theo tiến trình thật
 ----------------------------------------------------
-local MEIZU_LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuLibrary.lua"
+local LoaderColors = {
+    Main             = Color3.fromRGB(0, 0, 0),
+    Topic            = Color3.fromRGB(200, 200, 200),
+    Title            = Color3.fromRGB(255, 255, 255),
+    LoaderBackground = Color3.fromRGB(40, 40, 40),
+    LoaderSplash     = Color3.fromRGB(3, 252, 3),
+    Error            = Color3.fromRGB(255, 90, 90),
+}
 
+local function GetGuiParent()
+    if type(gethui) == "function" then
+        local ok, gui = pcall(gethui)
+        if ok and gui then return gui end
+    end
+    return game:GetService("CoreGui")
+end
+
+local GuiParent = GetGuiParent()
+
+-- Cleanup những instance của bản Primeval/Meizu trước đó để re-run không chồng UI.
+pcall(function()
+    for _, child in ipairs(GuiParent:GetChildren()) do
+        if child:IsA("ScreenGui") then
+            if child.Name == "MeizuLoader"
+            or child.Name == "PrimevalFOVOverlay"
+            or child.Name:match("^MeizuLibrary") then
+                child:Destroy()
+            end
+        end
+    end
+end)
+
+pcall(function()
+    RunService:UnbindFromRenderStep("AimbotSystem")
+end)
+
+local function Create(className, properties)
+    local obj = Instance.new(className)
+    local parent
+    for prop, value in pairs(properties or {}) do
+        if prop == "Parent" then
+            parent = value
+        else
+            obj[prop] = value
+        end
+    end
+    if parent then obj.Parent = parent end
+    return obj
+end
+
+local function AddCorner(radius, parent)
+    return Create("UICorner", {
+        CornerRadius = UDim.new(0, radius),
+        Parent = parent,
+    })
+end
+
+local function LoaderTween(object, duration, properties)
+    local tw = TweenService:Create(
+        object,
+        TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        properties
+    )
+    tw:Play()
+    return tw
+end
+
+local LoaderGui = Create("ScreenGui", {
+    Name = "MeizuLoader",
+    ResetOnSpawn = false,
+    IgnoreGuiInset = true,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    DisplayOrder = 100000,
+    Parent = GuiParent,
+})
+
+-- Chặn input vào UI phía sau trong lúc loader chạy.
+Create("Frame", {
+    Name = "InputBlocker",
+    BackgroundTransparency = 1,
+    Active = true,
+    Size = UDim2.fromScale(1, 1),
+    ZIndex = 1,
+    Parent = LoaderGui,
+})
+
+local LoaderFrame = Create("Frame", {
+    Name = "Main",
+    Parent = LoaderGui,
+    BackgroundColor3 = LoaderColors.Main,
+    BorderSizePixel = 0,
+    ClipsDescendants = true,
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.new(0.5, 0, 0.5, 0),
+    Size = UDim2.new(0, 0, 0, 0),
+    ZIndex = 10,
+})
+AddCorner(12, LoaderFrame)
+
+local LoaderStroke = Create("UIStroke", {
+    Color = LoaderColors.LoaderSplash,
+    Thickness = 1.25,
+    Transparency = 0.25,
+    Parent = LoaderFrame,
+})
+
+local LoaderLogo = Create("ImageLabel", {
+    Name = "Logo",
+    Parent = LoaderFrame,
+    BackgroundTransparency = 1,
+    Image = "",
+    Position = UDim2.new(0, 15, 0, 10),
+    Size = UDim2.new(0, 50, 0, 50),
+    ZIndex = 11,
+})
+AddCorner(25, LoaderLogo)
+
+Create("TextLabel", {
+    Name = "HubName",
+    Parent = LoaderFrame,
+    BackgroundTransparency = 1,
+    Text = "Primeval Earth Hub",
+    Position = UDim2.new(0, 75, 0, 10),
+    Size = UDim2.new(0, 240, 0, 50),
+    Font = Enum.Font.GothamBold,
+    TextColor3 = LoaderColors.Title,
+    TextSize = 16,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 11,
+})
+
+local LoaderTitle = Create("TextLabel", {
+    Name = "Title",
+    Parent = LoaderFrame,
+    TextTransparency = 1,
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 15, 0, 66),
+    Size = UDim2.new(1, -30, 0, 18),
+    Font = Enum.Font.Gotham,
+    RichText = true,
+    Text = "<b>Đang khởi tạo Primeval...</b>",
+    TextColor3 = LoaderColors.Title,
+    TextSize = 13,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 11,
+})
+
+local ProgressBG = Create("Frame", {
+    Name = "BG",
+    Parent = LoaderFrame,
+    AnchorPoint = Vector2.new(0.5, 0),
+    BackgroundTransparency = 1,
+    BackgroundColor3 = LoaderColors.LoaderBackground,
+    BorderSizePixel = 0,
+    Position = UDim2.new(0.5, 0, 0, 90),
+    Size = UDim2.new(0.9, 0, 0, 14),
+    ZIndex = 11,
+})
+AddCorner(7, ProgressBG)
+
+local ProgressBar = Create("Frame", {
+    Name = "Progress",
+    Parent = ProgressBG,
+    BackgroundColor3 = LoaderColors.LoaderSplash,
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    Size = UDim2.new(0, 0, 1, 0),
+    ZIndex = 12,
+})
+AddCorner(7, ProgressBar)
+
+local PercentLabel = Create("TextLabel", {
+    Name = "Percent",
+    Parent = LoaderFrame,
+    BackgroundTransparency = 1,
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -20, 0, 108),
+    Size = UDim2.new(0, 52, 0, 18),
+    Font = Enum.Font.GothamBold,
+    Text = "0%",
+    TextColor3 = LoaderColors.LoaderSplash,
+    TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Right,
+    ZIndex = 11,
+})
+
+local StepLabel = Create("TextLabel", {
+    Name = "StepLabel",
+    Parent = LoaderFrame,
+    BackgroundTransparency = 1,
+    AnchorPoint = Vector2.new(0, 0),
+    Position = UDim2.new(0, 15, 0, 108),
+    Size = UDim2.new(1, -85, 0, 18),
+    Font = Enum.Font.Gotham,
+    Text = "Đang chuẩn bị...",
+    TextColor3 = LoaderColors.Topic,
+    TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 11,
+})
+
+local LoaderSteps = {
+    {5,  "Đã load xong: Core Services"},
+    {15, "Đã load xong: MeizuLibrary"},
+    {25, "Đã load xong: State + FOV"},
+    {40, "Đã load xong: Aimbot + ESP"},
+    {52, "Đã load xong: Movement + Fly"},
+    {66, "Đã dựng xong: Tab Di Chuyển + Teleport"},
+    {80, "Đã dựng xong: ESP + PVP + Fossils + Utility"},
+    {94, "Đã load xong: Runtime + Background Systems"},
+    {100, "Đã load xong toàn bộ Primeval Earth Hub"},
+}
+
+local LoaderStageIndex = 0
+local LoaderComplete = false
+
+local function UpdateLoader(percent, message)
+    percent = math.clamp(tonumber(percent) or 0, 0, 100)
+    PercentLabel.Text = string.format("%d%%", math.floor(percent))
+    StepLabel.Text = "✓ " .. tostring(message or "")
+    LoaderTween(ProgressBar, 0.18, {Size = UDim2.new(percent / 100, 0, 1, 0)})
+end
+
+local function LoaderStage(index)
+    local data = LoaderSteps[index]
+    if not data then return end
+    if index <= LoaderStageIndex then return end
+    LoaderStageIndex = index
+    UpdateLoader(data[1], data[2])
+end
+
+LoaderTween(LoaderFrame, 0.25, {Size = UDim2.new(0, 346, 0, 132)})
+task.defer(function()
+    LoaderTween(LoaderTitle, 0.25, {TextTransparency = 0})
+    LoaderTween(ProgressBG, 0.25, {BackgroundTransparency = 0})
+    LoaderTween(ProgressBar, 0.25, {BackgroundTransparency = 0})
+end)
+
+LoaderStage(1)
+
+----------------------------------------------------
+-- LOAD MEIZU LIBRARY — chỉ load source, chưa tạo Window
+----------------------------------------------------
 local function LoadMeizuLibrary()
     local okHttp, source = pcall(function()
         return game:HttpGet(MEIZU_LIBRARY_URL, true)
     end)
     if not okHttp or type(source) ~= "string" or source == "" then
-        error("[Primeval] Không thể tải MeizuLibrary: " .. tostring(source))
+        error("[Primeval] Khong the tai MeizuLibrary: " .. tostring(source))
     end
 
-    local loader, compileErr = loadstring(source)
-    if type(loader) ~= "function" then
+    local chunk, compileErr = loadstring(source)
+    if type(chunk) ~= "function" then
         error("[Primeval] MeizuLibrary compile error: " .. tostring(compileErr))
     end
 
-    local okLoad, library = pcall(loader)
+    local okLoad, library = pcall(chunk)
     if not okLoad or type(library) ~= "table" then
         error("[Primeval] MeizuLibrary load error: " .. tostring(library))
     end
@@ -36,10 +283,19 @@ local function LoadMeizuLibrary()
     return library
 end
 
-local MeizuLibrary = LoadMeizuLibrary()
+local okLibrary, MeizuLibraryOrError = pcall(LoadMeizuLibrary)
+if not okLibrary then
+    UpdateLoader(100, "Lỗi: Không thể load MeizuLibrary")
+    task.wait(0.4)
+    if LoaderGui then LoaderGui:Destroy() end
+    error(MeizuLibraryOrError)
+end
+
+local MeizuLibrary = MeizuLibraryOrError
+LoaderStage(2)
 
 ----------------------------------------------------
--- 2. PRIMEVAL GLOBAL STATE / CORE SETTINGS
+-- PRIMEVAL STATE
 ----------------------------------------------------
 _G.AutoDrinkRunning = false
 _G.AutoRestRunning = false
@@ -66,48 +322,24 @@ local EspSettings = {
 }
 
 local hasTargetInFOV = false
+local AmmoStatusLabel
+local QuestStatusLabel
+local lowServerBtn
+local noclipConn = nil
 
 ----------------------------------------------------
--- 3. MEIZU WINDOW
+-- FOV OVERLAY — không phải menu
 ----------------------------------------------------
-local Window = MeizuLibrary:CreateWindow({
-    Title = "Meizu Hub",
-    SubTitle = "Primeval Earth • NTTP1721",
-    Theme = "Dark",
-    Accent = Color3.fromRGB(99, 102, 241),
-    ToggleKeybind = Enum.KeyCode.RightControl,
-    ToggleUIButton = true,
-    Size = UDim2.fromOffset(650, 470),
-    Language = "vi",
-})
-
-if not Window then
-    error("[Meizu] Không Gửi Tạo Thành Công.")
-end
-
-----------------------------------------------------
--- 4. FOV OVERLAY (CHỨC NĂNG AIM, KHÔNG PHẢI MENU UI)
-----------------------------------------------------
-local function GetGuiParent()
-    if type(gethui) == "function" then
-        local ok, ui = pcall(gethui)
-        if ok and ui then return ui end
-    end
-    return game:GetService("CoreGui")
-end
-
-local oldFovGui = GetGuiParent():FindFirstChild("PrimevalFOVOverlay")
-if oldFovGui then
-    pcall(function() oldFovGui:Destroy() end)
-end
+local oldFovGui = GuiParent:FindFirstChild("PrimevalFOVOverlay")
+if oldFovGui then pcall(function() oldFovGui:Destroy() end) end
 
 local FOVGui = Instance.new("ScreenGui")
 FOVGui.Name = "PrimevalFOVOverlay"
 FOVGui.ResetOnSpawn = false
 FOVGui.IgnoreGuiInset = true
-FOVGui.DisplayOrder = 9998
 FOVGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-FOVGui.Parent = GetGuiParent()
+FOVGui.DisplayOrder = 9998
+FOVGui.Parent = GuiParent
 
 local FOVCircle = Instance.new("Frame")
 FOVCircle.Name = "FOVCircle"
@@ -129,73 +361,12 @@ FOVStroke.Thickness = 1
 FOVStroke.Transparency = 0.2
 FOVStroke.Parent = FOVCircle
 
-----------------------------------------------------
--- UI ADAPTERS
--- Meizu trả element object thay vì trả TextButton trực tiếp.
--- Các adapter dưới đây chỉ dùng API/frame mà library đã expose.
-----------------------------------------------------
-local function SetButtonTitle(element, text)
-    if not element or not element.Frame or not element.Frame.Parent then return end
-    local title
-    for _, obj in ipairs(element.Frame:GetDescendants()) do
-        if obj:IsA("TextLabel") then
-            title = obj
-            break
-        end
-    end
-    if title then title.Text = tostring(text) end
-end
-
-local function SetParagraphContent(element, text, textColor)
-    if not element or not element.Frame or not element.Frame.Parent then return end
-    local labels = {}
-    for _, obj in ipairs(element.Frame:GetDescendants()) do
-        if obj:IsA("TextLabel") then
-            table.insert(labels, obj)
-        end
-    end
-    local content = labels[2] or labels[1]
-    if content then
-        content.Text = tostring(text)
-        if textColor then
-            content.TextColor3 = textColor
-        end
-    end
-end
-
-local function RemoveDestroyedElements(tab)
-    if not tab or type(tab._Elements) ~= "table" then return end
-    for i = #tab._Elements, 1, -1 do
-        local element = tab._Elements[i]
-        if not element or not element.Frame or not element.Frame.Parent then
-            table.remove(tab._Elements, i)
-        end
-    end
-end
-
-local function SafeFeatureNotify(title, content)
-    pcall(function()
-        MeizuLibrary:Notify({
-            Title = title,
-            Content = content,
-            Duration = 3,
-        })
-    end)
-end
-
--- Đồng bộ trạng thái FOV khi UI/library bị đóng hoàn toàn.
-task.spawn(function()
-    while FOVGui and FOVGui.Parent and not MeizuLibrary.Destroyed do
-        task.wait(0.5)
-    end
-    if FOVGui and FOVGui.Parent then
-        FOVGui:Destroy()
-    end
-end)
+LoaderStage(3)
 
 ----------------------------------------------------
--- 5. LOGIC ESP, AIMBOT, AUTO ATTACK & AUTO NHẶT ĐẠN
+-- 3. LOGIC ESP, AIMBOT, AUTO ATTACK & AUTO NHẶT ĐẠN
 ----------------------------------------------------
+
 -- 3. LOGIC ESP, AIMBOT, AUTO ATTACK & AUTO NHẶT ĐẠN
 ----------------------------------------------------
 local targetAmmoCFrame = CFrame.new(637.3, 94.3, -56.5)
@@ -368,6 +539,8 @@ RunService:BindToRenderStep("AimbotSystem", Enum.RenderPriority.Camera.Value + 1
     end
 end)
 
+LoaderStage(4)
+
 local function CreateESP(player)
     if player == LocalPlayer then return end
 
@@ -437,6 +610,8 @@ for _, p in ipairs(Players:GetPlayers()) do
     CreateESP(p)
 end
 Players.PlayerAdded:Connect(CreateESP)
+
+LoaderStage(4)
 
 local flyEnabled = false
 local flySpeed = 50
@@ -525,15 +700,14 @@ LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 ----------------------------------------------------
+-- 4. KHỞI TẠO TABS VÀ CHỨC NĂNG
 ----------------------------------------------------
--- 6. KHỞI TẠO TABS VÀ CHỨC NĂNG QUA MEIZULIBRARY
-----------------------------------------------------
-local MovementTab = Window:CreateTab("Di Chuyen", nil, 1)
-local TeleportTab = Window:CreateTab("Dich Chuyen", nil, 2)
-local EspTab = Window:CreateTab("Nhin Xuyen", nil, 3)
-local PvpTab = Window:CreateTab("PVP", nil, 4)
-local FossilsTab = Window:CreateTab("Fossils", nil, 5)
-local VisualsTab = Window:CreateTab("Cai Dat", nil, 6)
+local MovementTab = CreateTab("Di Chuyen", "⚡")
+local TeleportTab = CreateTab("Dich Chuyen", "📍")
+local EspTab = CreateTab("Nhin Xuyen", "👁️")
+local PvpTab = CreateTab("PVP", "⚔")
+local FossilsTab = CreateTab("Fossils", "🦴")
+local VisualsTab = CreateTab("Cai Dat", "⚙️")
 
 local targetWalkSpeed = 16
 RunService.Stepped:Connect(function()
@@ -548,12 +722,165 @@ RunService.Stepped:Connect(function()
     end)
 end)
 
+
+
+----------------------------------------------------
+-- 4. MEIZU UI — dựng hoàn chỉnh phía sau Loader HUD
+----------------------------------------------------
+local Window = MeizuLibrary:CreateWindow({
+    Title = "Primeval Earth Hub",
+    SubTitle = "UpdatePrimeval • MeizuLibrary",
+    Theme = "Dark",
+    Accent = Color3.fromRGB(99, 102, 241),
+    ToggleKeybind = Enum.KeyCode.RightControl,
+    ToggleUIButton = true,
+    ToggleImage = "https://i.ibb.co/S7rpHJJN/meizuxp.png",
+    Size = UDim2.fromOffset(650, 470),
+})
+
+local function FixParagraphElement(element, defaultHeight)
+    if not element or not element.Frame then return element end
+    local frame = element.Frame
+    local fallbackHeight = defaultHeight or 58
+
+    local titleLabel = element.TitleLabel
+    local contentLabel = element.ContentLabel
+    if not titleLabel or not contentLabel then
+        local labels = {}
+        for _, obj in ipairs(frame:GetDescendants()) do
+            if obj:IsA("TextLabel") then
+                table.insert(labels, obj)
+                obj.Visible = true
+            end
+        end
+        titleLabel = titleLabel or labels[1]
+        contentLabel = contentLabel or labels[2]
+    end
+
+    local function Reflow()
+        if not frame or not frame.Parent then return end
+        pcall(function()
+            frame.Visible = true
+            frame.ClipsDescendants = false
+            frame.AutomaticSize = Enum.AutomaticSize.None
+        end)
+
+        if not titleLabel or not titleLabel.Parent then return end
+
+        local width = math.max(120, frame.AbsoluteSize.X - 24)
+        if width <= 120 then
+            width = 430
+        end
+
+        local titleHeight = 18
+        local contentHeight = 0
+
+        pcall(function()
+            titleLabel.Visible = true
+            titleLabel.TextWrapped = true
+            titleLabel.AutomaticSize = Enum.AutomaticSize.None
+            titleHeight = math.max(18, math.ceil(
+                TextService:GetTextSize(tostring(titleLabel.Text or ""), Enum.Font.GothamBold, 13, Vector2.new(width, 1000)).Y
+            ))
+            titleLabel.Size = UDim2.new(1, 0, 0, titleHeight)
+        end)
+
+        if contentLabel and contentLabel.Parent then
+            pcall(function()
+                contentLabel.Visible = true
+                contentLabel.TextWrapped = true
+                contentLabel.AutomaticSize = Enum.AutomaticSize.None
+                if tostring(contentLabel.Text or "") ~= "" then
+                    contentHeight = math.max(16, math.ceil(
+                        TextService:GetTextSize(tostring(contentLabel.Text or ""), Enum.Font.Gotham, 12, Vector2.new(width, 1000)).Y
+                    ))
+                end
+                contentLabel.Size = UDim2.new(1, 0, 0, contentHeight)
+            end)
+        end
+
+        local total = 10 + titleHeight + (contentLabel and 4 or 0) + contentHeight + 10
+        total = math.max(fallbackHeight, total, 40)
+        frame.Size = UDim2.new(1, 0, 0, total)
+    end
+
+    Reflow()
+    task.defer(Reflow)
+    pcall(function()
+        frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            task.defer(Reflow)
+        end)
+    end)
+
+    if type(element.SetContent) ~= "function" then
+        element.SetContent = function(self, text, textColor)
+            if contentLabel and contentLabel.Parent then
+                contentLabel.Text = tostring(text or "")
+                if textColor then contentLabel.TextColor3 = textColor end
+            end
+            self._Content = tostring(text or "")
+            task.defer(Reflow)
+        end
+    end
+    if type(element.SetTitle) ~= "function" then
+        element.SetTitle = function(self, text)
+            if titleLabel and titleLabel.Parent then
+                titleLabel.Text = tostring(text or "")
+            end
+            task.defer(Reflow)
+        end
+    end
+
+    return element
+end
+
+local function CreateParagraph(tab, cfg, height)
+    local element = tab:CreateParagraph(cfg)
+    return FixParagraphElement(element, height or 58)
+end
+
+local function SetParagraphContent(element, text, textColor)
+    if not element then return end
+    pcall(function()
+        if type(element.SetContent) == "function" then
+            element:SetContent(text, textColor)
+            return
+        end
+        local frame = element.Frame
+        if frame then
+            for _, obj in ipairs(frame:GetDescendants()) do
+                if obj:IsA("TextLabel") and obj ~= frame:FindFirstChild("TitleLabel", true) then
+                    obj.Text = tostring(text or "")
+                    if textColor then obj.TextColor3 = textColor end
+                end
+            end
+        end
+    end)
+end
+
+local function SetAmmoStatus(text)
+    SetParagraphContent(AmmoStatusLabel, text)
+end
+
+local function SetQuestStatus(text, color)
+    SetParagraphContent(QuestStatusLabel, text, color)
+end
+
+local MovementTab = Window:CreateTab("Di Chuyen", nil, 1)
+local TeleportTab = Window:CreateTab("Dich Chuyen", nil, 2)
+local EspTab = Window:CreateTab("Nhin Xuyen", nil, 3)
+local PvpTab = Window:CreateTab("PVP", nil, 4)
+local FossilsTab = Window:CreateTab("Fossils", nil, 5)
+local VisualsTab = Window:CreateTab("Cai Dat", nil, 6)
+
+----------------------------------------------------
+-- TAB DI CHUYEN
+----------------------------------------------------
 MovementTab:CreateSection("Movement")
 MovementTab:CreateSlider({
-    Title = "Tốc Độ Chạy (WalkSpeed)",
-    Min = 16,
-    Max = 200,
-    Default = 16,
+    Title = "Toc Do Di Chuyen",
+    Description = "WalkSpeed",
+    Min = 16, Max = 200, Default = 16,
     Callback = function(value)
         targetWalkSpeed = value
         local char = LocalPlayer.Character
@@ -561,77 +888,65 @@ MovementTab:CreateSlider({
         if hum then hum.WalkSpeed = value end
     end,
 })
-
 MovementTab:CreateSlider({
-    Title = "Nhảy (Jump Power)",
-    Min = 50,
-    Max = 300,
-    Default = 50,
+    Title = "Suc Nhay (Jump Power)",
+    Description = "JumpPower",
+    Min = 50, Max = 300, Default = 50,
     Callback = function(value)
         local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-        local hum = char:FindFirstChildOfClass("Humanoid")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
         if hum then
             hum.UseJumpPower = true
             hum.JumpPower = value
         end
     end,
 })
-
 MovementTab:CreateToggle({
-    Title = "Bat/Tat Bay (Fly)",
+    Title = "Bat/Tat Fly (Bay)",
     Default = false,
     Callback = function(state)
         if state then startFly() else stopFly() end
     end,
 })
-
 MovementTab:CreateSlider({
-    Title = "Tốc Độ Bay (FlySpeed)",
-    Min = 10,
-    Max = 150,
-    Default = 50,
-    Callback = function(value)
-        flySpeed = value
-    end,
+    Title = "Toc Do Fly (Speed)",
+    Description = "Fly speed",
+    Min = 10, Max = 150, Default = 50,
+    Callback = function(value) flySpeed = value end,
 })
-
-local noclipConn = nil
 MovementTab:CreateToggle({
     Title = "Xuyen Tuong (Noclip)",
     Default = false,
     Callback = function(state)
         if state then
-            if noclipConn then
-                pcall(function() noclipConn:Disconnect() end)
-                noclipConn = nil
-            end
+            if noclipConn then pcall(function() noclipConn:Disconnect() end) end
             noclipConn = RunService.Stepped:Connect(function()
-                if LocalPlayer.Character then
-                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.CanCollide = false
-                        end
+                local char = LocalPlayer.Character
+                if char then
+                    for _, part in pairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then part.CanCollide = false end
                     end
                 end
             end)
-        else
-            if noclipConn then
-                noclipConn:Disconnect()
-                noclipConn = nil
-            end
+        elseif noclipConn then
+            noclipConn:Disconnect()
+            noclipConn = nil
         end
     end,
 })
-
+CreateParagraph(MovementTab, {
+    Title = "Thong tin",
+    Content = "Toc do di chuyen, Jump Power, Fly va Noclip.",
+}, 58)
 
 ----------------------------------------------------
 -- TAB TELEPORT
 ----------------------------------------------------
 TeleportTab:CreateSection("Teleport nguoi choi")
-TeleportTab:CreateParagraph({
+CreateParagraph(TeleportTab, {
     Title = "Danh sach nguoi choi",
-    Content = "Chọn người chơi bên dưới để dịch chuyển. Danh sách tự refresh khi người chơi vào/rời server.",
-})
+    Content = "Chon nguoi choi ben duoi de dich chuyen. Danh sach tu refresh khi nguoi choi vao/rời server.",
+}, 72)
 
 local PlayerButtonElements = {}
 
@@ -643,18 +958,12 @@ local function ClearPlayerButtons()
         end
         PlayerButtonElements[i] = nil
     end
-    RemoveDestroyedElements(TeleportTab)
 end
 
 local function AddPlayerButton(plr)
     if plr == LocalPlayer then return end
-
-    local displayName = plr.DisplayName
-    local userName = plr.Name
-    local btnText = "📍 " .. displayName .. " (@" .. userName .. ")"
-
     local element = TeleportTab:CreateButton({
-        Title = btnText,
+        Title = "📍 " .. plr.DisplayName .. " (@" .. plr.Name .. ")",
         Callback = function()
             if plr and plr.Parent == Players and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                 local myChar = LocalPlayer.Character
@@ -665,7 +974,6 @@ local function AddPlayerButton(plr)
             end
         end,
     })
-
     table.insert(PlayerButtonElements, element)
 end
 
@@ -680,112 +988,68 @@ Players.PlayerAdded:Connect(function()
     task.wait(0.15)
     RefreshPlayerList()
 end)
-
 Players.PlayerRemoving:Connect(function()
     task.wait()
     RefreshPlayerList()
 end)
-
 task.defer(RefreshPlayerList)
+
+LoaderStage(6)
 
 ----------------------------------------------------
 -- TAB ESP
 ----------------------------------------------------
 EspTab:CreateSection("ESP")
-EspTab:CreateToggle({
-    Title = "Bat ESP Tong",
-    Default = EspSettings.Enabled,
-    Callback = function(state)
-        EspSettings.Enabled = state
-    end,
-})
-EspTab:CreateToggle({
-    Title = "Hien Ten Nguoi Choi",
-    Default = EspSettings.ShowName,
-    Callback = function(state)
-        EspSettings.ShowName = state
-    end,
-})
-EspTab:CreateToggle({
-    Title = "Hien Thanh Mau (HP)",
-    Default = EspSettings.ShowHealth,
-    Callback = function(state)
-        EspSettings.ShowHealth = state
-    end,
-})
-EspTab:CreateToggle({
-    Title = "Hien Khoang Cach (m)",
-    Default = EspSettings.ShowDistance,
-    Callback = function(state)
-        EspSettings.ShowDistance = state
-    end,
-})
+EspTab:CreateToggle({Title="Bat ESP Tong", Default=EspSettings.Enabled, Callback=function(v) EspSettings.Enabled=v end})
+EspTab:CreateToggle({Title="Hien Ten Nguoi Choi", Default=EspSettings.ShowName, Callback=function(v) EspSettings.ShowName=v end})
+EspTab:CreateToggle({Title="Hien Thanh Mau (HP)", Default=EspSettings.ShowHealth, Callback=function(v) EspSettings.ShowHealth=v end})
+EspTab:CreateToggle({Title="Hien Khoang Cach (m)", Default=EspSettings.ShowDistance, Callback=function(v) EspSettings.ShowDistance=v end})
 
 ----------------------------------------------------
 -- TAB PVP
 ----------------------------------------------------
 PvpTab:CreateSection("Aim / FOV")
 PvpTab:CreateToggle({
-    Title = "Bat Auto Attack (Chi Ban Khi FOV Do)",
-    Default = false,
-    Callback = function(state)
-        _G.AutoAttackRunning = state
-    end,
+    Title="Bat Auto Attack (Chi Bắn Khi FOV Đỏ)", Default=false,
+    Callback=function(state) _G.AutoAttackRunning=state end,
 })
-
 PvpTab:CreateToggle({
-    Title = "Bat Aimbot (Auto Lock)",
-    Default = false,
-    Callback = function(state)
-        AimSettings.Enabled = state
-        FOVCircle.Visible = AimSettings.Enabled and AimSettings.ShowFOV
+    Title="Bat Aimbot (Auto Lock)", Default=false,
+    Callback=function(state)
+        AimSettings.Enabled=state
+        FOVCircle.Visible=AimSettings.Enabled and AimSettings.ShowFOV
     end,
 })
-
 PvpTab:CreateToggle({
-    Title = "Hien Vong FOV",
-    Default = false,
-    Callback = function(state)
-        AimSettings.ShowFOV = state
-        FOVCircle.Visible = AimSettings.Enabled and AimSettings.ShowFOV
+    Title="Hien Vong FOV", Default=false,
+    Callback=function(state)
+        AimSettings.ShowFOV=state
+        FOVCircle.Visible=AimSettings.Enabled and AimSettings.ShowFOV
     end,
 })
-
 PvpTab:CreateSlider({
-    Title = "Kich Thuoc FOV",
-    Min = 30,
-    Max = 200,
-    Default = 150,
-    Callback = function(value)
-        AimSettings.FOVRadius = value
-        FOVCircle.Size = UDim2.fromOffset(value * 2, value * 2)
+    Title="Kich Thuoc FOV", Min=30, Max=200, Default=150,
+    Callback=function(value)
+        AimSettings.FOVRadius=value
+        FOVCircle.Size=UDim2.fromOffset(value*2, value*2)
     end,
 })
-
 PvpTab:CreateSlider({
-    Title = "Do Muot Aim (Smooth)",
-    Min = 1,
-    Max = 10,
-    Default = 2,
-    Callback = function(value)
-        AimSettings.Smoothness = value / 10
-    end,
+    Title="Do Muot Aim (Smooth)", Min=1, Max=10, Default=2,
+    Callback=function(value) AimSettings.Smoothness=value/10 end,
 })
-
-local AmmoStatusLabel = PvpTab:CreateParagraph({
-    Title = "Trang thai dan",
-    Content = "Đang chờ...",
-})
-
+AmmoStatusLabel = CreateParagraph(PvpTab, {
+    Title="Trạng thái đạn",
+    Content="Đang chờ...",
+}, 60)
 PvpTab:CreateToggle({
-    Title = "Auto Nhat Dan (Nhat 2 Lan)",
-    Default = false,
-    Callback = function(state)
-        _G.AutoFarmAmmo = state
+    Title="Auto Nhat Dan (Nhat 2 Lan)", Default=false,
+    Callback=function(state)
+        _G.AutoFarmAmmo=state
         if not state then
-            SetParagraphContent(AmmoStatusLabel, "Đã TẮT")
+            SetAmmoStatus("Trạng thái đạn: Đã TẮT")
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                LocalPlayer.Character.HumanoidRootPart.Anchored = false
+                LocalPlayer.Character.HumanoidRootPart.Anchored=false
             end
         end
     end,
@@ -795,123 +1059,99 @@ PvpTab:CreateToggle({
 -- TAB FOSSILS
 ----------------------------------------------------
 FossilsTab:CreateSection("Fossils / Quest")
-local QuestStatusLabel = FossilsTab:CreateParagraph({
-    Title = "Quest Hiện Tại",
-    Content = "Đang chờ...",
-})
-
-FossilsTab:CreateToggle({
-    Title = "Auto Ăn Thịt (Toggle Meat)",
-    Default = false,
-    Callback = function(state) _G.AutoEatActive = state end,
-})
-FossilsTab:CreateToggle({
-    Title = "Auto Ăn Cỏ (Toggle Herb)",
-    Default = false,
-    Callback = function(state) _G.AutoHerbActive = state end,
-})
-FossilsTab:CreateToggle({
-    Title = "Auto Drink (Uong Lien Tuc)",
-    Default = false,
-    Callback = function(state) _G.AutoDrinkRunning = state end,
-})
-FossilsTab:CreateToggle({
-    Title = "Auto Rest (Nghi Noi)",
-    Default = false,
-    Callback = function(state) _G.AutoRestRunning = state end,
-})
-FossilsTab:CreateToggle({
-    Title = "Auto Zone (Chiem Zone)",
-    Default = false,
-    Callback = function(state) _G.AutoZoneRunning = state end,
-})
+QuestStatusLabel = CreateParagraph(FossilsTab, {
+    Title="Quest Hiện Tại",
+    Content="Đang chờ...",
+}, 60)
+FossilsTab:CreateToggle({Title="Auto Ăn Thịt (Toggle Meat)", Default=false, Callback=function(v) _G.AutoEatActive=v end})
+FossilsTab:CreateToggle({Title="Auto Ăn Cỏ (Toggle Herb)", Default=false, Callback=function(v) _G.AutoHerbActive=v end})
+FossilsTab:CreateToggle({Title="Auto Drink (Uong Lien Tuc)", Default=false, Callback=function(v) _G.AutoDrinkRunning=v end})
+FossilsTab:CreateToggle({Title="Auto Rest (Nghi Noi)", Default=false, Callback=function(v) _G.AutoRestRunning=v end})
+FossilsTab:CreateToggle({Title="Auto Zone (Chiem Zone)", Default=false, Callback=function(v) _G.AutoZoneRunning=v end})
+CreateParagraph(FossilsTab, {
+    Title = "Primeval Core",
+    Content = "Auto Ăn Thịt/Cỏ, Drink, Rest, Zone và Quest được giữ nguyên từ UpdatePrimeval.",
+}, 64)
 
 ----------------------------------------------------
 -- TAB CAI DAT / UTILITY
 ----------------------------------------------------
 VisualsTab:CreateSection("Utility")
 VisualsTab:CreateToggle({
-    Title = "Bat Sang Ban Dem (Fullbright)",
-    Default = false,
-    Callback = function(state)
+    Title="Bat Sang Ban Dem (Fullbright)", Default=false,
+    Callback=function(state)
+        local Lighting=game:GetService("Lighting")
         if state then
-            game:GetService("Lighting").Brightness = 2
-            game:GetService("Lighting").ClockTime = 14
-            game:GetService("Lighting").GlobalShadows = false
+            Lighting.Brightness=2
+            Lighting.ClockTime=14
+            Lighting.GlobalShadows=false
         else
-            game:GetService("Lighting").Brightness = 1
-            game:GetService("Lighting").GlobalShadows = true
+            Lighting.Brightness=1
+            Lighting.GlobalShadows=true
         end
     end,
 })
 
-local lowServerBtn = VisualsTab:CreateButton({
-    Title = "Vao Server It Nguoi (Low Server)",
-    Callback = function()
-        local teleportService = game:GetService("TeleportService")
-        local placeId = game.PlaceId
-        local jobId = game.JobId
+lowServerBtn = VisualsTab:CreateButton({
+    Title="Vao Server It Nguoi (Low Server)",
+    Callback=function()
+        local teleportService=game:GetService("TeleportService")
+        local placeId=game.PlaceId
+        local jobId=game.JobId
 
-        SetButtonTitle(lowServerBtn, "Dang Tim Server...")
+        local function SetLowServerText(text)
+            if not lowServerBtn or not lowServerBtn.Frame then return end
+            local label = lowServerBtn.Frame:FindFirstChild("Title", true) or lowServerBtn.Frame:FindFirstChildWhichIsA("TextLabel", true)
+            if label then label.Text=tostring(text) end
+        end
 
-        local success, result = pcall(function()
-            return game:HttpGet("https://games.roblox.com/v1/games/" .. placeId .. "/servers/0?sortOrder=Asc&limit=100")
+        SetLowServerText("Dang Tim Server...")
+        local success,result=pcall(function()
+            return game:HttpGet("https://games.roblox.com/v1/games/"..placeId.."/servers/0?sortOrder=Asc&limit=100")
         end)
-
         if success and result then
-            local decodedSuccess, decoded = pcall(function()
-                return HttpService:JSONDecode(result)
-            end)
-
-            if decodedSuccess and decoded and decoded.data then
-                for _, server in ipairs(decoded.data) do
-                    if server.id ~= jobId and server.playing < server.maxPlayers and server.playing > 0 then
-                        SetButtonTitle(lowServerBtn, "Dang Chuyen Server (" .. server.playing .. " nguoi)...")
-                        SafeFeatureNotify("Low Server", "Đang chuyển sang server " .. tostring(server.playing) .. " người.")
-                        teleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
+            local ok,decoded=pcall(function() return HttpService:JSONDecode(result) end)
+            if ok and decoded and decoded.data then
+                for _,server in ipairs(decoded.data) do
+                    if server.id~=jobId and server.playing<server.maxPlayers and server.playing>0 then
+                        SetLowServerText("Dang Chuyen Server ("..server.playing.." nguoi)...")
+                        teleportService:TeleportToPlaceInstance(placeId,server.id,LocalPlayer)
                         return
                     end
                 end
             end
         end
-
-        SetButtonTitle(lowServerBtn, "Khong Tim Thay Server!")
-        SafeFeatureNotify("Low Server", "Không tìm thấy server phù hợp.")
-        task.delay(2, function()
-            SetButtonTitle(lowServerBtn, "Vao Server It Nguoi (Low Server)")
+        SetLowServerText("Khong Tim Thay Server!")
+        task.delay(2,function()
+            if lowServerBtn and lowServerBtn.Frame and lowServerBtn.Frame.Parent then
+                SetLowServerText("Vao Server It Nguoi (Low Server)")
+            end
         end)
     end,
 })
 
 VisualsTab:CreateButton({
-    Title = "Hoi Sinh Nhan Vat (Reset)",
-    Callback = function()
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-            LocalPlayer.Character:FindFirstChildOfClass("Humanoid").Health = 0
-        end
+    Title="Hoi Sinh Nhan Vat (Reset)",
+    Callback=function()
+        local hum=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.Health=0 end
     end,
 })
+CreateParagraph(VisualsTab, {
+    Title="Primeval Earth Hub",
+    Content="Giao dien dung MeizuLibrary. Logic UpdatePrimeval duoc giu lai; chi thay lop giao dien.",
+}, 64)
 
-VisualsTab:CreateParagraph({
-    Title = "UI / Library",
-    Content = "RightControl: bật/tắt menu. Theme, Accent, Config và các thiết lập Library nằm trong tab Settings của MeizuLibrary.",
-})
-
-----------------------------------------------------
--- PRIMEVAL READY
-----------------------------------------------------
-pcall(function()
-    MeizuLibrary:Notify({
-        Title = "Primeval Earth Hub",
-        Content = "Đã nạp thành công bằng MeizuLibrary.",
-        Duration = 4,
-    })
-end)
+LoaderStage(7)
 
 ----------------------------------------------------
--- 7. LOGIC CHẠY NGẦM (GIỮ NGUYÊN UPDATEPRIMEVAL)
+-- MỞ UI CHỈ SAU KHI TOÀN BỘ CONTROL ĐÃ ĐƯỢC DỰNG
 ----------------------------------------------------
-----------------------------------------------------
+-- Không để UI lộ từng phần: lúc này loader vẫn nằm trên cùng.
+Window:Toggle(true)
+
+
+-- 5. LOGIC CHẠY NGẦM (AUTO ATTACK, NHẶT ĐẠN, FOSSILS, AUTO ĂN THỊT/CỎ & ANTI-AFK)
 LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
@@ -947,10 +1187,10 @@ task.spawn(function()
             local hrp = char.HumanoidRootPart
             local currentAmmo, reserveAmmo, infoMsg = checkAmmoStatus()
             
-            SetParagraphContent(AmmoStatusLabel, infoMsg)
+            SetAmmoStatus(infoMsg)
             
             if currentAmmo == 0 and reserveAmmo == 0 then
-                SetParagraphContent(AmmoStatusLabel, "Hết đạn (00/0)! Đang tới chỗ nhặt...")
+                SetAmmoStatus("Hết đạn (00/0)! Đang tới chỗ nhặt...")
                 local originalCFrame = hrp.CFrame
                 
                 hrp.AssemblyLinearVelocity = Vector3.zero
@@ -980,11 +1220,11 @@ task.spawn(function()
                     return found
                 end
 
-                SetParagraphContent(AmmoStatusLabel, "Đang nhặt đạn (Lần 1)...")
+                SetAmmoStatus("Đang nhặt đạn (Lần 1)...")
                 tryInteract()
                 task.wait(0.6)
 
-                SetParagraphContent(AmmoStatusLabel, "Đang nhặt đạn (Lần 2)...")
+                SetAmmoStatus("Đang nhặt đạn (Lần 2)...")
                 tryInteract()
                 task.wait(0.6)
                 
@@ -995,7 +1235,7 @@ task.spawn(function()
                     task.wait(0.03)
                 end
                 
-                SetParagraphContent(AmmoStatusLabel, "Đã bơm đầy đạn! Đang quay lại...")
+                SetAmmoStatus("Đã bơm đầy đạn! Đang quay lại...")
                 task.wait(2)
             end
         end
@@ -1198,11 +1438,11 @@ task.spawn(function()
             _G.CurrentQuest = detectedQuest
             
             if detectedQuest == "Drink" then
-                SetParagraphContent(QuestStatusLabel, "Uống Nước (Drink)", Color3.fromRGB(50, 150, 255))
+                SetQuestStatus("Quest Hiện Tại: Uống Nước (Drink)", Color3.fromRGB(50, 150, 255))
             elseif detectedQuest == "Rest" then
-                SetParagraphContent(QuestStatusLabel, "Nghỉ Nơi (Rest)", Color3.fromRGB(255, 165, 0))
+                SetQuestStatus("Quest Hiện Tại: Nghỉ Nơi (Rest)", Color3.fromRGB(255, 165, 0))
             else
-                SetParagraphContent(QuestStatusLabel, "Đang chờ...", Color3.fromRGB(255, 255, 0))
+                SetQuestStatus("Quest Hiện Tại: Đang chờ...", Color3.fromRGB(255, 255, 0))
             end
         end)
     end
@@ -1304,8 +1544,33 @@ task.spawn(function()
 end)
 
 ----------------------------------------------------
+
+
 ----------------------------------------------------
--- 8. KẾT THÚC
+-- LOADER FINAL — chỉ đóng HUD khi mọi thứ đã sẵn sàng
 ----------------------------------------------------
--- Không còn loading UI cũ của Primeval.
--- MeizuLibrary tự xử lý intro/open animation, launcher và settings.
+LoaderStage(8)
+LoaderStage(9)
+
+LoaderComplete = true
+
+-- Fade-out ngắn chỉ là animation đóng HUD, không dùng để giả thời gian load.
+LoaderTween(LoaderTitle, 0.22, {TextTransparency = 1})
+LoaderTween(ProgressBG, 0.22, {BackgroundTransparency = 1})
+LoaderTween(ProgressBar, 0.22, {BackgroundTransparency = 1})
+LoaderTween(StepLabel, 0.22, {TextTransparency = 1})
+LoaderTween(PercentLabel, 0.22, {TextTransparency = 1})
+
+local closeTween = LoaderTween(LoaderFrame, 0.25, {Size = UDim2.new(0, 0, 0, 0)})
+closeTween.Completed:Wait()
+if LoaderGui and LoaderGui.Parent then
+    LoaderGui:Destroy()
+end
+
+pcall(function()
+    MeizuLibrary:Notify({
+        Title = "Primeval Earth Hub",
+        Content = "Đã load hoàn tất. Meizu UI sẵn sàng.",
+        Duration = 4,
+    })
+end)
