@@ -10,19 +10,20 @@ game:GetService("StarterGui"):SetCore("SendNotification", {
 shared.LoaderTitle = "Thanks For Using Meizu";
 shared.LoaderKeyFrames = {
     [1] = {
-        0.3,
+        0.15,
         10
     },
+    
     [2] = {
-        0.5,
+        0.3,
         30
     },
     [3] = {
-        0.6,
+        0.3,
         60
     },
     [4] = {
-        0.5,
+        0.2,
         100
     }
 };
