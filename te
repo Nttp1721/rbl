@@ -1461,175 +1461,232 @@ task.spawn(function()
     end
 end)
 
--- LOGIC AUTO ĂN THỊT & ĂN CỎ CHUNG MỘT HỆ THỐNG BLINK
+-- LOGIC AUTO ĂN THỊT / ĂN CỎ - OPTIMIZED
+-- Dùng spatial query thay cho Workspace:GetDescendants() mỗi chu kỳ.
+-- RemoteEvent được cache một lần, không quét ReplicatedStorage liên tục.
 local EAT_CONFIG = {
-    SEARCH_RADIUS = 350.0,
-    STAY_DURATION = 0.35,
-    CYCLE_INTERVAL = 1,
+    SEARCH_RADIUS = 350,
+    CYCLE_INTERVAL = 1.0,
+    STAY_DURATION = 0.32,
+    INTERACTION_INTERVAL = 0.11,
+    MAX_TARGETS_CHECKED = 120,
     STRICT_MEAT_KEYWORDS = {"carcass", "meat", "corpse", "deadbody", "ribs", "flesh"},
     STRICT_HERB_KEYWORDS = {"bush", "plant", "grass", "foliage", "herb", "fern", "leaves", "berry", "shrub"}
 }
 
 local IsExecutingEatOrHerb = false
+local EatRemoteCandidates = {}
+local EatOverlapParams = OverlapParams.new()
+EatOverlapParams.FilterType = Enum.RaycastFilterType.Exclude
 
-local function IsLivingEntityOrMapDecor(instance: Instance): boolean
-    local ancestorModel = instance:FindFirstAncestorOfClass("Model")
-    if ancestorModel then
-        if Players:GetPlayerFromCharacter(ancestorModel) then return true end
+local function RefreshEatFilter()
+    local char = LocalPlayer.Character
+    EatOverlapParams.FilterDescendantsInstances = char and {char} or {}
+end
 
-        local targetHumanoid = ancestorModel:FindFirstChildOfClass("Humanoid")
-        if targetHumanoid and targetHumanoid.Health > 0 then return true end
+RefreshEatFilter()
+LocalPlayer.CharacterAdded:Connect(function()
+    task.defer(RefreshEatFilter)
+end)
 
-        local pName = string.lower(ancestorModel.Name)
-        if pName:find("map") or pName:find("border") or pName:find("ocean") or pName:find("decor") then
+-- Cache các RemoteEvent liên quan một lần.
+do
+    local ok = pcall(function()
+        for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+            if remote:IsA("RemoteEvent") then
+                local name = string.lower(remote.Name)
+                if name:find("eat") or name:find("bite") or name:find("interact")
+                    or name:find("feed") or name:find("consume") or name:find("herb") or name:find("graze") then
+                    EatRemoteCandidates[#EatRemoteCandidates + 1] = remote
+                end
+            end
+        end
+    end)
+    if not ok then
+        table.clear(EatRemoteCandidates)
+    end
+end
+
+local function IsTargetNameMatch(part, keywords)
+    local name = string.lower(part.Name)
+    local parent = part.Parent
+    local parentName = parent and string.lower(parent.Name) or ""
+
+    for i = 1, #keywords do
+        local key = keywords[i]
+        if name:find(key, 1, true) or parentName:find(key, 1, true) then
             return true
         end
     end
     return false
 end
 
-local function ScanNearbyTarget(keywordsList): BasePart?
-    local targetNode: BasePart? = nil
-    local minDistance = EAT_CONFIG.SEARCH_RADIUS
+local function IsLivingEntityOrMapDecor(instance)
+    local model = instance:FindFirstAncestorOfClass("Model")
+    if not model then
+        return false
+    end
 
-    pcall(function()
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("BasePart") and not IsLivingEntityOrMapDecor(obj) then
-                local nameLower = string.lower(obj.Name)
-                local parentNameLower = obj.Parent and string.lower(obj.Parent.Name) or ""
-                local isMatch = false
+    if Players:GetPlayerFromCharacter(model) then
+        return true
+    end
 
-                for _, kw in ipairs(keywordsList) do
-                    if nameLower:find(kw) or parentNameLower:find(kw) then
-                        isMatch = true
-                        break
-                    end
-                end
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health > 0 then
+        return true
+    end
 
-                if isMatch then
-                    local char = LocalPlayer.Character
-                    local root = char and char:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        local dist = (obj.Position - root.Position).Magnitude
-                        if dist < minDistance then
-                            minDistance = dist
-                            targetNode = obj
-                        end
-                    end
-                end
-            end
-        end
-    end)
-
-    return targetNode
+    local modelName = string.lower(model.Name)
+    return modelName:find("map", 1, true) ~= nil
+        or modelName:find("border", 1, true) ~= nil
+        or modelName:find("ocean", 1, true) ~= nil
+        or modelName:find("decor", 1, true) ~= nil
 end
 
-local function TriggerInteraction(targetPart: BasePart)
-    pcall(function()
-        local prompt = targetPart:FindFirstChildOfClass("ProximityPrompt") 
-            or (targetPart.Parent and targetPart.Parent:FindFirstChildOfClass("ProximityPrompt"))
-        
-        if prompt and typeof(fireproximityprompt) == "function" then
-            fireproximityprompt(prompt)
-        end
-
-        for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
-            if remote:IsA("RemoteEvent") then
-                local rName = string.lower(remote.Name)
-                if rName:find("eat") or rName:find("bite") or rName:find("interact") 
-                   or rName:find("feed") or rName:find("consume") or rName:find("herb") or rName:find("graze") then
-                    
-                    remote:FireServer(targetPart)
-                    remote:FireServer(targetPart.Parent)
-                    remote:FireServer("Eat", targetPart)
-                    remote:FireServer("Herb", targetPart)
-                end
-            end
-        end
-    end)
-end
-
-local function PerformBlink(targetPart: BasePart)
+local function ScanNearbyTarget(keywords)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    if IsExecutingEatOrHerb or not root or not char then return end
+    if not root then
+        return nil
+    end
+
+    local best = nil
+    local bestDistanceSq = EAT_CONFIG.SEARCH_RADIUS * EAT_CONFIG.SEARCH_RADIUS
+    local parts = Workspace:GetPartBoundsInRadius(root.Position, EAT_CONFIG.SEARCH_RADIUS, EatOverlapParams)
+    local checked = 0
+
+    for i = 1, #parts do
+        if checked >= EAT_CONFIG.MAX_TARGETS_CHECKED then
+            break
+        end
+
+        local part = parts[i]
+        if part:IsA("BasePart") and IsTargetNameMatch(part, keywords) and not IsLivingEntityOrMapDecor(part) then
+            checked = checked + 1
+            local delta = part.Position - root.Position
+            local distanceSq = delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z
+            if distanceSq < bestDistanceSq then
+                bestDistanceSq = distanceSq
+                best = part
+            end
+        end
+    end
+
+    return best
+end
+
+local function TriggerInteraction(targetPart)
+    local prompt = targetPart:FindFirstChildOfClass("ProximityPrompt")
+        or (targetPart.Parent and targetPart.Parent:FindFirstChildOfClass("ProximityPrompt"))
+
+    if prompt and typeof(fireproximityprompt) == "function" then
+        pcall(fireproximityprompt, prompt)
+        return true
+    end
+
+    -- Fallback: dùng danh sách RemoteEvent đã cache.
+    -- Giữ đủ các payload cũ nhưng chỉ chạy một lần / target thay vì lặp mỗi 0.07s.
+    for i = 1, #EatRemoteCandidates do
+        local remote = EatRemoteCandidates[i]
+        if remote and remote.Parent then
+            pcall(function()
+                remote:FireServer(targetPart)
+                remote:FireServer(targetPart.Parent)
+                remote:FireServer("Eat", targetPart)
+                remote:FireServer("Herb", targetPart)
+            end)
+        end
+    end
+
+    return #EatRemoteCandidates > 0
+end
+
+local function PerformBlink(targetPart)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if IsExecutingEatOrHerb or not root or not char or not targetPart or not targetPart.Parent then
+        return
+    end
+
     IsExecutingEatOrHerb = true
 
     pcall(function()
         local storedCFrame = root.CFrame
         local storedVelocity = root.AssemblyLinearVelocity
+        local oldCollision = {}
 
-        local tempNoclip = {}
-        for _, p in ipairs(char:GetChildren()) do
-            if p:IsA("BasePart") and p.CanCollide then
-                p.CanCollide = false
-                table.insert(tempNoclip, p)
+        for _, part in ipairs(char:GetChildren()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                oldCollision[#oldCollision + 1] = part
+                part.CanCollide = false
             end
         end
 
         root.AssemblyLinearVelocity = Vector3.zero
-        root.CFrame = targetPart.CFrame * CFrame.new(0, 1.0, 0)
+        root.CFrame = targetPart.CFrame * CFrame.new(0, 1, 0)
 
-        local startTime = tick()
-        while tick() - startTime < EAT_CONFIG.STAY_DURATION do
-            TriggerInteraction(targetPart)
-            task.wait(0.07)
+        local finishAt = os.clock() + EAT_CONFIG.STAY_DURATION
+        local nextInteract = 0
+        while os.clock() < finishAt do
+            if not targetPart.Parent then
+                break
+            end
+            local now = os.clock()
+            if now >= nextInteract then
+                TriggerInteraction(targetPart)
+                nextInteract = now + EAT_CONFIG.INTERACTION_INTERVAL
+            end
+            task.wait(0.03)
         end
 
-        root.CFrame = storedCFrame
-        root.AssemblyLinearVelocity = storedVelocity
+        if root.Parent then
+            root.CFrame = storedCFrame
+            root.AssemblyLinearVelocity = storedVelocity
+        end
 
-        for _, p in ipairs(tempNoclip) do
-            if p and p.Parent then p.CanCollide = true end
+        for i = 1, #oldCollision do
+            local part = oldCollision[i]
+            if part and part.Parent then
+                part.CanCollide = true
+            end
         end
     end)
 
     IsExecutingEatOrHerb = false
 end
 
--- Vòng lặp Auto Ăn Thịt
+-- Một worker duy nhất cho cả Meat + Herb.
 task.spawn(function()
     while true do
         task.wait(EAT_CONFIG.CYCLE_INTERVAL)
-        pcall(function()
-            if _G.AutoEatActive and not _G.AutoHerbActive then
-                local char = LocalPlayer.Character
-                local root = char and char:FindFirstChild("HumanoidRootPart")
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if char and root and hum and hum.Health > 0 then
-                    local meatNode = ScanNearbyTarget(EAT_CONFIG.STRICT_MEAT_KEYWORDS)
-                    if meatNode then
-                        PerformBlink(meatNode)
-                    end
-                end
-            end
-        end)
-    end
-end)
 
--- Vòng lặp Auto Ăn Cỏ
-task.spawn(function()
-    while true do
-        task.wait(EAT_CONFIG.CYCLE_INTERVAL)
-        pcall(function()
-            if _G.AutoHerbActive then
+        local active = _G.AutoEatActive or _G.AutoHerbActive
+        if active and not IsExecutingEatOrHerb then
+            pcall(function()
                 local char = LocalPlayer.Character
-                local root = char and char:FindFirstChild("HumanoidRootPart")
                 local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if char and root and hum and hum.Health > 0 then
-                    local herbNode = ScanNearbyTarget(EAT_CONFIG.STRICT_HERB_KEYWORDS)
-                    if herbNode then
-                        PerformBlink(herbNode)
-                    end
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if not char or not root or not hum or hum.Health <= 0 then
+                    return
                 end
-            end
-        end)
+
+                -- Giữ behavior cũ: Herb được ưu tiên nếu cả hai toggle cùng bật.
+                local keywords = _G.AutoHerbActive
+                    and EAT_CONFIG.STRICT_HERB_KEYWORDS
+                    or EAT_CONFIG.STRICT_MEAT_KEYWORDS
+
+                local target = ScanNearbyTarget(keywords)
+                if target then
+                    PerformBlink(target)
+                end
+            end)
+        end
     end
 end)
 
 -- Vòng lặp Quét Quest (Fossils)
 task.spawn(function()
-    while task.wait(0.2) do
+    while task.wait(0.5) do
         pcall(function()
             local playerGui = LocalPlayer:WaitForChild("PlayerGui")
             local questsFrame = playerGui:FindFirstChild("GameUI") and playerGui.GameUI:FindFirstChild("QuestsFrame")
