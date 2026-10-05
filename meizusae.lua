@@ -364,7 +364,7 @@ Create("TextLabel", {
     Name = "HubName",
     Parent = LoaderFrame,
     BackgroundTransparency = 1,
-    Text = "Meizu Hub",
+    Text = "Primeval Earth Hub",
     Position = UDim2.new(0, 75, 0, 10),
     Size = UDim2.new(0, 240, 0, 50),
     Font = Enum.Font.GothamBold,
@@ -1645,7 +1645,7 @@ KaitunStatusLabel = CreateParagraph(FossilsTab, {
 FossilsTab:CreateDropdown({
     Title = "Chế độ ăn",
     Description = "Chọn Meat hoặc Herb. None = Kaitun đứng chờ.",
-    Values = {"None", "Meat", "Herb"},
+    Options = {"None", "Meat", "Herb"},
     Default = "None",
     Callback = function(value)
         KaitunState.Diet = value
@@ -2289,12 +2289,12 @@ end)
 task.spawn(function()
     while true do
         task.wait(0.5)
-        if not KaitunState.Enabled then goto continue end
-        if KaitunState.Diet == "None" then goto continue end
-        if KaitunState.CurrentSpot == "sky" then goto continue end
-        if KaitunState.IsEating then goto continue end
-        if _G.AutoEatActive or _G.AutoHerbActive then goto continue end
-        if IsExecutingEatOrHerb then goto continue end
+        if not KaitunState.Enabled then continue end
+        if KaitunState.Diet == "None" then continue end
+        if KaitunState.CurrentSpot == "sky" then continue end
+        if KaitunState.IsEating then continue end
+        if _G.AutoEatActive or _G.AutoHerbActive then continue end
+        if IsExecutingEatOrHerb then continue end
 
         local hunger = GetStatValue("hunger")
         -- Nếu không đọc được hunger → fallback: giả định đói
@@ -2324,7 +2324,7 @@ task.spawn(function()
             if KaitunState.NoFoodSince ~= 0 then
                 KaitunState.NoFoodSince = 0
             end
-            goto continue
+            continue
         end
 
         -- Nếu hunger < start threshold → cần ăn
@@ -2385,7 +2385,6 @@ task.spawn(function()
             end
         end
 
-        ::continue::
     end
 end)
 
@@ -2400,11 +2399,11 @@ task.spawn(function()
                 pcall(function() restRemote:InvokeServer(false) end)
                 isRestingActive = false
             end
-            goto continue
+            continue
         end
 
         local stamina = GetStatValue("stamina")
-        if stamina == nil then goto continue end
+        if stamina == nil then continue end
 
         if stamina < KAITUN_CONFIG.STAMINA_START and not isRestingActive then
             pcall(function() restRemote:InvokeServer(true) end)
@@ -2414,7 +2413,6 @@ task.spawn(function()
             isRestingActive = false
         end
 
-        ::continue::
     end
 end)
 
@@ -2422,13 +2420,13 @@ end)
 task.spawn(function()
     while true do
         task.wait(0.5)
-        if not KaitunState.Enabled then goto continue end
-        if KaitunState.Diet == "None" then goto continue end
+        if not KaitunState.Enabled then continue end
+        if KaitunState.Diet == "None" then continue end
 
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not hum or hum.Health <= 0 then goto continue end
+        if not hrp or not hum or hum.Health <= 0 then continue end
 
         local now = os.clock()
         local currentHP = hum.Health
@@ -2455,7 +2453,7 @@ task.spawn(function()
                 end
             end
             KaitunState.LastHP = currentHP
-            goto continue
+            continue
         end
 
         -- DETECT HP DROP
@@ -2519,7 +2517,6 @@ task.spawn(function()
             end
         end
 
-        ::continue::
     end
 end)
 
@@ -2527,7 +2524,7 @@ end)
 task.spawn(function()
     while true do
         task.wait(2)
-        if not KaitunState.Enabled then goto continue end
+        if not KaitunState.Enabled then continue end
 
         local hunger  = GetStatValue("hunger")
         local thirst  = GetStatValue("thirst")
@@ -2559,7 +2556,6 @@ task.spawn(function()
             end
         end
 
-        ::continue::
     end
 end)
 
