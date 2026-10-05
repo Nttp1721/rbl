@@ -1,178 +1,296 @@
---[[
-    PRIMEVAL EARTH HUB + MEIZU LIBRARY
-    Rewritten for runtime stability and lower background overhead.
-
-    Main goals:
-      - Keep the original tabs/features.
-      - Avoid repeated Workspace:GetDescendants() / ReplicatedStorage:GetDescendants().
-      - Use one RenderStepped worker for ESP instead of one connection per player.
-      - Bind Aimbot/Fly/Noclip workers only while enabled.
-      - Keep loader progress tied to actual initialization stages.
-      - Keep rerun cleanup through shared.PrimevalRuntime.
-]]
-
-local StarterGui = game:GetService("StarterGui")
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "Meizu Hub";
+    Text = "Loading..."; -- what the text says (ofc)
+    Icon = "rbxassetid://94377325741905",
+    Duration = 9;
+})
+shared.LoaderTitle = "Thanks For Using Meizu";
+shared.LoaderKeyFrames = {
+    [1] = {
+        1,
+        10
+    },
+    [2] = {
+        2,
+        30
+    },
+    [3] = {
+        3,
+        60
+    },
+    [4] = {
+        2,
+        100
+    }
+};
+local v2 = {
+    LoaderData = {
+        Name = shared.LoaderTitle or "A Loader",
+        Colors = shared.LoaderColors or {
+            Main = Color3.fromRGB(0, 0, 0),
+            Topic = Color3.fromRGB(200, 200, 200),
+            Title = Color3.fromRGB(255, 255, 255),
+            LoaderBackground = Color3.fromRGB(40, 40, 40),
+            LoaderSplash = Color3.fromRGB(3, 252, 3)
+        }
+    },
+    Keyframes = shared.LoaderKeyFrames or {
+        [1] = {
+            1,
+            10
+        },
+        [2] = {
+            2,
+            30
+        },
+        [3] = {
+            3,
+            60
+        },
+        [4] = {
+            2,
+            100
+        }
+    }
+};
+local v3 = {
+    [1] = "",
+    [2] = "",
+    [3] = "",
+    [4] = ""
+};
+function TweenObject(v178, v179, v180)
+    game.TweenService:Create(v178, TweenInfo.new(v179, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut), v180):Play();
+end
+function CreateObject(v181, v182)
+    local v183 = Instance.new(v181);
+    local v184;
+    for v416, v417 in pairs(v182) do
+        if (v416 ~= "Parent") then
+            v183[v416] = v417;
+        else
+            v184 = v417;
+        end
+    end
+    v183.Parent = v184;
+    return v183;
+end
+local function v4(v186, v187)
+    local v188 = Instance.new("UICorner");
+    v188.CornerRadius = UDim.new(0, v186);
+    v188.Parent = v187;
+end
+local v5 = CreateObject("ScreenGui", {
+    Name = "Core",
+    Parent = game.CoreGui
+});
+local v6 = CreateObject("Frame", {
+    Name = "Main",
+    Parent = v5,
+    BackgroundColor3 = v2.LoaderData.Colors.Main,
+    BorderSizePixel = 0,
+    ClipsDescendants = true,
+    Position = UDim2.new(0.5, 0, 0.5, 0),
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Size = UDim2.new(0, 0, 0, 0)
+});
+v4(12, v6);
+local v7 = CreateObject("ImageLabel", {
+    Name = "UserImage",
+    Parent = v6,
+    BackgroundTransparency = 1,
+    Image = "rbxassetid://132336058081263",
+    Position = UDim2.new(0, 15, 0, 10),
+    Size = UDim2.new(0, 50, 0, 50)
+});
+v4(25, v7);
+local v8 = CreateObject("TextLabel", {
+    Name = "UserName",
+    Parent = v6,
+    BackgroundTransparency = 1,
+    Text = "Meizu Hub",
+    Position = UDim2.new(0, 75, 0, 10),
+    Size = UDim2.new(0, 200, 0, 50),
+    Font = Enum.Font.GothamBold,
+    TextColor3 = v2.LoaderData.Colors.Title,
+    TextSize = 14,
+    TextXAlignment = Enum.TextXAlignment.Left
+});
+local v9 = CreateObject("TextLabel", {
+    Name = "Top",
+    TextTransparency = 1,
+    Parent = v6,
+    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 30, 0, 70),
+    Size = UDim2.new(0, 301, 0, 20),
+    Font = Enum.Font.Gotham,
+    Text = "Loader",
+    TextColor3 = v2.LoaderData.Colors.Topic,
+    TextSize = 10,
+    TextXAlignment = Enum.TextXAlignment.Left
+});
+local v10 = CreateObject("TextLabel", {
+    Name = "Title",
+    Parent = v6,
+    TextTransparency = 1,
+    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 30, 0, 90),
+    Size = UDim2.new(0, 301, 0, 46),
+    Font = Enum.Font.Gotham,
+    RichText = true,
+    Text = "<b>" .. v2.LoaderData.Name .. "</b>",
+    TextColor3 = v2.LoaderData.Colors.Title,
+    TextSize = 14,
+    TextXAlignment = Enum.TextXAlignment.Left
+});
+local v11 = CreateObject("Frame", {
+    Name = "BG",
+    Parent = v6,
+    AnchorPoint = Vector2.new(0.5, 0),
+    BackgroundTransparency = 1,
+    BackgroundColor3 = v2.LoaderData.Colors.LoaderBackground,
+    BorderSizePixel = 0,
+    Position = UDim2.new(0.5, 0, 0, 70),
+    Size = UDim2.new(0.8500000238418579, 0, 0, 24)
+});
+v4(8, v11);
+local v12 = CreateObject("Frame", {
+    Name = "Progress",
+    Parent = v11,
+    BackgroundColor3 = v2.LoaderData.Colors.LoaderSplash,
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    Size = UDim2.new(0, 0, 0, 24)
+});
+v4(8, v12);
+local v13 = CreateObject("TextLabel", {
+    Name = "StepLabel",
+    Parent = v6,
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0.5, 0, 1, - 25),
+    Size = UDim2.new(1, - 20, 0, 20),
+    Font = Enum.Font.Gotham,
+    Text = "",
+    TextColor3 = v2.LoaderData.Colors.Topic,
+    TextSize = 14,
+    TextXAlignment = Enum.TextXAlignment.Center,
+    AnchorPoint = Vector2.new(0.5, 0.5)
+});
+function UpdateStepText(v191)
+    v13.Text = v3[v191] or "" ;
+end
+function UpdatePercentage(v193, v194)
+    TweenObject(v12, 0.5, {
+        Size = UDim2.new(v193 / 100, 0, 0, 24)
+    });
+    UpdateStepText(v194);
+end
+TweenObject(v6, 0.25, {
+    Size = UDim2.new(0, 346, 0, 121)
+});
+wait();
+TweenObject(v9, 0.5, {
+    TextTransparency = 0
+});
+TweenObject(v10, 0.5, {
+    TextTransparency = 0
+});
+TweenObject(v11, 0.5, {
+    BackgroundTransparency = 0
+});
+TweenObject(v12, 0.5, {
+    BackgroundTransparency = 0
+});
+for v195, v196 in pairs(v2.Keyframes) do
+    wait(v196[1]);
+    UpdatePercentage(v196[2], v195);
+end
+UpdatePercentage(100, 4);
+TweenObject(v9, 0.5, {
+    TextTransparency = 1
+});
+TweenObject(v10, 0.5, {
+    TextTransparency = 1
+});
+TweenObject(v11, 0.5, {
+    BackgroundTransparency = 1
+});
+TweenObject(v12, 0.5, {
+    BackgroundTransparency = 1
+});
+wait(0.5);
+TweenObject(v6, 0.25, {
+    Size = UDim2.new(0, 0, 0, 0)
+});
+wait(0.25);
+v5:Destroy();
+local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
 local VirtualUser = game:GetService("VirtualUser")
+local Camera = workspace.CurrentCamera
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local TextService = game:GetService("TextService")
-local TeleportService = game:GetService("TeleportService")
-local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
 
-local LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua"
+local MEIZU_LIBRARY_URL = "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizulibrary1.lua"
 
-pcall(function()
-    StarterGui:SetCore("SendNotification", {
-        Title = "Meizu Hub",
-        Text = "Loading...",
-        Icon = "rbxassetid://94377325741905",
-        Duration = 6,
-    })
-end)
-
---==================================================
--- SHARED CLEANUP / RERUN SAFETY
---==================================================
-
-local oldRuntime = rawget(shared, "PrimevalRuntime")
-if type(oldRuntime) == "table" and type(oldRuntime.Cleanup) == "function" then
-    pcall(oldRuntime.Cleanup)
-end
-
-local Runtime = {
-    stopped = false,
-    connections = {},
-    instances = {},
+----------------------------------------------------
+-- LOAD HUD LOADER — đồng bộ theo tiến trình thật
+----------------------------------------------------
+local LoaderColors = {
+    Main             = Color3.fromRGB(0, 0, 0),
+    Topic            = Color3.fromRGB(200, 200, 200),
+    Title            = Color3.fromRGB(255, 255, 255),
+    LoaderBackground = Color3.fromRGB(40, 40, 40),
+    LoaderSplash     = Color3.fromRGB(3, 252, 3),
+    Error            = Color3.fromRGB(255, 90, 90),
 }
-
-function Runtime:TrackConnection(connection)
-    if connection then
-        table.insert(self.connections, connection)
-    end
-    return connection
-end
-
-function Runtime:Connect(signal, callback)
-    local ok, connection = pcall(function()
-        return signal:Connect(callback)
-    end)
-    if ok and connection then
-        self:TrackConnection(connection)
-        return connection
-    end
-end
-
-function Runtime:AddInstance(instance)
-    if instance then
-        table.insert(self.instances, instance)
-    end
-    return instance
-end
-
-function Runtime:Cleanup()
-    self.stopped = true
-    pcall(function() RunService:UnbindFromRenderStep("PrimevalAimbot") end)
-    pcall(function() RunService:UnbindFromRenderStep("PrimevalESP") end)
-
-    for i = #self.connections, 1, -1 do
-        local connection = self.connections[i]
-        if connection then
-            pcall(function() connection:Disconnect() end)
-        end
-        self.connections[i] = nil
-    end
-
-    for i = #self.instances, 1, -1 do
-        local instance = self.instances[i]
-        if instance and instance.Parent then
-            pcall(function() instance:Destroy() end)
-        end
-        self.instances[i] = nil
-    end
-end
-
-shared.PrimevalRuntime = Runtime
-
-pcall(function() RunService:UnbindFromRenderStep("AimbotSystem") end)
-pcall(function() RunService:UnbindFromRenderStep("PrimevalAimbot") end)
-pcall(function() RunService:UnbindFromRenderStep("PrimevalESP") end)
-
---==================================================
--- GUI PARENT / CLEANUP
---==================================================
 
 local function GetGuiParent()
     if type(gethui) == "function" then
         local ok, gui = pcall(gethui)
-        if ok and gui then
-            return gui
-        end
+        if ok and gui then return gui end
     end
-
-    local ok, coreGui = pcall(function()
-        return game:GetService("CoreGui")
-    end)
-    if ok and coreGui then
-        return coreGui
-    end
-
-    return LocalPlayer:WaitForChild("PlayerGui")
+    return game:GetService("CoreGui")
 end
 
 local GuiParent = GetGuiParent()
 
+-- Cleanup những instance của bản Primeval/Meizu trước đó để re-run không chồng UI.
 pcall(function()
     for _, child in ipairs(GuiParent:GetChildren()) do
         if child:IsA("ScreenGui") then
             if child.Name == "MeizuLoader"
-                or child.Name == "PrimevalFOVOverlay"
-                or child.Name == "PrimevalFOV"
-                or child.Name == "MeizuLoaderOld"
-                or child.Name:match("^MeizuLibrary") then
+            or child.Name == "PrimevalFOVOverlay"
+            or child.Name:match("^MeizuLibrary") then
                 child:Destroy()
             end
         end
     end
 end)
 
---==================================================
--- LOADER
---==================================================
-
-local LoaderColors = {
-    Main = Color3.fromRGB(0, 0, 0),
-    Topic = Color3.fromRGB(200, 200, 200),
-    Title = Color3.fromRGB(255, 255, 255),
-    LoaderBackground = Color3.fromRGB(40, 40, 40),
-    LoaderSplash = Color3.fromRGB(3, 252, 3),
-    Error = Color3.fromRGB(255, 90, 90),
-}
+pcall(function()
+    RunService:UnbindFromRenderStep("AimbotSystem")
+end)
 
 local function Create(className, properties)
-    local object = Instance.new(className)
+    local obj = Instance.new(className)
     local parent
-
-    for property, value in pairs(properties or {}) do
-        if property == "Parent" then
+    for prop, value in pairs(properties or {}) do
+        if prop == "Parent" then
             parent = value
         else
-            pcall(function()
-                object[property] = value
-            end)
+            obj[prop] = value
         end
     end
-
-    if parent then
-        object.Parent = parent
-    end
-
-    return object
+    if parent then obj.Parent = parent end
+    return obj
 end
 
 local function AddCorner(radius, parent)
@@ -182,34 +300,26 @@ local function AddCorner(radius, parent)
     })
 end
 
-local function Tween(object, duration, properties)
-    if not object or not object.Parent then
-        return nil
-    end
-
-    local ok, tween = pcall(function()
-        return TweenService:Create(
-            object,
-            TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-            properties
-        )
-    end)
-
-    if ok and tween then
-        tween:Play()
-        return tween
-    end
+local function LoaderTween(object, duration, properties)
+    local tw = TweenService:Create(
+        object,
+        TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        properties
+    )
+    tw:Play()
+    return tw
 end
 
-local LoaderGui = Runtime:AddInstance(Create("ScreenGui", {
+local LoaderGui = Create("ScreenGui", {
     Name = "MeizuLoader",
     ResetOnSpawn = false,
     IgnoreGuiInset = true,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     DisplayOrder = 100000,
     Parent = GuiParent,
-}))
+})
 
+-- Chặn input vào UI phía sau trong lúc loader chạy.
 Create("Frame", {
     Name = "InputBlocker",
     BackgroundTransparency = 1,
@@ -226,40 +336,36 @@ local LoaderFrame = Create("Frame", {
     BorderSizePixel = 0,
     ClipsDescendants = true,
     AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(0, 0),
+    Position = UDim2.new(0.5, 0, 0.5, 0),
+    Size = UDim2.new(0, 0, 0, 0),
     ZIndex = 10,
 })
 AddCorner(12, LoaderFrame)
 
-Create("UIStroke", {
+local LoaderStroke = Create("UIStroke", {
     Color = LoaderColors.LoaderSplash,
     Thickness = 1.25,
     Transparency = 0.25,
     Parent = LoaderFrame,
 })
 
-Create("ImageLabel", {
+local LoaderLogo = Create("ImageLabel", {
     Name = "Logo",
     Parent = LoaderFrame,
     BackgroundTransparency = 1,
-    Image = "rbxassetid://132336058081263",
-    Position = UDim2.fromOffset(15, 10),
-    Size = UDim2.fromOffset(50, 50),
+    Image = "",
+    Position = UDim2.new(0, 15, 0, 10),
+    Size = UDim2.new(0, 50, 0, 50),
     ZIndex = 11,
 })
-
-local logo = LoaderFrame:FindFirstChild("Logo")
-if logo then
-    AddCorner(25, logo)
-end
+AddCorner(25, LoaderLogo)
 
 Create("TextLabel", {
     Name = "HubName",
     Parent = LoaderFrame,
     BackgroundTransparency = 1,
-    Text = "Primeval Earth Hub",
-    Position = UDim2.fromOffset(75, 10),
+    Text = "Meizu Hub",
+    Position = UDim2.new(0, 75, 0, 10),
     Size = UDim2.new(0, 240, 0, 50),
     Font = Enum.Font.GothamBold,
     TextColor3 = LoaderColors.Title,
@@ -271,16 +377,16 @@ Create("TextLabel", {
 local LoaderTitle = Create("TextLabel", {
     Name = "Title",
     Parent = LoaderFrame,
+    TextTransparency = 1,
     BackgroundTransparency = 1,
-    Text = "<b>Đang khởi tạo Primeval...</b>",
-    RichText = true,
-    Position = UDim2.fromOffset(15, 66),
+    Position = UDim2.new(0, 15, 0, 66),
     Size = UDim2.new(1, -30, 0, 18),
     Font = Enum.Font.Gotham,
+    RichText = true,
+    Text = "<b>Đang khởi tạo Primeval...</b>",
     TextColor3 = LoaderColors.Title,
     TextSize = 13,
     TextXAlignment = Enum.TextXAlignment.Left,
-    TextTransparency = 1,
     ZIndex = 11,
 })
 
@@ -300,8 +406,8 @@ AddCorner(7, ProgressBG)
 local ProgressBar = Create("Frame", {
     Name = "Progress",
     Parent = ProgressBG,
-    BackgroundTransparency = 1,
     BackgroundColor3 = LoaderColors.LoaderSplash,
+    BackgroundTransparency = 1,
     BorderSizePixel = 0,
     Size = UDim2.new(0, 0, 1, 0),
     ZIndex = 12,
@@ -314,7 +420,7 @@ local PercentLabel = Create("TextLabel", {
     BackgroundTransparency = 1,
     AnchorPoint = Vector2.new(1, 0),
     Position = UDim2.new(1, -20, 0, 108),
-    Size = UDim2.fromOffset(52, 18),
+    Size = UDim2.new(0, 52, 0, 18),
     Font = Enum.Font.GothamBold,
     Text = "0%",
     TextColor3 = LoaderColors.LoaderSplash,
@@ -327,7 +433,8 @@ local StepLabel = Create("TextLabel", {
     Name = "StepLabel",
     Parent = LoaderFrame,
     BackgroundTransparency = 1,
-    Position = UDim2.fromOffset(15, 108),
+    AnchorPoint = Vector2.new(0, 0),
+    Position = UDim2.new(0, 15, 0, 108),
     Size = UDim2.new(1, -85, 0, 18),
     Font = Enum.Font.Gotham,
     Text = "Đang chuẩn bị...",
@@ -337,43 +444,59 @@ local StepLabel = Create("TextLabel", {
     ZIndex = 11,
 })
 
+local LoaderSteps = {
+    {5,  "Đã load xong: Core Services"},
+    {15, "Đã load xong: MeizuLibrary"},
+    {25, "Đã load xong: State + FOV"},
+    {40, "Đã load xong: Aimbot + ESP"},
+    {52, "Đã load xong: Movement + Fly"},
+    {66, "Đã dựng xong: Tab Di Chuyển + Teleport"},
+    {80, "Đã dựng xong: ESP + PVP + Fossils + Utility"},
+    {94, "Đã load xong: Runtime + Background Systems"},
+    {100, "Đã load xong toàn bộ Primeval Earth Hub"},
+}
+
+local LoaderStageIndex = 0
+local LoaderComplete = false
+
 local function UpdateLoader(percent, message)
     percent = math.clamp(tonumber(percent) or 0, 0, 100)
     PercentLabel.Text = string.format("%d%%", math.floor(percent))
     StepLabel.Text = "✓ " .. tostring(message or "")
-    Tween(ProgressBar, 0.18, {
-        Size = UDim2.new(percent / 100, 0, 1, 0),
-    })
+    LoaderTween(ProgressBar, 0.18, {Size = UDim2.new(percent / 100, 0, 1, 0)})
 end
 
-Tween(LoaderFrame, 0.22, {
-    Size = UDim2.fromOffset(346, 132),
-})
-Tween(LoaderTitle, 0.22, {TextTransparency = 0})
-Tween(ProgressBG, 0.22, {BackgroundTransparency = 0})
-Tween(ProgressBar, 0.22, {BackgroundTransparency = 0})
-UpdateLoader(3, "Đang chuẩn bị...")
+local function LoaderStage(index)
+    local data = LoaderSteps[index]
+    if not data then return end
+    if index <= LoaderStageIndex then return end
+    LoaderStageIndex = index
+    UpdateLoader(data[1], data[2])
+end
 
---==================================================
--- LOAD MEIZU LIBRARY
---==================================================
+LoaderTween(LoaderFrame, 0.25, {Size = UDim2.new(0, 346, 0, 132)})
+task.defer(function()
+    LoaderTween(LoaderTitle, 0.25, {TextTransparency = 0})
+    LoaderTween(ProgressBG, 0.25, {BackgroundTransparency = 0})
+    LoaderTween(ProgressBar, 0.25, {BackgroundTransparency = 0})
+end)
 
+LoaderStage(1)
+
+----------------------------------------------------
+-- LOAD MEIZU LIBRARY — chỉ load source, chưa tạo Window
+----------------------------------------------------
 local function LoadMeizuLibrary()
     local okHttp, source = pcall(function()
-        return game:HttpGet(LIBRARY_URL, true)
+        return game:HttpGet(MEIZU_LIBRARY_URL, true)
     end)
     if not okHttp or type(source) ~= "string" or source == "" then
-        error("[Primeval] Không thể tải MeizuLibrary: " .. tostring(source))
+        error("[Primeval] Khong the tai MeizuLibrary: " .. tostring(source))
     end
 
-    local loader = loadstring or load
-    if type(loader) ~= "function" then
-        error("[Primeval] Executor không hỗ trợ loadstring/load")
-    end
-
-    local chunk, compileError = loader(source)
+    local chunk, compileErr = loadstring(source)
     if type(chunk) ~= "function" then
-        error("[Primeval] MeizuLibrary compile error: " .. tostring(compileError))
+        error("[Primeval] MeizuLibrary compile error: " .. tostring(compileErr))
     end
 
     local okLoad, library = pcall(chunk)
@@ -387,984 +510,507 @@ end
 local okLibrary, MeizuLibraryOrError = pcall(LoadMeizuLibrary)
 if not okLibrary then
     UpdateLoader(100, "Lỗi: Không thể load MeizuLibrary")
-    task.wait(0.35)
+    task.wait(0.4)
+    if LoaderGui then LoaderGui:Destroy() end
     error(MeizuLibraryOrError)
 end
 
 local MeizuLibrary = MeizuLibraryOrError
-UpdateLoader(12, "Đã load xong: MeizuLibrary")
+LoaderStage(2)
 
---==================================================
--- STATE
---==================================================
-
-local State = {
-    autoAttack = false,
-    autoAmmo = false,
-    autoEat = false,
-    autoHerb = false,
-    autoDrink = false,
-    autoRest = false,
-    autoZone = false,
-    aimEnabled = false,
-    showFOV = false,
-    espEnabled = false,
-    showName = true,
-    showHealth = true,
-    showDistance = true,
-    flyEnabled = false,
-    noclipEnabled = false,
-    targetWalkSpeed = 16,
-    targetJumpPower = 50,
-    flySpeed = 50,
-    aimFOV = 150,
-    aimSmooth = 0.2,
-    aimMaxDistance = 150,
-    currentQuest = "None",
-}
-
-_G.AutoAttackRunning = false
-_G.AutoFarmAmmo = false
-_G.AutoEatActive = false
-_G.AutoHerbActive = false
+----------------------------------------------------
+-- PRIMEVAL STATE
+----------------------------------------------------
 _G.AutoDrinkRunning = false
 _G.AutoRestRunning = false
 _G.AutoZoneRunning = false
+_G.AutoFarmAmmo = false
+_G.AutoAttackRunning = false
+_G.AutoEatActive = false
+_G.AutoHerbActive = false
 _G.CurrentQuest = "None"
+
+----------------------------------------------------
+-- AUTO NUÔI (KAITUN) — STATE & CONFIG
+----------------------------------------------------
+_G.AutoNuoiKaitun = false
+_G.KaitunDiet = "None"
+
+local KaitunState = {
+    Diet = "None",
+    Enabled = false,
+    CurrentSpot = nil,        -- "1" | "2" | "sky" | nil
+    SkyStartTime = 0,
+    LastSwitchTime = 0,
+    LastHP = 100,
+    LastActualAttack = 0,
+    NoFoodSince = 0,
+    UnsafeSince = 0,
+    IsEating = false,
+}
+
+local KAITUN_CONFIG = {
+    HUNGER_START = 0.50,      -- < 50% bắt đầu ăn
+    HUNGER_STOP  = 0.95,      -- >= 95% dừng ăn
+    STAMINA_START = 0.50,
+    STAMINA_STOP  = 0.95,
+    SCAN_RADII     = {100, 200, 300, 500},
+    SCAN_COOLDOWNS = {0.3, 0.5, 1.0, 1.0},
+    HIDE_SPOTS = {
+        ["1"]   = Vector3.new(-965.171, 114.720, -418.536),
+        ["2"]   = Vector3.new(-589.342, 93.005, -1322.879),
+        ["sky"] = Vector3.new(127.360, 2683.926, -1478.516),
+    },
+    SKY_DURATION       = 60,   -- giây ở sky spot
+    SWITCH_COOLDOWN    = 15,   -- giây giữa các lần switch
+    BLEED_TOLERANCE    = 8,    -- giây sau cắn → bleed, không switch
+    UNSAFE_FAILSAFE    = 30,   -- giây không switch được → force sky
+    ENEMY_SCAN_RADIUS  = 150,  -- check spot safe
+    ENEMY_ATTACK_RADIUS = 50,  -- check attack thật
+    HP_DROP_THRESHOLD  = 2,    -- mất > 2 HP / 0.5s = bị damage
+    CRITICAL_HUNGER    = 0.10, -- < 10% → shutdown game
+    NO_FOOD_TIMEOUT    = 30,   -- giây không thấy food → anti-stuck
+    NO_FOOD_RETRY_DELAY = 10,  -- giây chờ sau anti-stuck
+    HIDE_HUNGER_MIN    = 0.80, -- >= 80% mới được hide
+    HIDE_THIRST_MIN    = 0.80,
+}
+
+-- Forward declarations (gán sau, dùng trong UI callbacks)
+local KaitunStatusLabel
+local SetKaitunStatus
+local TeleportToHideSpot, StartSkyMode, StopSkyMode, IsSpotSafe, TrySwitchSpot
+local GetStatValue, ScanEnemyNear, ScanNearbyTargetAtRadius, KaitunCleanup
+
+local AimSettings = {
+    Enabled = false,
+    ShowFOV = false,
+    FOVRadius = 150,
+    Smoothness = 0.2,
+    MaxDistance = 150,
+}
+
+local EspSettings = {
+    Enabled = false,
+    ShowName = true,
+    ShowHealth = true,
+    ShowDistance = true,
+}
 
 local hasTargetInFOV = false
 local AmmoStatusLabel
 local QuestStatusLabel
 local lowServerBtn
-
-UpdateLoader(18, "Đã load xong: State + Runtime")
-
---==================================================
--- FOV GUI
---==================================================
-
-local FOVGui = Runtime:AddInstance(Create("ScreenGui", {
-    Name = "PrimevalFOVOverlay",
-    ResetOnSpawn = false,
-    IgnoreGuiInset = true,
-    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    DisplayOrder = 9998,
-    Parent = GuiParent,
-}))
-
-local FOVCircle = Create("Frame", {
-    Name = "FOVCircle",
-    AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(State.aimFOV * 2, State.aimFOV * 2),
-    BackgroundTransparency = 1,
-    Visible = false,
-    ZIndex = 2,
-    Parent = FOVGui,
-})
-AddCorner(State.aimFOV, FOVCircle)
-
-local FOVStroke = Create("UIStroke", {
-    Color = Color3.fromRGB(255, 255, 255),
-    Thickness = 1,
-    Transparency = 0.2,
-    Parent = FOVCircle,
-})
-
-UpdateLoader(22, "Đã load xong: FOV Overlay")
-
---==================================================
--- GENERIC HELPERS
---==================================================
-
-local function GetCharacter()
-    return LocalPlayer.Character
-end
-
-local function GetHumanoid(character)
-    return character and character:FindFirstChildOfClass("Humanoid")
-end
-
-local function GetRoot(character)
-    return character and character:FindFirstChild("HumanoidRootPart")
-end
-
-local function GetAimPart(character)
-    if not character then return nil end
-    return character:FindFirstChild("UpperTorso")
-        or character:FindFirstChild("Torso")
-        or character:FindFirstChild("HumanoidRootPart")
-        or character:FindFirstChild("Head")
-end
-
-local function SafeCharacterReady()
-    local character = GetCharacter()
-    local root = GetRoot(character)
-    local humanoid = GetHumanoid(character)
-    return character, root, humanoid
-end
-
-local function SetSafeCFrame(root, cf)
-    if root and root.Parent then
-        pcall(function()
-            root.CFrame = cf
-            root.AssemblyLinearVelocity = Vector3.zero
-        end)
-    end
-end
-
---==================================================
--- AIMBOT
---==================================================
-
-local function GetClosestEnemyInFOV()
-    Camera = Workspace.CurrentCamera or Camera
-    if not Camera or not State.aimEnabled then
-        return nil
-    end
-
-    local center = Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y * 0.5)
-    local closestCharacter = nil
-    local closestWorldDistance = State.aimMaxDistance
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local character = player.Character
-            local humanoid = GetHumanoid(character)
-            local aimPart = GetAimPart(character)
-
-            if humanoid and humanoid.Health > 0 and aimPart then
-                local worldDistance = (Camera.CFrame.Position - aimPart.Position).Magnitude
-                if worldDistance <= State.aimMaxDistance then
-                    local screenPosition, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
-                    if onScreen and screenPosition.Z > 0 then
-                        local screenDistance = (
-                            Vector2.new(screenPosition.X, screenPosition.Y) - center
-                        ).Magnitude
-
-                        if screenDistance <= State.aimFOV and worldDistance < closestWorldDistance then
-                            closestWorldDistance = worldDistance
-                            closestCharacter = character
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    return closestCharacter
-end
-
-local function StopAimbot()
-    State.aimEnabled = false
-    hasTargetInFOV = false
-    FOVStroke.Color = Color3.fromRGB(255, 255, 255)
-    FOVCircle.Visible = false
-    pcall(function() RunService:UnbindFromRenderStep("PrimevalAimbot") end)
-end
-
-local function StartAimbot()
-    pcall(function() RunService:UnbindFromRenderStep("PrimevalAimbot") end)
-    State.aimEnabled = true
-
-    RunService:BindToRenderStep(
-        "PrimevalAimbot",
-        Enum.RenderPriority.Camera.Value + 100,
-        function()
-            if Runtime.stopped or not State.aimEnabled then
-                return
-            end
-
-            local target = GetClosestEnemyInFOV()
-            if target then
-                hasTargetInFOV = true
-                FOVStroke.Color = Color3.fromRGB(255, 50, 50)
-
-                local aimPart = GetAimPart(target)
-                Camera = Workspace.CurrentCamera or Camera
-                if Camera and aimPart then
-                    local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, aimPart.Position)
-                    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, State.aimSmooth)
-                end
-            else
-                hasTargetInFOV = false
-                FOVStroke.Color = Color3.fromRGB(255, 255, 255)
-            end
-
-            FOVCircle.Visible = State.showFOV
-        end
-    )
-end
-
-local function SetAimEnabled(enabled)
-    if enabled then
-        StartAimbot()
-    else
-        StopAimbot()
-    end
-end
-
---==================================================
--- ESP: ONE RENDER LOOP FOR ALL PLAYERS
---==================================================
-
-local ESPEntries = {}
-
-local function DestroyESPEntry(player)
-    local entry = ESPEntries[player]
-    if not entry then return end
-
-    if entry.billboard then
-        pcall(function() entry.billboard:Destroy() end)
-    end
-
-    ESPEntries[player] = nil
-end
-
-local function BuildESPEntry(player, character)
-    if player == LocalPlayer or not character then return end
-
-    local head = character:FindFirstChild("Head")
-    local humanoid = GetHumanoid(character)
-    if not head or not humanoid then
-        task.spawn(function()
-            local deadline = os.clock() + 6
-            while not Runtime.stopped and character.Parent and os.clock() < deadline do
-                head = head or character:FindFirstChild("Head")
-                humanoid = humanoid or GetHumanoid(character)
-                if head and humanoid then break end
-                task.wait(0.1)
-            end
-
-            if Runtime.stopped or not character.Parent or not head or not humanoid then
-                return
-            end
-            BuildESPEntry(player, character)
-        end)
-        return
-    end
-
-    DestroyESPEntry(player)
-
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "PlayerESP"
-    billboard.Adornee = head
-    billboard.Size = UDim2.fromOffset(220, 52)
-    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
-    billboard.AlwaysOnTop = true
-    billboard.Enabled = false
-    billboard.Parent = head
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.fromScale(1, 1)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.fromRGB(0, 255, 150)
-    label.TextStrokeTransparency = 0
-    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 13
-    label.TextWrapped = true
-    label.Parent = billboard
-
-    ESPEntries[player] = {
-        character = character,
-        head = head,
-        humanoid = humanoid,
-        billboard = billboard,
-        label = label,
-    }
-end
-
-local function SetupESPPlayer(player)
-    if player == LocalPlayer then return end
-
-    if player.Character then
-        BuildESPEntry(player, player.Character)
-    end
-
-    Runtime:Connect(player.CharacterAdded, function(character)
-        BuildESPEntry(player, character)
-    end)
-end
-
-for _, player in ipairs(Players:GetPlayers()) do
-    SetupESPPlayer(player)
-end
-
-Runtime:Connect(Players.PlayerAdded, SetupESPPlayer)
-Runtime:Connect(Players.PlayerRemoving, function(player)
-    DestroyESPEntry(player)
-end)
-
-local function StopESP()
-    State.espEnabled = false
-    pcall(function() RunService:UnbindFromRenderStep("PrimevalESP") end)
-    for _, entry in pairs(ESPEntries) do
-        if entry.billboard then
-            entry.billboard.Enabled = false
-        end
-    end
-end
-
-local function StartESP()
-    pcall(function() RunService:UnbindFromRenderStep("PrimevalESP") end)
-    State.espEnabled = true
-
-    RunService:BindToRenderStep("PrimevalESP", Enum.RenderPriority.Last.Value, function()
-        if Runtime.stopped or not State.espEnabled then
-            return
-        end
-
-        local localCharacter = GetCharacter()
-        local localRoot = GetRoot(localCharacter)
-
-        for player, entry in pairs(ESPEntries) do
-            local character = entry.character
-            local head = entry.head
-            local humanoid = entry.humanoid
-            local billboard = entry.billboard
-
-            if player.Parent ~= Players or not character or not character.Parent
-                or not head or not head.Parent or not humanoid or not humanoid.Parent
-                or humanoid.Health <= 0 then
-                if billboard then billboard.Enabled = false end
-            else
-                billboard.Enabled = true
-
-                local parts = {}
-                if State.showName then
-                    table.insert(parts, player.DisplayName)
-                end
-                if State.showHealth then
-                    table.insert(parts, string.format(
-                        "[%d/%d HP]",
-                        math.floor(humanoid.Health),
-                        math.floor(humanoid.MaxHealth)
-                    ))
-                end
-                if State.showDistance and localRoot then
-                    local distance = (localRoot.Position - head.Position).Magnitude
-                    table.insert(parts, string.format("[%dm]", math.floor(distance)))
-                end
-
-                entry.label.Text = table.concat(parts, " | ")
-            end
-        end
-    end)
-end
-
---==================================================
--- FLY
---==================================================
-
-local flyAttachment
-local flyVelocity
-local flyOrientation
-local flyConnection
-
-local function CleanupFlyObjects()
-    if flyConnection then
-        pcall(function() flyConnection:Disconnect() end)
-        flyConnection = nil
-    end
-
-    if flyVelocity then
-        pcall(function() flyVelocity:Destroy() end)
-        flyVelocity = nil
-    end
-
-    if flyOrientation then
-        pcall(function() flyOrientation:Destroy() end)
-        flyOrientation = nil
-    end
-
-    if flyAttachment then
-        pcall(function() flyAttachment:Destroy() end)
-        flyAttachment = nil
-    end
-end
-
-local function StopFly()
-    State.flyEnabled = false
-    CleanupFlyObjects()
-end
-
-local function StartFly()
-    CleanupFlyObjects()
-    State.flyEnabled = true
-
-    local character, root, humanoid = SafeCharacterReady()
-    if not character or not root or not humanoid or humanoid.Health <= 0 then
-        State.flyEnabled = false
-        return
-    end
-
-    flyAttachment = Instance.new("Attachment")
-    flyAttachment.Name = "PrimevalFlyAttachment"
-    flyAttachment.Parent = root
-
-    flyVelocity = Instance.new("LinearVelocity")
-    flyVelocity.Name = "PrimevalFlyVelocity"
-    flyVelocity.Attachment0 = flyAttachment
-    flyVelocity.MaxForce = math.huge
-    flyVelocity.VectorVelocity = Vector3.zero
-    flyVelocity.Parent = root
-
-    flyOrientation = Instance.new("AlignOrientation")
-    flyOrientation.Name = "PrimevalFlyOrientation"
-    flyOrientation.Attachment0 = flyAttachment
-    flyOrientation.MaxTorque = math.huge
-    flyOrientation.Responsiveness = 200
-    flyOrientation.Parent = root
-
-    flyConnection = Runtime:Connect(RunService.RenderStepped, function()
-        if Runtime.stopped or not State.flyEnabled then
-            return
-        end
-
-        Camera = Workspace.CurrentCamera or Camera
-        local currentCharacter = GetCharacter()
-        local currentRoot = GetRoot(currentCharacter)
-        local currentHumanoid = GetHumanoid(currentCharacter)
-
-        if not currentCharacter or not currentRoot or not currentHumanoid
-            or currentHumanoid.Health <= 0
-            or not flyVelocity or not flyOrientation
-            or flyVelocity.Parent ~= currentRoot
-            or flyOrientation.Parent ~= currentRoot then
-            CleanupFlyObjects()
-            return
-        end
-
-        if not Camera then return end
-
-        local moveDirection = currentHumanoid.MoveDirection
-        if moveDirection.Magnitude <= 0.001 then
-            flyVelocity.VectorVelocity = Vector3.zero
-            flyOrientation.CFrame = Camera.CFrame
-            return
-        end
-
-        local look = Camera.CFrame.LookVector
-        local right = Camera.CFrame.RightVector
-        local flatLook = Vector3.new(look.X, 0, look.Z)
-        local flatRight = Vector3.new(right.X, 0, right.Z)
-
-        if flatLook.Magnitude <= 0.001 then
-            flatLook = Vector3.new(0, 0, -1)
-        else
-            flatLook = flatLook.Unit
-        end
-
-        if flatRight.Magnitude <= 0.001 then
-            flatRight = Vector3.new(1, 0, 0)
-        else
-            flatRight = flatRight.Unit
-        end
-
-        local forwardAmount = moveDirection:Dot(look)
-        local rightAmount = moveDirection:Dot(right)
-        local desired = flatLook * forwardAmount
-            + flatRight * rightAmount
-            + Vector3.new(0, look.Y * math.abs(forwardAmount), 0)
-
-        if desired.Magnitude > 0.001 then
-            desired = desired.Unit * State.flySpeed
-        else
-            desired = Vector3.zero
-        end
-
-        flyVelocity.VectorVelocity = desired
-        flyOrientation.CFrame = Camera.CFrame
-    end)
-end
-
-Runtime:Connect(LocalPlayer.CharacterAdded, function()
-    if State.flyEnabled then
-        task.delay(0.45, function()
-            if not Runtime.stopped and State.flyEnabled then
-                StartFly()
-            end
-        end)
-    end
-end)
-
-UpdateLoader(28, "Đã load xong: Aimbot + ESP + Fly")
-
---==================================================
--- MOVEMENT / NOCLIP
---==================================================
-
-local noclipConnection
-local noclipOriginals = {}
-
-local function StopNoclip()
-    State.noclipEnabled = false
-
-    if noclipConnection then
-        pcall(function() noclipConnection:Disconnect() end)
-        noclipConnection = nil
-    end
-
-    for part, originalValue in pairs(noclipOriginals) do
-        if part and part.Parent then
-            pcall(function() part.CanCollide = originalValue end)
-        end
-        noclipOriginals[part] = nil
-    end
-end
-
-local function StartNoclip()
-    StopNoclip()
-    State.noclipEnabled = true
-
-    noclipConnection = Runtime:Connect(RunService.Stepped, function()
-        if Runtime.stopped or not State.noclipEnabled then
-            return
-        end
-
-        local character = GetCharacter()
-        if not character then return end
-
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                if noclipOriginals[part] == nil then
-                    noclipOriginals[part] = part.CanCollide
-                end
-                part.CanCollide = false
-            end
-        end
-    end)
-end
-
-Runtime:Connect(LocalPlayer.CharacterAdded, function(character)
-    task.delay(0.2, function()
-        if Runtime.stopped then return end
-        local humanoid = GetHumanoid(character)
-        if humanoid then
-            pcall(function()
-                humanoid.WalkSpeed = State.targetWalkSpeed
-                humanoid.UseJumpPower = true
-                humanoid.JumpPower = State.targetJumpPower
-            end)
-        end
-
-        if State.noclipEnabled then
-            StartNoclip()
-        end
-    end)
-end)
-
---==================================================
--- AMMO HELPERS
---==================================================
-
+local noclipConn = nil
+
+----------------------------------------------------
+-- FOV OVERLAY — không phải menu
+----------------------------------------------------
+local oldFovGui = GuiParent:FindFirstChild("PrimevalFOVOverlay")
+if oldFovGui then pcall(function() oldFovGui:Destroy() end) end
+
+local FOVGui = Instance.new("ScreenGui")
+FOVGui.Name = "PrimevalFOVOverlay"
+FOVGui.ResetOnSpawn = false
+FOVGui.IgnoreGuiInset = true
+FOVGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+FOVGui.DisplayOrder = 9998
+FOVGui.Parent = GuiParent
+
+local FOVCircle = Instance.new("Frame")
+FOVCircle.Name = "FOVCircle"
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
+FOVCircle.Size = UDim2.fromOffset(AimSettings.FOVRadius * 2, AimSettings.FOVRadius * 2)
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.Visible = false
+FOVCircle.ZIndex = 2
+FOVCircle.Parent = FOVGui
+
+local FOVCorner = Instance.new("UICorner")
+FOVCorner.CornerRadius = UDim.new(1, 0)
+FOVCorner.Parent = FOVCircle
+
+local FOVStroke = Instance.new("UIStroke")
+FOVStroke.Color = Color3.fromRGB(255, 255, 255)
+FOVStroke.Thickness = 1
+FOVStroke.Transparency = 0.2
+FOVStroke.Parent = FOVCircle
+
+LoaderStage(3)
+
+
+-- 3. LOGIC ESP, AIMBOT, AUTO ATTACK & AUTO NHẶT ĐẠN
+----------------------------------------------------
 local targetAmmoCFrame = CFrame.new(637.3, 94.3, -56.5)
 local ammoMaxDistance = 15
 
-local function IsFullyVisible(gui)
+local function triggerAttack()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return end
+
+    for _, gui in pairs(playerGui:GetDescendants()) do
+        if (gui:IsA("ImageButton") or gui:IsA("TextButton")) and gui.Name == "Attack" then
+            if getconnections then
+                for _, conn in pairs(getconnections(gui.Activated)) do 
+                    conn:Fire() 
+                end
+                for _, conn in pairs(getconnections(gui.MouseButton1Click)) do 
+                    conn:Fire() 
+                end
+            end
+        end
+    end
+end
+
+local function getPromptPosition(prompt)
+    local parent = prompt.Parent
+    if parent:IsA("BasePart") then
+        return parent.Position
+    elseif parent:IsA("Attachment") then
+        return parent.WorldPosition
+    end
+    return nil
+end
+
+local function isFullyVisible(gui)
     if not gui or not gui:IsDescendantOf(game) then return false end
     if gui.AbsoluteSize.X <= 0 or gui.AbsoluteSize.Y <= 0 then return false end
-
+    
     local current = gui
     while current and current:IsA("GuiObject") do
         if not current.Visible then return false end
         if current:IsA("CanvasGroup") and current.GroupTransparency >= 0.9 then return false end
         current = current.Parent
     end
-
+    
     if current and current:IsA("ScreenGui") and not current.Enabled then
         return false
     end
-
     return true
 end
 
-local function CheckAmmoStatus()
-    local character = GetCharacter()
-    if not character then return nil, nil, "Chưa tải Nhân vật" end
+local function checkAmmoStatus()
+    local char = LocalPlayer.Character
+    if not char then return nil, nil, "Chưa tải Nhân vật" end
 
-    if not character:FindFirstChildOfClass("Tool") then
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then
         return nil, nil, "Hãy cầm súng trên tay!"
     end
 
-    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if not playerGui then
-        return nil, nil, "Không thấy PlayerGui"
-    end
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return nil, nil, "Không thấy PlayerGui" end
 
-    Camera = Workspace.CurrentCamera or Camera
-    local viewport = Camera and Camera.ViewportSize or Vector2.new(1000, 1000)
-    local rightSideX = viewport.X * 0.5
-    local bottomSideY = viewport.Y * 0.5
+    local screenWidth = Camera and Camera.ViewportSize.X or 1000
+    local screenHeight = Camera and Camera.ViewportSize.Y or 1000
+    local rightSideX = screenWidth * 0.5
+    local bottomSideY = screenHeight * 0.5
 
-    local currentAmmo
-    local reserveAmmo
+    local currentAmmo = nil
+    local reserveAmmo = nil
 
-    for _, gui in ipairs(playerGui:GetDescendants()) do
-        if (gui:IsA("TextLabel") or gui:IsA("TextBox") or gui:IsA("TextButton"))
-            and IsFullyVisible(gui)
-            and gui.AbsolutePosition.X >= rightSideX
-            and gui.AbsolutePosition.Y >= bottomSideY then
+    for _, gui in pairs(playerGui:GetDescendants()) do
+        if (gui:IsA("TextLabel") or gui:IsA("TextBox") or gui:IsA("TextButton")) and isFullyVisible(gui) then
+            if gui.AbsolutePosition.X >= rightSideX and gui.AbsolutePosition.Y >= bottomSideY then
+                local rawText = gui.Text
+                if rawText and rawText ~= "" and gui.TextTransparency < 0.8 then
+                    local cleanText = string.gsub(rawText, "<[^>]->", "")
+                    cleanText = string.match(cleanText, "^%s*(.-)%s*$") or cleanText
 
-            local rawText = gui.Text
-            if rawText and rawText ~= "" and gui.TextTransparency < 0.8 then
-                local cleanText = rawText:gsub("<[^>]->", "")
-                cleanText = cleanText:match("^%s*(.-)%s*$") or cleanText
+                    local cur, res = string.match(cleanText, "^(%d+)%s*[/⁄∕|]%s*(%d+)$")
+                    if cur and res then
+                        return tonumber(cur), tonumber(res), "Đạn: " .. cleanText
+                    end
 
-                local cur, res = cleanText:match("^(%d+)%s*[/⁄∕|]%s*(%d+)$")
-                if cur and res then
-                    return tonumber(cur), tonumber(res), "Đạn: " .. cleanText
-                end
+                    local resOnly = string.match(cleanText, "^[/⁄∕|]%s*(%d+)$")
+                    if resOnly then
+                        reserveAmmo = tonumber(resOnly)
+                    end
 
-                local resOnly = cleanText:match("^[/⁄∕|]%s*(%d+)$")
-                if resOnly then
-                    reserveAmmo = tonumber(resOnly)
-                end
-
-                local curOnly = cleanText:match("^(%d+)$")
-                if curOnly and tonumber(curOnly) <= 200 then
-                    currentAmmo = tonumber(curOnly)
+                    local curOnly = string.match(cleanText, "^(%d+)$")
+                    if curOnly and tonumber(curOnly) <= 200 then
+                        currentAmmo = tonumber(curOnly)
+                    end
                 end
             end
         end
     end
 
     if currentAmmo ~= nil and reserveAmmo ~= nil then
-        return currentAmmo, reserveAmmo,
-            string.format("Đạn: %02d/%d", currentAmmo, reserveAmmo)
+        return currentAmmo, reserveAmmo, string.format("Đạn: %02d/%d", currentAmmo, reserveAmmo)
     elseif reserveAmmo ~= nil then
-        return currentAmmo or 0, reserveAmmo,
-            "Đạn dự trữ: /" .. reserveAmmo
+        return currentAmmo or 0, reserveAmmo, "Đạn dự trữ: /" .. reserveAmmo
     end
 
     return nil, nil, "Đang quét UI đạn..."
 end
 
-local function FindNearbyPrompts(radius)
-    local character = GetCharacter()
-    local root = GetRoot(character)
-    if not root then return {} end
-
-    local params = OverlapParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {character}
-    params.MaxParts = 120
-
-    local found = {}
-    local seen = {}
-
-    local ok, parts = pcall(function()
-        return Workspace:GetPartBoundsInRadius(root.Position, radius, params)
-    end)
-    if not ok or not parts then
-        return found
-    end
-
-    for _, part in ipairs(parts) do
-        local prompt = part:FindFirstChildOfClass("ProximityPrompt")
-            or (part.Parent and part.Parent:FindFirstChildOfClass("ProximityPrompt"))
-        if prompt and prompt.Enabled and not seen[prompt] then
-            seen[prompt] = true
-            table.insert(found, prompt)
-        end
-    end
-
-    return found
+local function getTorso(character)
+    if not character then return nil end
+    return character:FindFirstChild("UpperTorso") 
+        or character:FindFirstChild("Torso") 
+        or character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("Head")
 end
 
-UpdateLoader(34, "Đã load xong: Ammo System")
+local function getClosestEnemyInFOV()
+    if not AimSettings.Enabled then return nil end
 
---==================================================
--- AUTO EAT / HERB - LOW OVERHEAD SYSTEM
---==================================================
+    local closestChar = nil
+    local shortestWorldDist = AimSettings.MaxDistance
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
-local EatConfig = {
-    SEARCH_RADIUS = 350,
-    STAY_DURATION = 0.35,
-    INTERACTION_INTERVAL = 0.14,
-    CYCLE_INTERVAL = 0.9,
-    STRICT_MEAT_KEYWORDS = {"carcass", "meat", "corpse", "deadbody", "ribs", "flesh"},
-    STRICT_HERB_KEYWORDS = {"bush", "plant", "grass", "foliage", "herb", "fern", "leaves", "berry", "shrub"},
-}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local char = player.Character
+            local torso = getTorso(char)
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
 
-local EatRemotes = nil
-local EatRemoteByType = {
-    meat = nil,
-    herb = nil,
-    generic = nil,
-}
-local IsExecutingEatOrHerb = false
-local EatBusyUntil = 0
-
-local function HasKeyword(text, keywords)
-    text = string.lower(tostring(text or ""))
-    for _, keyword in ipairs(keywords) do
-        if text:find(keyword, 1, true) then
-            return true
-        end
-    end
-    return false
-end
-
-local function IsLivingOrMapDecor(instance)
-    local model = instance:FindFirstAncestorOfClass("Model")
-    if not model then return false end
-
-    if Players:GetPlayerFromCharacter(model) then
-        return true
-    end
-
-    local humanoid = GetHumanoid(model)
-    if humanoid and humanoid.Health > 0 then
-        return true
-    end
-
-    local modelName = string.lower(model.Name)
-    return modelName:find("map", 1, true) ~= nil
-        or modelName:find("border", 1, true) ~= nil
-        or modelName:find("ocean", 1, true) ~= nil
-        or modelName:find("decor", 1, true) ~= nil
-end
-
-local function FindNearbyEatTarget(keywords)
-    local character, root = SafeCharacterReady()
-    if not character or not root then return nil end
-
-    local params = OverlapParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {character}
-    params.MaxParts = 220
-
-    local ok, parts = pcall(function()
-        return Workspace:GetPartBoundsInRadius(root.Position, EatConfig.SEARCH_RADIUS, params)
-    end)
-    if not ok or not parts then
-        return nil
-    end
-
-    local nearest
-    local nearestDistance = EatConfig.SEARCH_RADIUS
-
-    for _, part in ipairs(parts) do
-        if part:IsA("BasePart") and not IsLivingOrMapDecor(part) then
-            local parent = part.Parent
-            local ancestor = parent and parent.Parent
-            local matches = HasKeyword(part.Name, keywords)
-                or (parent and HasKeyword(parent.Name, keywords))
-                or (ancestor and HasKeyword(ancestor.Name, keywords))
-
-            if matches then
-                local distance = (part.Position - root.Position).Magnitude
-                if distance < nearestDistance then
-                    nearestDistance = distance
-                    nearest = part
-                end
-            end
-        end
-    end
-
-    return nearest
-end
-
-local function RefreshEatRemotes()
-    EatRemotes = {}
-    EatRemoteByType = {
-        meat = nil,
-        herb = nil,
-        generic = nil,
-    }
-
-    pcall(function()
-        for _, object in ipairs(ReplicatedStorage:GetDescendants()) do
-            if object:IsA("RemoteEvent") then
-                local name = string.lower(object.Name)
-                local isMeat = name:find("eat", 1, true)
-                    or name:find("bite", 1, true)
-                    or name:find("feed", 1, true)
-                    or name:find("consume", 1, true)
-                local isHerb = name:find("herb", 1, true)
-                    or name:find("graze", 1, true)
-                local isGeneric = name:find("interact", 1, true)
-
-                if isMeat or isHerb or isGeneric then
-                    table.insert(EatRemotes, object)
-                    if isHerb and not EatRemoteByType.herb then
-                        EatRemoteByType.herb = object
-                    end
-                    if isMeat and not EatRemoteByType.meat then
-                        EatRemoteByType.meat = object
-                    end
-                    if isGeneric and not EatRemoteByType.generic then
-                        EatRemoteByType.generic = object
+            if humanoid and humanoid.Health > 0 and torso then
+                local worldDistance = (Camera.CFrame.Position - torso.Position).Magnitude
+                
+                if worldDistance <= AimSettings.MaxDistance then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(torso.Position)
+                    if onScreen and screenPos.Z > 0 then
+                        local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                        
+                        if screenDist <= AimSettings.FOVRadius then
+                            if worldDistance < shortestWorldDist then
+                                shortestWorldDist = worldDistance
+                                closestChar = char
+                            end
+                        end
                     end
                 end
             end
         end
-    end)
+    end
+    return closestChar
 end
 
-local function GetEatPrompt(targetPart)
-    if not targetPart then return nil end
-
-    local prompt = targetPart:FindFirstChildOfClass("ProximityPrompt")
-    if prompt and prompt.Enabled then
-        return prompt
+RunService:BindToRenderStep("AimbotSystem", Enum.RenderPriority.Camera.Value + 100, function()
+    if not AimSettings.Enabled then
+        FOVStroke.Color = Color3.fromRGB(255, 255, 255)
+        hasTargetInFOV = false
+        return
     end
 
-    local parent = targetPart.Parent
-    if parent then
-        prompt = parent:FindFirstChildOfClass("ProximityPrompt")
-        if prompt and prompt.Enabled then
-            return prompt
+    local target = getClosestEnemyInFOV()
+    if target then
+        hasTargetInFOV = true
+        local targetTorso = getTorso(target)
+        FOVStroke.Color = Color3.fromRGB(255, 50, 50)
+
+        if targetTorso then
+            local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, targetTorso.Position)
+            Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, AimSettings.Smoothness)
         end
-    end
-
-    return nil
-end
-
-local function TriggerEatInteraction(targetPart, mode)
-    if not targetPart or not targetPart.Parent then
-        return false
-    end
-
-    local prompt = GetEatPrompt(targetPart)
-    if prompt and type(fireproximityprompt) == "function" then
-        local ok = pcall(function()
-            fireproximityprompt(prompt)
-        end)
-        if ok then
-            return true
-        end
-    end
-
-    if EatRemotes == nil then
-        RefreshEatRemotes()
-    end
-
-    local remote
-    if mode == "herb" then
-        remote = EatRemoteByType.herb or EatRemoteByType.generic or EatRemoteByType.meat
     else
-        remote = EatRemoteByType.meat or EatRemoteByType.generic or EatRemoteByType.herb
-    end
-
-    if remote and remote.Parent then
-        local remoteName = string.lower(remote.Name)
-        local ok = pcall(function()
-            if remoteName:find("herb", 1, true) or remoteName:find("graze", 1, true) or mode == "herb" then
-                remote:FireServer("Herb", targetPart)
-            else
-                remote:FireServer(targetPart)
-            end
-        end)
-        return ok
-    end
-
-    return false
-end
-
-local function PerformEatBlink(targetPart, mode)
-    local now = os.clock()
-    if now < EatBusyUntil or IsExecutingEatOrHerb then
-        return false
-    end
-
-    local character, root, humanoid = SafeCharacterReady()
-    if not character or not root or not humanoid or humanoid.Health <= 0 then
-        return false
-    end
-
-    if not targetPart or not targetPart.Parent then
-        return false
-    end
-
-    IsExecutingEatOrHerb = true
-    EatBusyUntil = now + EatConfig.CYCLE_INTERVAL * 0.5
-
-    local originalCFrame = root.CFrame
-    local originalVelocity = root.AssemblyLinearVelocity
-    local originalCollisions = {}
-
-    local ok = pcall(function()
-        for _, part in ipairs(character:GetChildren()) do
-            if part:IsA("BasePart") then
-                originalCollisions[part] = part.CanCollide
-                if part.CanCollide then
-                    part.CanCollide = false
-                end
-            end
-        end
-
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.CFrame = targetPart.CFrame * CFrame.new(0, 1, 0)
-
-        local start = os.clock()
-        while os.clock() - start < EatConfig.STAY_DURATION do
-            if not targetPart.Parent then
-                break
-            end
-            TriggerEatInteraction(targetPart, mode)
-            task.wait(EatConfig.INTERACTION_INTERVAL)
-        end
-    end)
-
-    if root and root.Parent then
-        root.CFrame = originalCFrame
-        root.AssemblyLinearVelocity = originalVelocity
-    end
-
-    for part, originalValue in pairs(originalCollisions) do
-        if part and part.Parent then
-            pcall(function() part.CanCollide = originalValue end)
-        end
-    end
-
-    IsExecutingEatOrHerb = false
-    return ok
-end
-
--- One worker for both Meat + Herb, never two scanners fighting each other.
-task.spawn(function()
-    while not Runtime.stopped do
-        local started = os.clock()
-
-        if State.autoEat and not State.autoHerb then
-            local target = FindNearbyEatTarget(EatConfig.STRICT_MEAT_KEYWORDS)
-            if target then
-                PerformEatBlink(target, "meat")
-            end
-        elseif State.autoHerb and not State.autoEat then
-            local target = FindNearbyEatTarget(EatConfig.STRICT_HERB_KEYWORDS)
-            if target then
-                PerformEatBlink(target, "herb")
-            end
-        elseif State.autoEat and State.autoHerb then
-            -- Alternates between the two lists so both toggles can remain enabled.
-            local target = FindNearbyEatTarget(EatConfig.STRICT_MEAT_KEYWORDS)
-            if not target then
-                target = FindNearbyEatTarget(EatConfig.STRICT_HERB_KEYWORDS)
-            end
-            if target then
-                local name = string.lower(target.Name)
-                local mode = HasKeyword(name, EatConfig.STRICT_HERB_KEYWORDS) and "herb" or "meat"
-                PerformEatBlink(target, mode)
-            end
-        end
-
-        local elapsed = os.clock() - started
-        local remaining = math.max(0.05, EatConfig.CYCLE_INTERVAL - elapsed)
-        task.wait(remaining)
+        hasTargetInFOV = false
+        FOVStroke.Color = Color3.fromRGB(255, 255, 255)
     end
 end)
 
-RefreshEatRemotes()
-UpdateLoader(42, "Đã load xong: Auto Eat + Auto Herb")
+local function CreateESP(player)
+    if player == LocalPlayer then return end
 
---==================================================
--- UI WINDOW
---==================================================
+    local function SetupCharacter(char)
+        if not char then return end
 
+        -- Không chặn thread load bằng WaitForChild.
+        -- Character có thể chưa có Head/Humanoid ngay khi CharacterAdded.
+        task.spawn(function()
+            local deadline = os.clock() + 8
+            local head = char:FindFirstChild("Head")
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+
+            while char.Parent and os.clock() < deadline and (not head or not humanoid) do
+                head = head or char:FindFirstChild("Head")
+                humanoid = humanoid or char:FindFirstChildOfClass("Humanoid")
+                if head and humanoid then break end
+                task.wait(0.1)
+            end
+
+            if not char.Parent or not head or not humanoid then return end
+
+            if head:FindFirstChild("PlayerESP") then
+                head.PlayerESP:Destroy()
+            end
+
+            local bgui = Instance.new("BillboardGui")
+            bgui.Name = "PlayerESP"
+            bgui.Adornee = head
+            bgui.Size = UDim2.new(0, 200, 0, 50)
+            bgui.StudsOffset = Vector3.new(0, 2.5, 0)
+            bgui.AlwaysOnTop = true
+            bgui.Parent = head
+
+            local textLabel = Instance.new("TextLabel")
+            textLabel.Size = UDim2.new(1, 0, 1, 0)
+            textLabel.BackgroundTransparency = 1
+            textLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+            textLabel.TextStrokeTransparency = 0
+            textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            textLabel.Font = Enum.Font.GothamBold
+            textLabel.TextSize = 13
+            textLabel.Parent = bgui
+
+            -- Một connection riêng cho ESP này; việc tạo nó không cản quá trình load chính.
+            RunService.RenderStepped:Connect(function()
+                if not char.Parent or not humanoid.Parent or humanoid.Health <= 0 or not EspSettings.Enabled then
+                    if bgui.Parent then bgui.Enabled = false end
+                    return
+                end
+
+                bgui.Enabled = true
+                local textParts = {}
+
+                if EspSettings.ShowName then
+                    table.insert(textParts, player.DisplayName)
+                end
+
+                if EspSettings.ShowHealth then
+                    local hp = math.floor(humanoid.Health)
+                    local maxHp = math.floor(humanoid.MaxHealth)
+                    table.insert(textParts, string.format("[%d/%d HP]", hp, maxHp))
+                end
+
+                local myChar = LocalPlayer.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                if EspSettings.ShowDistance and myHRP then
+                    local dist = math.floor((myHRP.Position - head.Position).Magnitude)
+                    table.insert(textParts, string.format("[%dm]", dist))
+                end
+
+                textLabel.Text = table.concat(textParts, " | ")
+            end)
+        end)
+    end
+
+    if player.Character then
+        SetupCharacter(player.Character)
+    end
+    player.CharacterAdded:Connect(SetupCharacter)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    CreateESP(p)
+end
+Players.PlayerAdded:Connect(CreateESP)
+
+-- Stage 4 chỉ xác nhận hệ thống ESP đã được đăng ký.
+-- Không đợi từng Character spawn xong mới cho script chạy tiếp.
+LoaderStage(4)
+
+local flyEnabled = false
+local flySpeed = 50
+local flyAtt, flyLV, flyAG
+local flyRenderConnection = nil
+
+local function cleanupFly()
+    if flyRenderConnection then
+        flyRenderConnection:Disconnect()
+        flyRenderConnection = nil
+    end
+    if flyLV then flyLV:Destroy() flyLV = nil end
+    if flyAG then flyAG:Destroy() flyAG = nil end
+    if flyAtt then flyAtt:Destroy() flyAtt = nil end
+end
+
+local function stopFly()
+    flyEnabled = false
+    cleanupFly()
+end
+
+local function startFly()
+    cleanupFly()
+    flyEnabled = true
+
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart", 5)
+    if not hrp or not flyEnabled then return end
+
+    flyAtt = Instance.new("Attachment", hrp)
+
+    flyLV = Instance.new("LinearVelocity")
+    flyLV.Attachment0 = flyAtt
+    flyLV.MaxForce = math.huge
+    flyLV.VectorVelocity = Vector3.new(0, 0, 0)
+    flyLV.Parent = hrp
+
+    flyAG = Instance.new("AlignOrientation")
+    flyAG.Attachment0 = flyAtt
+    flyAG.MaxTorque = math.huge
+    flyAG.Responsiveness = 200
+    flyAG.Parent = hrp
+
+    flyRenderConnection = RunService.RenderStepped:Connect(function()
+        local currentChar = LocalPlayer.Character
+        local currentHRP = currentChar and currentChar:FindFirstChild("HumanoidRootPart")
+        local humanoid = currentChar and currentChar:FindFirstChildOfClass("Humanoid")
+
+        if not flyEnabled or not currentChar or not currentChar.Parent or not currentHRP or not humanoid or humanoid.Health <= 0 then
+            cleanupFly()
+            return
+        end
+
+        if not flyLV or not flyAG or flyLV.Parent ~= currentHRP or flyAG.Parent ~= currentHRP then
+            cleanupFly()
+            return
+        end
+
+        local moveDir = humanoid.MoveDirection
+        local targetVel = Vector3.new()
+        if moveDir.Magnitude > 0 then
+            local camCF = Camera.CFrame
+            local camLook = camCF.LookVector
+            local camRight = camCF.RightVector
+            local flatLook = Vector3.new(camLook.X, 0, camLook.Z).Unit
+            local flatRight = Vector3.new(camRight.X, 0, camRight.Z).Unit
+            local lookDot = moveDir:Dot(camLook)
+            local rightDot = moveDir:Dot(camRight)
+            targetVel = (flatLook * lookDot + flatRight * rightDot + Vector3.new(0, camLook.Y * math.abs(lookDot), 0)).Unit * flySpeed
+        else
+            targetVel = Vector3.new(0, 0, 0)
+        end
+
+        flyLV.VectorVelocity = targetVel
+        flyAG.CFrame = Camera.CFrame
+    end)
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    if flyEnabled then
+        task.wait(0.5)
+        if flyEnabled then
+            startFly()
+        end
+    end
+end)
+
+LoaderStage(5)
+
+----------------------------------------------------
+-- 4. KHỞI TẠO TABS VÀ CHỨC NĂNG
+----------------------------------------------------
+local targetWalkSpeed = 16
+RunService.Stepped:Connect(function()
+    pcall(function()
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum and targetWalkSpeed > 16 then
+            if hum.WalkSpeed ~= targetWalkSpeed then
+                hum.WalkSpeed = targetWalkSpeed
+            end
+        end
+    end)
+end)
+
+
+
+----------------------------------------------------
+-- 4. MEIZU UI — dựng hoàn chỉnh phía sau Loader HUD
+----------------------------------------------------
 local Window = MeizuLibrary:CreateWindow({
     Title = "Meizu Hub",
     SubTitle = "Primeval Earth • NTTP1721",
@@ -1376,117 +1022,90 @@ local Window = MeizuLibrary:CreateWindow({
     Size = UDim2.fromOffset(650, 470),
 })
 
-pcall(function()
-    Window:Toggle(false)
-end)
-
---==================================================
--- PARAGRAPH HELPERS
---==================================================
-
 local function FixParagraphElement(element, defaultHeight)
-    if not element or not element.Frame then
-        return element
-    end
-
+    if not element or not element.Frame then return element end
     local frame = element.Frame
     local fallbackHeight = defaultHeight or 58
+
     local titleLabel = element.TitleLabel
     local contentLabel = element.ContentLabel
-
     if not titleLabel or not contentLabel then
         local labels = {}
-        for _, object in ipairs(frame:GetDescendants()) do
-            if object:IsA("TextLabel") then
-                table.insert(labels, object)
-                object.Visible = true
+        for _, obj in ipairs(frame:GetDescendants()) do
+            if obj:IsA("TextLabel") then
+                table.insert(labels, obj)
+                obj.Visible = true
             end
         end
         titleLabel = titleLabel or labels[1]
         contentLabel = contentLabel or labels[2]
     end
 
-    local busy = false
     local function Reflow()
-        if busy or not frame.Parent then return end
-        busy = true
-
+        if not frame or not frame.Parent then return end
         pcall(function()
             frame.Visible = true
             frame.ClipsDescendants = false
             frame.AutomaticSize = Enum.AutomaticSize.None
         end)
 
-        if titleLabel and titleLabel.Parent then
-            local width = math.max(120, frame.AbsoluteSize.X - 24)
-            if width <= 120 then width = 430 end
+        if not titleLabel or not titleLabel.Parent then return end
 
-            local titleHeight = 18
-            pcall(function()
-                titleLabel.Visible = true
-                titleLabel.TextWrapped = true
-                titleLabel.AutomaticSize = Enum.AutomaticSize.None
-                titleHeight = math.max(
-                    18,
-                    math.ceil(TextService:GetTextSize(
-                        tostring(titleLabel.Text or ""),
-                        Enum.Font.GothamBold,
-                        13,
-                        Vector2.new(width, 1000)
-                    ).Y)
-                )
-                titleLabel.Size = UDim2.new(1, 0, 0, titleHeight)
-            end)
+        local width = math.max(120, frame.AbsoluteSize.X - 24)
+        if width <= 120 then
+            width = 430
+        end
 
-            local contentHeight = 0
-            if contentLabel and contentLabel.Parent then
-                pcall(function()
-                    contentLabel.Visible = true
-                    contentLabel.TextWrapped = true
-                    contentLabel.AutomaticSize = Enum.AutomaticSize.None
-                    local text = tostring(contentLabel.Text or "")
-                    if text ~= "" then
-                        contentHeight = math.max(
-                            16,
-                            math.ceil(TextService:GetTextSize(
-                                text,
-                                Enum.Font.Gotham,
-                                12,
-                                Vector2.new(width, 1000)
-                            ).Y)
-                        )
-                    end
-                    contentLabel.Size = UDim2.new(1, 0, 0, contentHeight)
-                end)
-            end
+        local titleHeight = 18
+        local contentHeight = 0
 
-            local total = 10 + titleHeight + (contentLabel and 4 or 0) + contentHeight + 10
-            frame.Size = UDim2.new(1, 0, 0, math.max(fallbackHeight, total, 40))
+        pcall(function()
+            titleLabel.Visible = true
+            titleLabel.TextWrapped = true
+            titleLabel.AutomaticSize = Enum.AutomaticSize.None
+            titleHeight = math.max(18, math.ceil(
+                TextService:GetTextSize(tostring(titleLabel.Text or ""), Enum.Font.GothamBold, 13, Vector2.new(width, 1000)).Y
+            ))
+            titleLabel.Size = UDim2.new(1, 0, 0, titleHeight)
         end)
 
-        busy = false
+        if contentLabel and contentLabel.Parent then
+            pcall(function()
+                contentLabel.Visible = true
+                contentLabel.TextWrapped = true
+                contentLabel.AutomaticSize = Enum.AutomaticSize.None
+                if tostring(contentLabel.Text or "") ~= "" then
+                    contentHeight = math.max(16, math.ceil(
+                        TextService:GetTextSize(tostring(contentLabel.Text or ""), Enum.Font.Gotham, 12, Vector2.new(width, 1000)).Y
+                    ))
+                end
+                contentLabel.Size = UDim2.new(1, 0, 0, contentHeight)
+            end)
+        end
+
+        local total = 10 + titleHeight + (contentLabel and 4 or 0) + contentHeight + 10
+        total = math.max(fallbackHeight, total, 40)
+        frame.Size = UDim2.new(1, 0, 0, total)
     end
 
     Reflow()
     task.defer(Reflow)
-
-    Runtime:Connect(frame:GetPropertyChangedSignal("AbsoluteSize"), function()
-        task.defer(Reflow)
+    pcall(function()
+        frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            task.defer(Reflow)
+        end)
     end)
 
     if type(element.SetContent) ~= "function" then
         element.SetContent = function(self, text, textColor)
             if contentLabel and contentLabel.Parent then
                 contentLabel.Text = tostring(text or "")
-                if textColor then
-                    contentLabel.TextColor3 = textColor
-                end
+                if textColor then contentLabel.TextColor3 = textColor end
             end
             self._Content = tostring(text or "")
             task.defer(Reflow)
         end
     end
-
     if type(element.SetTitle) ~= "function" then
         element.SetTitle = function(self, text)
             if titleLabel and titleLabel.Parent then
@@ -1499,29 +1118,24 @@ local function FixParagraphElement(element, defaultHeight)
     return element
 end
 
-local function CreateParagraph(tab, config, height)
-    return FixParagraphElement(tab:CreateParagraph(config), height or 58)
+local function CreateParagraph(tab, cfg, height)
+    local element = tab:CreateParagraph(cfg)
+    return FixParagraphElement(element, height or 58)
 end
 
 local function SetParagraphContent(element, text, textColor)
     if not element then return end
-
     pcall(function()
         if type(element.SetContent) == "function" then
             element:SetContent(text, textColor)
             return
         end
-
         local frame = element.Frame
-        if not frame then return end
-
-        for _, object in ipairs(frame:GetDescendants()) do
-            if object:IsA("TextLabel") then
-                if textColor then
-                    object.TextColor3 = textColor
-                end
-                if object ~= frame:FindFirstChild("TitleLabel", true) then
-                    object.Text = tostring(text or "")
+        if frame then
+            for _, obj in ipairs(frame:GetDescendants()) do
+                if obj:IsA("TextLabel") and obj ~= frame:FindFirstChild("TitleLabel", true) then
+                    obj.Text = tostring(text or "")
+                    if textColor then obj.TextColor3 = textColor end
                 end
             end
         end
@@ -1536,98 +1150,86 @@ local function SetQuestStatus(text, color)
     SetParagraphContent(QuestStatusLabel, text, color)
 end
 
---==================================================
--- TABS
---==================================================
+SetKaitunStatus = function(text, color)
+    SetParagraphContent(KaitunStatusLabel, text, color)
+end
 
 local MovementTab = Window:CreateTab("Misc", "rbxassetid://10747382750", 5)
-local TeleportTab = Window:CreateTab("Teleport", "rbxassetid://10734886004", 2)
+local TeleportTab = Window:CreateTab("Teleport ", "rbxassetid://10734886004", 2)
 local EspTab = Window:CreateTab("ESP", "rbxassetid://10747375132", 3)
 local PvpTab = Window:CreateTab("PVP", "rbxassetid://10734975692", 4)
 local FossilsTab = Window:CreateTab("Main", "rbxassetid://10709781605", 1)
 local VisualsTab = Window:CreateTab("Setting", "rbxassetid://10734950309", 6)
+LoaderStage(6)
 
-UpdateLoader(50, "Đã dựng xong: Tabs + Menu")
-
---==================================================
--- MOVEMENT TAB
---==================================================
-
+----------------------------------------------------
+-- TAB DI CHUYEN
+----------------------------------------------------
 MovementTab:CreateSection("Movement")
 MovementTab:CreateSlider({
     Title = "Tốc Độ Chạy",
     Description = "WalkSpeed",
-    Min = 16,
-    Max = 200,
-    Default = 16,
+    Min = 16, Max = 200, Default = 16,
     Callback = function(value)
-        State.targetWalkSpeed = tonumber(value) or 16
-        local humanoid = GetHumanoid(GetCharacter())
-        if humanoid then
-            pcall(function() humanoid.WalkSpeed = State.targetWalkSpeed end)
-        end
+        targetWalkSpeed = value
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = value end
     end,
 })
-
 MovementTab:CreateSlider({
     Title = "Nhảy",
     Description = "JumpPower",
-    Min = 50,
-    Max = 300,
-    Default = 50,
+    Min = 50, Max = 300, Default = 50,
     Callback = function(value)
-        State.targetJumpPower = tonumber(value) or 50
-        local humanoid = GetHumanoid(GetCharacter())
-        if humanoid then
-            pcall(function()
-                humanoid.UseJumpPower = true
-                humanoid.JumpPower = State.targetJumpPower
-            end)
+        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.UseJumpPower = true
+            hum.JumpPower = value
         end
     end,
 })
-
 MovementTab:CreateToggle({
     Title = "Bật/Tắt Bay",
     Description = "Fly",
     Default = false,
-    Callback = function(enabled)
-        if enabled then
-            StartFly()
-        else
-            StopFly()
-        end
+    Callback = function(state)
+        if state then startFly() else stopFly() end
     end,
 })
-
 MovementTab:CreateSlider({
     Title = "Tốc Độ Bay",
     Description = "Fly Speed",
-    Min = 10,
-    Max = 150,
-    Default = 50,
-    Callback = function(value)
-        State.flySpeed = tonumber(value) or 50
-    end,
+    Min = 10, Max = 150, Default = 50,
+    Callback = function(value) flySpeed = value end,
 })
-
 MovementTab:CreateToggle({
     Title = "Xuyên Tường",
     Description = "NoClip",
     Default = false,
-    Callback = function(enabled)
-        if enabled then
-            StartNoclip()
-        else
-            StopNoclip()
+    Callback = function(state)
+        if state then
+            if noclipConn then pcall(function() noclipConn:Disconnect() end) end
+            noclipConn = RunService.Stepped:Connect(function()
+                local char = LocalPlayer.Character
+                if char then
+                    for _, part in pairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then part.CanCollide = false end
+                    end
+                end
+            end)
+        elseif noclipConn then
+            noclipConn:Disconnect()
+            noclipConn = nil
         end
     end,
 })
 
---==================================================
--- TELEPORT TAB
---==================================================
 
+----------------------------------------------------
+-- TAB TELEPORT
+----------------------------------------------------
 TeleportTab:CreateSection("Teleport Player")
 CreateParagraph(TeleportTab, {
     Title = "Danh Sách Người Chơi",
@@ -1646,573 +1248,959 @@ local function ClearPlayerButtons()
     end
 end
 
-local function AddPlayerButton(player)
-    if player == LocalPlayer then return end
-
+local function AddPlayerButton(plr)
+    if plr == LocalPlayer then return end
     local element = TeleportTab:CreateButton({
-        Title = "📍 " .. player.DisplayName .. " (@" .. player.Name .. ")",
+        Title = "📍 " .. plr.DisplayName .. " (@" .. plr.Name .. ")",
         Callback = function()
-            if player.Parent ~= Players then return end
-            local targetRoot = GetRoot(player.Character)
-            local myRoot = GetRoot(GetCharacter())
-            if targetRoot and myRoot then
-                pcall(function()
-                    myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 2, 2)
-                end)
+            if plr and plr.Parent == Players and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local myChar = LocalPlayer.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    myHRP.CFrame = plr.Character.HumanoidRootPart.CFrame * CFrame.new(0, 2, 2)
+                end
             end
         end,
     })
-
     table.insert(PlayerButtonElements, element)
 end
 
 local function RefreshPlayerList()
     ClearPlayerButtons()
-    for _, player in ipairs(Players:GetPlayers()) do
-        AddPlayerButton(player)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        AddPlayerButton(plr)
     end
 end
 
-Runtime:Connect(Players.PlayerAdded, function()
-    task.delay(0.15, RefreshPlayerList)
+Players.PlayerAdded:Connect(function()
+    task.wait(0.15)
+    RefreshPlayerList()
 end)
-Runtime:Connect(Players.PlayerRemoving, function()
-    task.delay(0.05, RefreshPlayerList)
+Players.PlayerRemoving:Connect(function()
+    task.wait()
+    RefreshPlayerList()
 end)
 task.defer(RefreshPlayerList)
 
---==================================================
--- ESP TAB
---==================================================
-
+----------------------------------------------------
+-- TAB ESP
+----------------------------------------------------
 EspTab:CreateSection("ESP")
-EspTab:CreateToggle({
-    Title = "Bật/Tắt ESP",
-    Default = false,
-    Callback = function(enabled)
-        if enabled then
-            StartESP()
-        else
-            StopESP()
-        end
-    end,
-})
-EspTab:CreateToggle({
-    Title = "Hiện Tên",
-    Default = true,
-    Callback = function(value) State.showName = value end,
-})
-EspTab:CreateToggle({
-    Title = "Hiện Máu (HP)",
-    Default = true,
-    Callback = function(value) State.showHealth = value end,
-})
-EspTab:CreateToggle({
-    Title = "Hiện Khoảng Cách (m)",
-    Default = true,
-    Callback = function(value) State.showDistance = value end,
-})
+EspTab:CreateToggle({Title="Bật/Tắt ESP", Default=EspSettings.Enabled, Callback=function(v) EspSettings.Enabled=v end})
+EspTab:CreateToggle({Title="Hiện Tên", Default=EspSettings.ShowName, Callback=function(v) EspSettings.ShowName=v end})
+EspTab:CreateToggle({Title="Hiện Máu (HP)", Default=EspSettings.ShowHealth, Callback=function(v) EspSettings.ShowHealth=v end})
+EspTab:CreateToggle({Title="Hiện Khoảng Cách (m)", Default=EspSettings.ShowDistance, Callback=function(v) EspSettings.ShowDistance=v end})
 
---==================================================
--- PVP TAB
---==================================================
-
+----------------------------------------------------
+-- TAB PVP
+----------------------------------------------------
 PvpTab:CreateSection("Aim / FOV")
 PvpTab:CreateToggle({
-    Title = "Auto Attack (Chỉ bắn khi FOV đỏ)",
-    Default = false,
-    Callback = function(enabled)
-        State.autoAttack = enabled
-        _G.AutoAttackRunning = enabled
-    end,
+    Title="Auto Attack (Chi Bắn Khi FOV Đỏ)", Default=false,
+    Callback=function(state) _G.AutoAttackRunning=state end,
 })
-
 PvpTab:CreateToggle({
-    Title = "Aimbot (Auto Lock)",
-    Default = false,
-    Callback = function(enabled)
-        SetAimEnabled(enabled)
-        FOVCircle.Visible = enabled and State.showFOV
+    Title="Aimbot (Auto Lock)", Default=false,
+    Callback=function(state)
+        AimSettings.Enabled=state
+        FOVCircle.Visible=AimSettings.Enabled and AimSettings.ShowFOV
     end,
 })
-
 PvpTab:CreateToggle({
-    Title = "Hiện Vòng FOV",
-    Default = false,
-    Callback = function(enabled)
-        State.showFOV = enabled
-        FOVCircle.Visible = State.aimEnabled and enabled
+    Title="Hiện Vòng FOV", Default=false,
+    Callback=function(state)
+        AimSettings.ShowFOV=state
+        FOVCircle.Visible=AimSettings.Enabled and AimSettings.ShowFOV
     end,
 })
-
 PvpTab:CreateSlider({
-    Title = "Kích Thước FOV",
-    Min = 30,
-    Max = 200,
-    Default = 150,
-    Callback = function(value)
-        State.aimFOV = tonumber(value) or 150
-        FOVCircle.Size = UDim2.fromOffset(State.aimFOV * 2, State.aimFOV * 2)
-        local corner = FOVCircle:FindFirstChildOfClass("UICorner")
-        if corner then
-            corner.CornerRadius = UDim.new(1, 0)
-        end
+    Title="Kích Thước FOV", Min=30, Max=200, Default=150,
+    Callback=function(value)
+        AimSettings.FOVRadius=value
+        FOVCircle.Size=UDim2.fromOffset(value*2, value*2)
     end,
 })
-
 PvpTab:CreateSlider({
-    Title = "Độ Mượt Aim (Smooth)",
-    Min = 1,
-    Max = 10,
-    Default = 2,
-    Callback = function(value)
-        State.aimSmooth = math.clamp((tonumber(value) or 2) / 10, 0.05, 1)
-    end,
+    Title="Độ Mượt Aim (Smooth)", Min=1, Max=10, Default=2,
+    Callback=function(value) AimSettings.Smoothness=value/10 end,
 })
-
 AmmoStatusLabel = CreateParagraph(PvpTab, {
-    Title = "Trạng thái đạn",
-    Content = "Đang chờ...",
+    Title="Trạng thái đạn",
+    Content="Đang chờ...",
 }, 60)
-
 PvpTab:CreateToggle({
-    Title = "Auto Nhặt Đạn (Nhặt 2 Lần)",
-    Default = false,
-    Callback = function(enabled)
-        State.autoAmmo = enabled
-        _G.AutoFarmAmmo = enabled
-        if not enabled then
+    Title="Auto Nhặt Đạn (Nhặt 2 Lần)", Default=false,
+    Callback=function(state)
+        _G.AutoFarmAmmo=state
+        if not state then
             SetAmmoStatus("Trạng Thái Đạn: Đã TẮT")
-            local root = GetRoot(GetCharacter())
-            if root then
-                root.Anchored = false
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.Anchored=false
             end
         end
     end,
 })
 
---==================================================
--- MAIN / FOSSILS TAB
---==================================================
+----------------------------------------------------
+-- AUTO NUÔI (KAITUN) — HELPER FUNCTIONS
+----------------------------------------------------
 
+-- Cache thanh stat để không scan PlayerGui mỗi cycle
+local StatBarCache = {}
+
+local function FindBarByName(root, keyword)
+    for _, obj in pairs(root:GetDescendants()) do
+        if obj:IsA("Frame") then
+            local name = string.lower(obj.Name)
+            if name:find(keyword, 1, true) then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+local function ReadBarRatio(barFrame)
+    if not barFrame then return nil end
+    local fill = barFrame:FindFirstChild("Fill")
+        or barFrame:FindFirstChild("Bar")
+        or barFrame:FindFirstChild("FillBar")
+        or barFrame:FindFirstChild("Content")
+
+    if not fill then
+        for _, child in pairs(barFrame:GetChildren()) do
+            if child:IsA("Frame") then
+                fill = child
+                break
+            end
+        end
+    end
+    if not fill then return nil end
+
+    local sx = fill.Size.X.Scale
+    local sy = fill.Size.Y.Scale
+    -- Thanh ngang: dùng X.Scale. Thanh dọc: dùng 1 - Y.Scale (fill từ dưới lên)
+    if sx > 0 and sx <= 1 then return sx end
+    if sy > 0 and sy <= 1 then return 1 - sy end
+    return nil
+end
+
+-- Đọc giá trị thanh stat (hunger/thirst/stamina) từ PlayerGui
+-- Trả về 0.0 - 1.0, hoặc nil nếu không đọc được
+GetStatValue = function(statName)
+    -- Cache hit
+    if StatBarCache[statName] then
+        local bar = StatBarCache[statName]
+        if bar and bar.Parent then
+            return ReadBarRatio(bar)
+        end
+    end
+
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return nil end
+
+    local keywords = {
+        hunger  = {"hunger", "food", "meat"},
+        thirst  = {"thirst", "water", "drink"},
+        stamina = {"stamina", "energy", "rest"},
+    }
+    local kwList = keywords[statName]
+    if not kwList then return nil end
+
+    for _, kw in ipairs(kwList) do
+        local bar = FindBarByName(playerGui, kw)
+        if bar then
+            StatBarCache[statName] = bar
+            return ReadBarRatio(bar)
+        end
+    end
+    return nil
+end
+
+-- Quét địch (player + NPC creature) trong bán kính quanh vị trí
+-- Trả về: hasEnemy (bool), enemyType (string)
+ScanEnemyNear = function(position, radius)
+    local radiusSq = radius * radius
+
+    -- Check players
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                local delta = hrp.Position - position
+                if delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z <= radiusSq then
+                    return true, "player:" .. player.Name
+                end
+            end
+        end
+    end
+
+    -- Check NPC creatures via spatial query
+    local params = OverlapParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    local char = LocalPlayer.Character
+    if char then params.FilterDescendantsInstances = {char} end
+
+    local parts = Workspace:GetPartBoundsInRadius(position, radius, params)
+    for _, part in ipairs(parts) do
+        local model = part:FindFirstAncestorOfClass("Model")
+        if model and not Players:GetPlayerFromCharacter(model) then
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                local delta = part.Position - position
+                if delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z <= radiusSq then
+                    return true, "creature:" .. model.Name
+                end
+            end
+        end
+    end
+    return false, nil
+end
+
+-- Check hide spot có safe không (không có địch trong 150m)
+IsSpotSafe = function(spotName)
+    local pos = KAITUN_CONFIG.HIDE_SPOTS[spotName]
+    if not pos then return false end
+    if spotName == "sky" then return true end
+    local hasEnemy = ScanEnemyNear(pos, KAITUN_CONFIG.ENEMY_SCAN_RADIUS)
+    return not hasEnemy
+end
+
+-- Teleport an toàn tới vị trí (reset velocity, multi-set)
+local function TeleportToPosition(position)
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    pcall(function()
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        local targetCF = CFrame.new(position)
+        for _ = 1, 3 do
+            hrp.CFrame = targetCF
+            task.wait(0.03)
+        end
+    end)
+    return true
+end
+
+-- Sky mode state (riêng biệt với fly system của Misc tab)
+local skyAtt, skyLV, skyAG, skyRenderConn
+
+StopSkyMode = function()
+    if skyRenderConn then pcall(function() skyRenderConn:Disconnect() end) skyRenderConn = nil end
+    if skyLV then pcall(function() skyLV:Destroy() end) skyLV = nil end
+    if skyAG then pcall(function() skyAG:Destroy() end) skyAG = nil end
+    if skyAtt then pcall(function() skyAtt:Destroy() end) skyAtt = nil end
+end
+
+-- Sky mode: teleport lên sky spot + giữ yên bằng LinearVelocity (giống startFly)
+StartSkyMode = function()
+    StopSkyMode()
+
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart", 5)
+    if not hrp then return end
+
+    -- Teleport lên sky spot
+    pcall(function()
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.CFrame = CFrame.new(KAITUN_CONFIG.HIDE_SPOTS.sky)
+    end)
+
+    -- Tạo fly hold (giữ yên, velocity = 0)
+    skyAtt = Instance.new("Attachment", hrp)
+
+    skyLV = Instance.new("LinearVelocity")
+    skyLV.Attachment0 = skyAtt
+    skyLV.MaxForce = math.huge
+    skyLV.VectorVelocity = Vector3.new(0, 0, 0)
+    skyLV.Parent = hrp
+
+    skyAG = Instance.new("AlignOrientation")
+    skyAG.Attachment0 = skyAtt
+    skyAG.MaxTorque = math.huge
+    skyAG.Responsiveness = 200
+    skyAG.Parent = hrp
+
+    skyRenderConn = RunService.RenderStepped:Connect(function()
+        local currentChar = LocalPlayer.Character
+        local currentHRP = currentChar and currentChar:FindFirstChild("HumanoidRootPart")
+        local humanoid = currentChar and currentChar:FindFirstChildOfClass("Humanoid")
+
+        if not currentChar or not currentChar.Parent or not currentHRP
+           or not humanoid or humanoid.Health <= 0 then
+            StopSkyMode()
+            return
+        end
+
+        -- Giữ velocity = 0 (chống rơi)
+        if skyLV then skyLV.VectorVelocity = Vector3.new(0, 0, 0) end
+
+        -- Re-center nếu drift quá 3 studs
+        local delta = KAITUN_CONFIG.HIDE_SPOTS.sky - currentHRP.Position
+        if delta.Magnitude > 3 then
+            currentHRP.CFrame = CFrame.new(KAITUN_CONFIG.HIDE_SPOTS.sky)
+        end
+    end)
+end
+
+-- Teleport tới hide spot (1, 2, hoặc sky)
+TeleportToHideSpot = function(spotName)
+    local pos = KAITUN_CONFIG.HIDE_SPOTS[spotName]
+    if not pos then return false end
+
+    if spotName == "sky" then
+        StartSkyMode()
+        KaitunState.SkyStartTime = os.clock()
+    else
+        StopSkyMode()
+        TeleportToPosition(pos)
+    end
+
+    KaitunState.CurrentSpot = spotName
+    KaitunState.LastSwitchTime = os.clock()
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    KaitunState.LastHP = (hum and hum.Health) or 100
+    return true
+end
+
+-- Switch spot theo cycle: 1 → 2 → sky → 1 → 2 → sky → ...
+TrySwitchSpot = function(reason)
+    local now = os.clock()
+    if (now - KaitunState.LastSwitchTime) < KAITUN_CONFIG.SWITCH_COOLDOWN then
+        return false
+    end
+
+    local current = KaitunState.CurrentSpot
+    local nextSpot
+
+    if current == "1" then
+        if IsSpotSafe("2") then
+            nextSpot = "2"
+        else
+            nextSpot = "sky"
+        end
+    elseif current == "2" then
+        nextSpot = "sky"
+    else  -- sky or nil
+        if IsSpotSafe("1") then
+            nextSpot = "1"
+        elseif IsSpotSafe("2") then
+            nextSpot = "2"
+        else
+            return false  -- Cả 2 unsafe, ở lại sky
+        end
+    end
+
+    if nextSpot then
+        if SetKaitunStatus then
+            SetKaitunStatus(string.format("⚡ Switch %s → %s (%s)",
+                tostring(current), nextSpot, reason or "attack"),
+                Color3.fromRGB(255, 200, 50))
+        end
+        TeleportToHideSpot(nextSpot)
+        return true
+    end
+    return false
+end
+
+-- Cleanup khi tắt Kaitun
+KaitunCleanup = function()
+    StopSkyMode()
+    KaitunState.CurrentSpot = nil
+    KaitunState.NoFoodSince = 0
+    KaitunState.UnsafeSince = 0
+    KaitunState.IsEating = false
+    local restRemote = ReplicatedStorage:FindFirstChild("Remotes")
+    if restRemote and restRemote:FindFirstChild("Character") and restRemote.Character:FindFirstChild("Rest") then
+        pcall(function() restRemote.Character.Rest:InvokeServer(false) end)
+    end
+end
+
+----------------------------------------------------
+-- TAB FOSSILS
+----------------------------------------------------
 FossilsTab:CreateSection("Main / Quest")
 QuestStatusLabel = CreateParagraph(FossilsTab, {
-    Title = "Quest Hiện Tại",
-    Content = "Đang chờ...",
+    Title="Quest Hiện Tại",
+    Content="Đang chờ...",
 }, 60)
+FossilsTab:CreateToggle({Title="Auto Ăn Thịt (Toggle Meat)", Default=false, Callback=function(v) _G.AutoEatActive=v end})
+FossilsTab:CreateToggle({Title="Auto Ăn Cỏ (Toggle Herb)", Default=false, Callback=function(v) _G.AutoHerbActive=v end})
+FossilsTab:CreateToggle({Title="Auto Drink (Uống Liên Tục)", Default=false, Callback=function(v) _G.AutoDrinkRunning=v end})
+FossilsTab:CreateToggle({Title="Auto Rest (Nghỉ Ngơi)", Default=false, Callback=function(v) _G.AutoRestRunning=v end})
+FossilsTab:CreateToggle({Title="Auto Zone (Chiếm Zone)", Default=false, Callback=function(v) _G.AutoZoneRunning=v end})
 
-FossilsTab:CreateToggle({
-    Title = "Auto Ăn Thịt (Toggle Meat)",
-    Default = false,
-    Callback = function(enabled)
-        State.autoEat = enabled
-        _G.AutoEatActive = enabled
+----------------------------------------------------
+-- TAB FOSSILS — AUTO NUÔI (KAITUN)
+----------------------------------------------------
+FossilsTab:CreateSection("Auto Nuôi (Kaitun)")
+
+KaitunStatusLabel = CreateParagraph(FossilsTab, {
+    Title = "Trạng thái Auto Nuôi",
+    Content = "Đang chờ...",
+}, 70)
+
+FossilsTab:CreateDropdown({
+    Title = "Chế độ ăn",
+    Description = "Chọn Meat hoặc Herb. None = Kaitun đứng chờ.",
+    Values = {"None", "Meat", "Herb"},
+    Default = "None",
+    Callback = function(value)
+        KaitunState.Diet = value
+        _G.KaitunDiet = value
+        if KaitunState.Enabled and SetKaitunStatus then
+            if value == "None" then
+                SetKaitunStatus("⚠ Chưa chọn chế độ ăn — Kaitun đang chờ", Color3.fromRGB(255, 80, 80))
+            else
+                SetKaitunStatus(string.format("✓ Diet: %s", value), Color3.fromRGB(80, 255, 80))
+            end
+        end
     end,
 })
 
 FossilsTab:CreateToggle({
-    Title = "Auto Ăn Cỏ (Toggle Herb)",
+    Title = "Auto Nuôi (Kaitun)",
+    Description = "Master switch — tự ẩn + ăn + uống + nghỉ thông minh",
     Default = false,
-    Callback = function(enabled)
-        State.autoHerb = enabled
-        _G.AutoHerbActive = enabled
+    Callback = function(state)
+        _G.AutoNuoiKaitun = state
+        KaitunState.Enabled = state
+
+        if state then
+            -- Bật Kaitun: kích hoạt Auto Drink + Auto Rest hiện có
+            _G.AutoDrinkRunning = true
+            _G.AutoRestRunning = true
+
+            task.spawn(function()
+                task.wait(0.5)
+                if not KaitunState.Enabled then return end
+                if KaitunState.Diet == "None" then
+                    if SetKaitunStatus then
+                        SetKaitunStatus("⚠ Chưa chọn chế độ ăn — Kaitun đang chờ", Color3.fromRGB(255, 80, 80))
+                    end
+                else
+                    -- Tele ngay về hide spot 1
+                    TeleportToHideSpot("1")
+                    if SetKaitunStatus then
+                        SetKaitunStatus(string.format("✓ Kaitun ON — Diet: %s — Đã tele hide spot 1", KaitunState.Diet), Color3.fromRGB(80, 255, 80))
+                    end
+                end
+            end)
+        else
+            -- Tắt Kaitun: dừng mọi thứ
+            _G.AutoDrinkRunning = false
+            _G.AutoRestRunning = false
+            KaitunCleanup()
+            if SetKaitunStatus then
+                SetKaitunStatus("✗ Kaitun OFF", Color3.fromRGB(150, 150, 150))
+            end
+        end
     end,
 })
 
-FossilsTab:CreateToggle({
-    Title = "Auto Drink (Uống Liên Tục)",
-    Default = false,
-    Callback = function(enabled)
-        State.autoDrink = enabled
-        _G.AutoDrinkRunning = enabled
-    end,
-})
 
-FossilsTab:CreateToggle({
-    Title = "Auto Rest (Nghỉ Ngơi)",
-    Default = false,
-    Callback = function(enabled)
-        State.autoRest = enabled
-        _G.AutoRestRunning = enabled
-    end,
-})
-
-FossilsTab:CreateToggle({
-    Title = "Auto Zone (Chiếm Zone)",
-    Default = false,
-    Callback = function(enabled)
-        State.autoZone = enabled
-        _G.AutoZoneRunning = enabled
-    end,
-})
-
---==================================================
--- SETTINGS / UTILITY TAB
---==================================================
-
+----------------------------------------------------
+-- TAB CAI DAT / UTILITY
+----------------------------------------------------
 VisualsTab:CreateSection("Utility")
 VisualsTab:CreateToggle({
-    Title = "Trời Sáng (Fullbright)",
-    Default = false,
-    Callback = function(enabled)
-        local Lighting = game:GetService("Lighting")
-        if enabled then
-            Lighting.Brightness = 2
-            Lighting.ClockTime = 14
-            Lighting.GlobalShadows = false
+    Title="Trời Sáng (Fullbright)", Default=false,
+    Callback=function(state)
+        local Lighting=game:GetService("Lighting")
+        if state then
+            Lighting.Brightness=2
+            Lighting.ClockTime=14
+            Lighting.GlobalShadows=false
         else
-            Lighting.Brightness = 1
-            Lighting.GlobalShadows = true
+            Lighting.Brightness=1
+            Lighting.GlobalShadows=true
         end
     end,
 })
 
 lowServerBtn = VisualsTab:CreateButton({
-    Title = "HOP Server (Low Player)",
-    Callback = function()
-        if not lowServerBtn or not lowServerBtn.Frame then return end
+    Title="HOP Server (Low Player)",
+    Callback=function()
+        local teleportService=game:GetService("TeleportService")
+        local placeId=game.PlaceId
+        local jobId=game.JobId
 
-        local function SetText(text)
-            pcall(function()
-                local label = lowServerBtn.Frame:FindFirstChild("Title", true)
-                    or lowServerBtn.Frame:FindFirstChildWhichIsA("TextLabel", true)
-                if label then
-                    label.Text = tostring(text)
-                end
-            end)
+        local function SetLowServerText(text)
+            if not lowServerBtn or not lowServerBtn.Frame then return end
+            local label = lowServerBtn.Frame:FindFirstChild("Title", true) or lowServerBtn.Frame:FindFirstChildWhichIsA("TextLabel", true)
+            if label then label.Text=tostring(text) end
         end
 
-        SetText("Đang Tìm Server...")
-
-        local placeId = game.PlaceId
-        local currentJobId = game.JobId
-        local success, result = pcall(function()
-            return game:HttpGet(
-                "https://games.roblox.com/v1/games/" .. tostring(placeId)
-                .. "/servers/0?sortOrder=Asc&limit=100"
-            )
+        SetLowServerText("Đang Tìm Server...")
+        local success,result=pcall(function()
+            return game:HttpGet("https://games.roblox.com/v1/games/"..placeId.."/servers/0?sortOrder=Asc&limit=100")
         end)
-
         if success and result then
-            local ok, data = pcall(function()
-                return HttpService:JSONDecode(result)
-            end)
-
-            if ok and data and data.data then
-                for _, server in ipairs(data.data) do
-                    if server.id ~= currentJobId
-                        and tonumber(server.playing) ~= nil
-                        and tonumber(server.maxPlayers) ~= nil
-                        and server.playing < server.maxPlayers
-                        and server.playing > 0 then
-                        SetText("Đang Chuyển Server (" .. tostring(server.playing) .. " người)...")
-                        pcall(function()
-                            TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
-                        end)
+            local ok,decoded=pcall(function() return HttpService:JSONDecode(result) end)
+            if ok and decoded and decoded.data then
+                for _,server in ipairs(decoded.data) do
+                    if server.id~=jobId and server.playing<server.maxPlayers and server.playing>0 then
+                        SetLowServerText("Dang Chuyen Server ("..server.playing.." nguoi)...")
+                        teleportService:TeleportToPlaceInstance(placeId,server.id,LocalPlayer)
                         return
                     end
                 end
             end
         end
-
-        SetText("Không Tìm Thấy Server!")
-        task.delay(2, function()
+        SetLowServerText("Không Tìm Thất Server!")
+        task.delay(2,function()
             if lowServerBtn and lowServerBtn.Frame and lowServerBtn.Frame.Parent then
-                SetText("Vào Server Ít Người (Low Player)")
+                SetLowServerText("Vào Server Ít Người (Low Player)")
             end
         end)
     end,
 })
 
 VisualsTab:CreateButton({
-    Title = "Hồi Sinh Nhân vật (Reset)",
-    Callback = function()
-        local humanoid = GetHumanoid(GetCharacter())
-        if humanoid then
-            pcall(function() humanoid.Health = 0 end)
-        end
+    Title="Hồi Sinh Nhân vật (Reset)",
+    Callback=function()
+        local hum=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.Health=0 end
     end,
 })
 
-UpdateLoader(60, "Đã dựng xong: Misc + Teleport + ESP + PVP + Main + Setting")
 
---==================================================
--- AUTO ATTACK - CACHED ATTACK BUTTONS
---==================================================
+LoaderStage(7)
 
-local AttackButtons = {}
-local AttackScanTime = 0
+----------------------------------------------------
+-- 5. LOGIC CHẠY NGẦM (AUTO ATTACK, NHẶT ĐẠN, FOSSILS, AUTO ĂN THỊT/CỎ & ANTI-AFK)
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
 
-local function RefreshAttackButtons()
-    table.clear(AttackButtons)
+local Mouse = LocalPlayer:GetMouse()
+Mouse.Button1Down:Connect(function()
+    if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp and Mouse.Target then
+            hrp.CFrame = CFrame.new(Mouse.Hit.X, Mouse.Hit.Y + 3, Mouse.Hit.Z)
+        end
+    end
+end)
 
-    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if not playerGui then return end
+-- Vòng lặp Auto Attack (PVP)
+task.spawn(function()
+    while true do
+        if _G.AutoAttackRunning and hasTargetInFOV then
+            triggerAttack()
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- Vòng lặp Auto Nhặt Đạn (PVP)
+task.spawn(function()
+    while true do
+        task.wait(0.3)
+        if _G.AutoFarmAmmo and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local char = LocalPlayer.Character
+            local hrp = char.HumanoidRootPart
+            local currentAmmo, reserveAmmo, infoMsg = checkAmmoStatus()
+            
+            SetAmmoStatus(infoMsg)
+            
+            if currentAmmo == 0 and reserveAmmo == 0 then
+                SetAmmoStatus("Hết đạn (00/0)! Đang tới chỗ nhặt...")
+                local originalCFrame = hrp.CFrame
+                
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hrp.Anchored = false
+                
+                for i = 1, 5 do
+                    hrp.CFrame = targetAmmoCFrame
+                    task.wait(0.03)
+                end
+                
+                hrp.Anchored = true
+                
+                local function tryInteract()
+                    local found = false
+                    for _, v in pairs(workspace:GetDescendants()) do
+                        if v:IsA("ProximityPrompt") and v.Enabled then
+                            local promptPos = getPromptPosition(v)
+                            if promptPos then
+                                local distance = (promptPos - hrp.Position).Magnitude
+                                if distance <= ammoMaxDistance then
+                                    found = true
+                                    fireproximityprompt(v)
+                                end
+                            end
+                        end
+                    end
+                    return found
+                end
+
+                SetAmmoStatus("Đang nhặt đạn (Lần 1)...")
+                tryInteract()
+                task.wait(0.6)
+
+                SetAmmoStatus("Đang nhặt đạn (Lần 2)...")
+                tryInteract()
+                task.wait(0.6)
+                
+                hrp.Anchored = false
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                for i = 1, 5 do
+                    hrp.CFrame = originalCFrame
+                    task.wait(0.03)
+                end
+                
+                SetAmmoStatus("Đã bơm đầy đạn! Đang quay lại...")
+                task.wait(2)
+            end
+        end
+    end
+end)
+
+-- LOGIC AUTO ĂN THỊT / ĂN CỎ - OPTIMIZED
+-- Dùng spatial query thay cho Workspace:GetDescendants() mỗi chu kỳ.
+-- RemoteEvent được cache một lần, không quét ReplicatedStorage liên tục.
+local EAT_CONFIG = {
+    SEARCH_RADIUS = 350,
+    CYCLE_INTERVAL = 1.0,
+    STAY_DURATION = 0.32,
+    INTERACTION_INTERVAL = 0.11,
+    MAX_TARGETS_CHECKED = 222,
+    STRICT_MEAT_KEYWORDS = {"carcass", "meat", "corpse", "deadbody", "ribs", "flesh"},
+    STRICT_HERB_KEYWORDS = {"bush", "plant", "grass", "foliage", "herb", "fern", "leaves", "berry", "shrub"}
+}
+
+local IsExecutingEatOrHerb = false
+local EatRemoteCandidates = {}
+local EatOverlapParams = OverlapParams.new()
+EatOverlapParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function RefreshEatFilter()
+    local char = LocalPlayer.Character
+    EatOverlapParams.FilterDescendantsInstances = char and {char} or {}
+end
+
+RefreshEatFilter()
+LocalPlayer.CharacterAdded:Connect(function()
+    task.defer(RefreshEatFilter)
+end)
+
+-- Cache các RemoteEvent liên quan một lần.
+do
+    local ok = pcall(function()
+        for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+            if remote:IsA("RemoteEvent") then
+                local name = string.lower(remote.Name)
+                if name:find("eat") or name:find("bite") or name:find("interact")
+                    or name:find("feed") or name:find("consume") or name:find("herb") or name:find("graze") then
+                    EatRemoteCandidates[#EatRemoteCandidates + 1] = remote
+                end
+            end
+        end
+    end)
+    if not ok then
+        table.clear(EatRemoteCandidates)
+    end
+end
+
+local function IsTargetNameMatch(part, keywords)
+    local name = string.lower(part.Name)
+    local parent = part.Parent
+    local parentName = parent and string.lower(parent.Name) or ""
+
+    for i = 1, #keywords do
+        local key = keywords[i]
+        if name:find(key, 1, true) or parentName:find(key, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function IsLivingEntityOrMapDecor(instance)
+    local model = instance:FindFirstAncestorOfClass("Model")
+    if not model then
+        return false
+    end
+
+    if Players:GetPlayerFromCharacter(model) then
+        return true
+    end
+
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health > 0 then
+        return true
+    end
+
+    local modelName = string.lower(model.Name)
+    return modelName:find("map", 1, true) ~= nil
+        or modelName:find("border", 1, true) ~= nil
+        or modelName:find("ocean", 1, true) ~= nil
+        or modelName:find("decor", 1, true) ~= nil
+end
+
+local function ScanNearbyTarget(keywords)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then
+        return nil
+    end
+
+    local best = nil
+    local bestDistanceSq = EAT_CONFIG.SEARCH_RADIUS * EAT_CONFIG.SEARCH_RADIUS
+    local parts = Workspace:GetPartBoundsInRadius(root.Position, EAT_CONFIG.SEARCH_RADIUS, EatOverlapParams)
+    local checked = 0
+
+    for i = 1, #parts do
+        if checked >= EAT_CONFIG.MAX_TARGETS_CHECKED then
+            break
+        end
+
+        local part = parts[i]
+        if part:IsA("BasePart") and IsTargetNameMatch(part, keywords) and not IsLivingEntityOrMapDecor(part) then
+            checked = checked + 1
+            local delta = part.Position - root.Position
+            local distanceSq = delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z
+            if distanceSq < bestDistanceSq then
+                bestDistanceSq = distanceSq
+                best = part
+            end
+        end
+    end
+
+    return best
+end
+
+local function TriggerInteraction(targetPart)
+    local prompt = targetPart:FindFirstChildOfClass("ProximityPrompt")
+        or (targetPart.Parent and targetPart.Parent:FindFirstChildOfClass("ProximityPrompt"))
+
+    if prompt and typeof(fireproximityprompt) == "function" then
+        pcall(fireproximityprompt, prompt)
+        return true
+    end
+
+    -- Fallback: dùng danh sách RemoteEvent đã cache.
+    -- Giữ đủ các payload cũ nhưng chỉ chạy một lần / target thay vì lặp mỗi 0.07s.
+    for i = 1, #EatRemoteCandidates do
+        local remote = EatRemoteCandidates[i]
+        if remote and remote.Parent then
+            pcall(function()
+                remote:FireServer(targetPart)
+                remote:FireServer(targetPart.Parent)
+                remote:FireServer("Eat", targetPart)
+                remote:FireServer("Herb", targetPart)
+            end)
+        end
+    end
+
+    return #EatRemoteCandidates > 0
+end
+
+local function PerformBlink(targetPart)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if IsExecutingEatOrHerb or not root or not char or not targetPart or not targetPart.Parent then
+        return
+    end
+
+    IsExecutingEatOrHerb = true
 
     pcall(function()
-        for _, gui in ipairs(playerGui:GetDescendants()) do
-            if (gui:IsA("ImageButton") or gui:IsA("TextButton"))
-                and gui.Name == "Attack" then
-                table.insert(AttackButtons, gui)
+        local storedCFrame = root.CFrame
+        local storedVelocity = root.AssemblyLinearVelocity
+        local oldCollision = {}
+
+        for _, part in ipairs(char:GetChildren()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                oldCollision[#oldCollision + 1] = part
+                part.CanCollide = false
+            end
+        end
+
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.CFrame = targetPart.CFrame * CFrame.new(0, 1, 0)
+
+        local finishAt = os.clock() + EAT_CONFIG.STAY_DURATION
+        local nextInteract = 0
+        while os.clock() < finishAt do
+            if not targetPart.Parent then
+                break
+            end
+            local now = os.clock()
+            if now >= nextInteract then
+                TriggerInteraction(targetPart)
+                nextInteract = now + EAT_CONFIG.INTERACTION_INTERVAL
+            end
+            task.wait(0.03)
+        end
+
+        if root.Parent then
+            root.CFrame = storedCFrame
+            root.AssemblyLinearVelocity = storedVelocity
+        end
+
+        for i = 1, #oldCollision do
+            local part = oldCollision[i]
+            if part and part.Parent then
+                part.CanCollide = true
             end
         end
     end)
 
-    AttackScanTime = os.clock()
+    IsExecutingEatOrHerb = false
 end
 
-local function TriggerAttack()
-    if type(getconnections) ~= "function" then return end
+----------------------------------------------------
+-- AUTO NUÔI — SCAN NEARBY TARGET AT RADIUS
+-- Dùng cho Kaitun smart eat (100/200/300/500m escalation)
+----------------------------------------------------
+ScanNearbyTargetAtRadius = function(keywords, radius)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
 
-    if os.clock() - AttackScanTime >= 2 or #AttackButtons == 0 then
-        RefreshAttackButtons()
+    local best = nil
+    local bestDistanceSq = radius * radius
+    local parts = Workspace:GetPartBoundsInRadius(root.Position, radius, EatOverlapParams)
+    local checked = 0
+    local maxCheck = EAT_CONFIG.MAX_TARGETS_CHECKED or 222
+
+    for i = 1, #parts do
+        if checked >= maxCheck then break end
+        local part = parts[i]
+        if part:IsA("BasePart") and IsTargetNameMatch(part, keywords) and not IsLivingEntityOrMapDecor(part) then
+            checked = checked + 1
+            local delta = part.Position - root.Position
+            local distanceSq = delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z
+            if distanceSq < bestDistanceSq then
+                bestDistanceSq = distanceSq
+                best = part
+            end
+        end
     end
+    return best
+end
 
-    for i = #AttackButtons, 1, -1 do
-        local button = AttackButtons[i]
-        if not button or not button.Parent then
-            table.remove(AttackButtons, i)
-        else
+-- Một worker duy nhất cho cả Meat + Herb.
+task.spawn(function()
+    while true do
+        task.wait(EAT_CONFIG.CYCLE_INTERVAL)
+
+        local active = _G.AutoEatActive or _G.AutoHerbActive
+        if active and not IsExecutingEatOrHerb then
             pcall(function()
-                for _, connection in ipairs(getconnections(button.Activated)) do
-                    connection:Fire()
+                local char = LocalPlayer.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if not char or not root or not hum or hum.Health <= 0 then
+                    return
+                end
+
+                -- Giữ behavior cũ: Herb được ưu tiên nếu cả hai toggle cùng bật.
+                local keywords = _G.AutoHerbActive
+                    and EAT_CONFIG.STRICT_HERB_KEYWORDS
+                    or EAT_CONFIG.STRICT_MEAT_KEYWORDS
+
+                local target = ScanNearbyTarget(keywords)
+                if target then
+                    PerformBlink(target)
                 end
             end)
         end
     end
-end
+end)
 
---==================================================
--- CONTROL CLICK TELEPORT
---==================================================
-
-local Mouse = LocalPlayer:GetMouse()
-Runtime:Connect(Mouse.Button1Down, function()
-    if not UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
-        return
-    end
-
-    local root = GetRoot(GetCharacter())
-    if root and Mouse.Target then
+-- Vòng lặp Quét Quest (Fossils)
+task.spawn(function()
+    while task.wait(0.5) do
         pcall(function()
-            local position = Mouse.Hit.Position
-            root.CFrame = CFrame.new(position.X, position.Y + 3, position.Z)
+            local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+            local questsFrame = playerGui:FindFirstChild("GameUI") and playerGui.GameUI:FindFirstChild("QuestsFrame")
+            local detectedQuest = "None"
+            
+            if questsFrame then
+                for _, child in pairs(questsFrame:GetChildren()) do
+                    local textContent = ""
+                    for _, desc in pairs(child:GetDescendants()) do
+                        if desc:IsA("TextLabel") then
+                            textContent = textContent .. " " .. string.lower(desc.Text)
+                        end
+                    end
+                    
+                    if string.find(textContent, "drink water") then
+                        detectedQuest = "Drink"
+                        break
+                    elseif string.find(textContent, "rest") then
+                        detectedQuest = "Rest"
+                        break
+                    end
+                end
+            end
+            
+            _G.CurrentQuest = detectedQuest
+            
+            if KaitunState.Enabled and KaitunState.Diet == "None" then
+                SetQuestStatus("⚠ Chưa chọn chế độ ăn (Meat/Herb)", Color3.fromRGB(255, 80, 80))
+            elseif detectedQuest == "Drink" then
+                SetQuestStatus("Quest Hiện Tại: Uống Nước (Drink)", Color3.fromRGB(50, 150, 255))
+            elseif detectedQuest == "Rest" then
+                SetQuestStatus("Quest Hiện Tại: Nghỉ Nơi (Rest)", Color3.fromRGB(255, 165, 0))
+            else
+                SetQuestStatus("Quest Hiện Tại: Đang chờ...", Color3.fromRGB(255, 255, 0))
+            end
         end)
     end
 end)
 
---==================================================
--- ANTI AFK
---==================================================
-
-Runtime:Connect(LocalPlayer.Idled, function()
-    pcall(function()
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-    end)
-end)
-
---==================================================
--- AUTO ATTACK WORKER
---==================================================
-
 task.spawn(function()
-    while not Runtime.stopped do
-        if State.autoAttack and hasTargetInFOV then
-            TriggerAttack()
-        end
-        task.wait(0.12)
-    end
-end)
-
---==================================================
--- AUTO AMMO WORKER
---==================================================
-
-local autoAmmoBusy = false
-
-task.spawn(function()
-    while not Runtime.stopped do
-        if State.autoAmmo and not autoAmmoBusy then
-            local character, root, humanoid = SafeCharacterReady()
-            if root and humanoid and humanoid.Health > 0 then
-                local currentAmmo, reserveAmmo, info = CheckAmmoStatus()
-                SetAmmoStatus(info)
-
-                if currentAmmo == 0 and reserveAmmo == 0 then
-                    autoAmmoBusy = true
-
-                    local originalCFrame = root.CFrame
-                    root.Anchored = false
-                    root.AssemblyLinearVelocity = Vector3.zero
-
-                    for _ = 1, 4 do
-                        if not State.autoAmmo then break end
-                        SetSafeCFrame(root, targetAmmoCFrame)
-                        task.wait(0.04)
-                    end
-
-                    if State.autoAmmo then
-                        root.Anchored = true
-                        SetAmmoStatus("Đang nhặt đạn (Lần 1)...")
-                        for _, prompt in ipairs(FindNearbyPrompts(ammoMaxDistance)) do
-                            pcall(function() fireproximityprompt(prompt) end)
-                        end
-
-                        task.wait(0.65)
-                        if State.autoAmmo then
-                            SetAmmoStatus("Đang nhặt đạn (Lần 2)...")
-                            for _, prompt in ipairs(FindNearbyPrompts(ammoMaxDistance)) do
-                                pcall(function() fireproximityprompt(prompt) end)
-                            end
-                        end
-                        task.wait(0.5)
-                    end
-
-                    root.Anchored = false
-                    root.AssemblyLinearVelocity = Vector3.zero
-
-                    for _ = 1, 4 do
-                        if not State.autoAmmo then break end
-                        SetSafeCFrame(root, originalCFrame)
-                        task.wait(0.04)
-                    end
-
-                    if State.autoAmmo then
-                        SetAmmoStatus("Đã bơm đầy đạn! Đang quay lại...")
-                    end
-
-                    autoAmmoBusy = false
-                end
-            end
-        end
-        task.wait(State.autoAmmo and 0.75 or 0.2)
-    end
-end)
-
---==================================================
--- QUEST SCANNER
---==================================================
-
-local lastQuestScan = 0
-
-local function DetectQuest()
-    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if not playerGui then return "None" end
-
-    local gameUI = playerGui:FindFirstChild("GameUI")
-    local questsFrame = gameUI and gameUI:FindFirstChild("QuestsFrame")
-    if not questsFrame then return "None" end
-
-    local detectedQuest = "None"
-
-    pcall(function()
-        for _, object in ipairs(questsFrame:GetDescendants()) do
-            if object:IsA("TextLabel") then
-                local text = string.lower(object.Text or "")
-                if text:find("drink water", 1, true) then
-                    detectedQuest = "Drink"
-                    break
-                elseif text:find("rest", 1, true) then
-                    detectedQuest = "Rest"
-                    break
-                end
-            end
-        end
-    end)
-
-    return detectedQuest
-end
-
-task.spawn(function()
-    while not Runtime.stopped do
-        local now = os.clock()
-        if now - lastQuestScan >= 0.9 then
-            lastQuestScan = now
-            local quest = DetectQuest()
-            State.currentQuest = quest
-            _G.CurrentQuest = quest
-
-            if quest == "Drink" then
-                SetQuestStatus(
-                    "Quest Hiện Tại: Uống Nước (Drink)",
-                    Color3.fromRGB(50, 150, 255)
-                )
-            elseif quest == "Rest" then
-                SetQuestStatus(
-                    "Quest Hiện Tại: Nghỉ Nơi (Rest)",
-                    Color3.fromRGB(255, 165, 0)
-                )
-            else
-                SetQuestStatus(
-                    "Quest Hiện Tại: Đang chờ...",
-                    Color3.fromRGB(255, 255, 0)
-                )
-            end
-        end
-
-        task.wait(0.2)
-    end
-end)
-
---==================================================
--- AUTO DRINK
---==================================================
-
-task.spawn(function()
-    while not Runtime.stopped do
-        if State.autoDrink then
-            local ok, remote = pcall(function()
-                return ReplicatedStorage
-                    .Remotes
-                    .Character
-                    .CharacterFunctions
+    while true do
+        if _G.AutoDrinkRunning then
+            pcall(function() 
+                game:GetService("ReplicatedStorage").Remotes.Character.CharacterFunctions:InvokeServer("Drink") 
             end)
-
-            if ok and remote then
-                pcall(function()
-                    remote:InvokeServer("Drink")
-                end)
-            end
             task.wait(0.8)
         else
-            task.wait(0.25)
+            task.wait(0.2)
         end
     end
 end)
-
---==================================================
--- AUTO REST
---==================================================
 
 task.spawn(function()
-    local restRemote
-    local restingActive = false
-
-    while not Runtime.stopped do
-        if not restRemote or not restRemote.Parent then
-            pcall(function()
-                restRemote = ReplicatedStorage.Remotes.Character.Rest
-            end)
-        end
-
-        local shouldRest = State.autoRest and State.currentQuest == "Rest"
-
-        if shouldRest and not restingActive and restRemote then
+    local restRemote = game:GetService("ReplicatedStorage").Remotes.Character.Rest
+    local isRestingActive = false
+    while true do
+        task.wait(0.3)
+        local shouldRest = _G.AutoRestRunning and (_G.CurrentQuest == "Rest")
+        if shouldRest and not isRestingActive then
             pcall(function() restRemote:InvokeServer(true) end)
-            restingActive = true
-        elseif not shouldRest and restingActive and restRemote then
+            isRestingActive = true
+        elseif not shouldRest and isRestingActive then
             pcall(function() restRemote:InvokeServer(false) end)
-            restingActive = false
+            isRestingActive = false
         end
-
-        task.wait(0.35)
     end
 end)
 
---==================================================
--- AUTO ZONE
---==================================================
+local function IsThisZoneGreen(targetPos)
+    local isGreen = false
+    pcall(function()
+        local folder = game:GetService("Workspace").MapResources.Zones
+        for _, zoneObj in pairs(folder:GetChildren()) do
+            local core = zoneObj:FindFirstChild("LightCore")
+            if core and (core.Position - targetPos).Magnitude < 15 then
+                local color = core.Color
+                if color.R == 0 and color.G > 0.9 and color.B == 0 then isGreen = true end
+                break
+            end
+        end
+    end)
+    return isGreen
+end
 
 local ZonesList = {
     Vector3.new(-144.54, -102.15, 1032.19),
@@ -2223,169 +2211,386 @@ local ZonesList = {
     Vector3.new(1090.65, 66.03, 467.14),
     Vector3.new(209.25, -32.79, -359.19),
     Vector3.new(-170.20, 109.98, 388.42),
-    Vector3.new(-69.11, -61.16, -1493.54),
+    Vector3.new(-69.11, -61.16, -1493.54)
 }
 
-local ZoneFolder
-local ZoneCores = {}
-local zoneCacheBuilt = false
-
-local function BuildZoneCache()
-    ZoneCores = {}
-    zoneCacheBuilt = false
-
-    pcall(function()
-        ZoneFolder = Workspace:FindFirstChild("MapResources")
-            and Workspace.MapResources:FindFirstChild("Zones")
-        if not ZoneFolder then return end
-
-        for _, zoneObject in ipairs(ZoneFolder:GetChildren()) do
-            local core = zoneObject:FindFirstChild("LightCore")
-            if core and core:IsA("BasePart") then
-                table.insert(ZoneCores, core)
-            end
-        end
-
-        zoneCacheBuilt = true
-    end)
-end
-
-local function IsThisZoneGreen(targetPosition)
-    if not zoneCacheBuilt then
-        BuildZoneCache()
-    end
-
-    for i = #ZoneCores, 1, -1 do
-        local core = ZoneCores[i]
-        if not core or not core.Parent then
-            table.remove(ZoneCores, i)
-        else
-            local distance = (core.Position - targetPosition).Magnitude
-            if distance < 15 then
-                local color = core.Color
-                return color.R <= 0.05 and color.G > 0.9 and color.B <= 0.05
-            end
-        end
-    end
-
-    return false
-end
-
-BuildZoneCache()
-
-Runtime:Connect(LocalPlayer.CharacterAdded, function()
-    if State.autoZone then
-        task.delay(0.5, function()
-            -- Worker automatically reacquires root; no blocking wait here.
-        end)
-    end
-end)
-
 task.spawn(function()
-    local zoneIndex = 1
-
-    while not Runtime.stopped do
-        if State.autoZone then
-            local character, root, humanoid = SafeCharacterReady()
-            if root and humanoid and humanoid.Health > 0 then
-                local startIndex = zoneIndex
-
-                repeat
-                    if not State.autoZone then break end
-
-                    local zonePosition = ZonesList[zoneIndex]
-                    if zonePosition and not IsThisZoneGreen(zonePosition) then
-                        local targetCFrame = CFrame.new(
-                            zonePosition.X,
-                            zonePosition.Y + 5,
-                            zonePosition.Z
-                        )
-
-                        SetSafeCFrame(root, targetCFrame)
+    while true do
+        if _G.AutoZoneRunning then
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local safetyZone3CFrame = CFrame.new(1449.99, 77.16 + 5, -677.59)
+                for i = 1, #ZonesList do
+                    if not _G.AutoZoneRunning then break end
+                    local zonePos = ZonesList[i]
+                    local targetCFrame = CFrame.new(zonePos.X, zonePos.Y + 5, zonePos.Z)
+                    
+                    if not IsThisZoneGreen(zonePos) then
+                        hrp.CFrame = targetCFrame
                         task.wait(0.1)
-
-                        local startTime = os.clock()
-                        local nextCheck = 0
-
-                        while State.autoZone and root.Parent and humanoid.Health > 0 do
-                            local now = os.clock()
-
-                            if now >= nextCheck then
-                                nextCheck = now + 0.5
-                                if IsThisZoneGreen(zonePosition) or now - startTime >= 15 then
-                                    break
+                        local startTime = tick()
+                        local lastCheckTime = 0
+                        
+                        while _G.AutoZoneRunning do
+                            local now = tick()
+                            
+                            -- Chỉ quét kiểm tra xem Zone đã XANH chưa mỗi 0.5 giây (Tiết kiệm 90% CPU)
+                            if now - lastCheckTime >= 0.5 then
+                                lastCheckTime = now
+                                if IsThisZoneGreen(zonePos) or (now - startTime >= 15) then 
+                                    break 
                                 end
                             end
-
+                            
+                            -- Giữ hiệu ứng rung lắc nhưng tăng thời gian chờ lên 0.08s (khoảng 12 lần/giây)
                             local shakeX = math.sin(now * 8) * 0.35
                             local shakeZ = math.cos(now * 8) * 0.35
-                            pcall(function()
-                                root.CFrame = targetCFrame * CFrame.new(shakeX, 0, shakeZ)
-                                root.AssemblyLinearVelocity = Vector3.zero
-                            end)
+                            hrp.CFrame = targetCFrame * CFrame.new(shakeX, 0, shakeZ)
+                            hrp.AssemblyLinearVelocity = Vector3.zero
                             task.wait(0.08)
                         end
-
-                        task.wait(0.25)
+                        task.wait(0.3)
                     end
-
-                    zoneIndex = zoneIndex + 1
-                    if zoneIndex > #ZonesList then
-                        zoneIndex = 1
-                    end
-                until zoneIndex == startIndex or not State.autoZone
-
-                if State.autoZone and root.Parent then
-                    pcall(function()
-                        root.CFrame = CFrame.new(1449.99, 82.16, -677.59)
-                    end)
                 end
-
-                task.wait(2.5)
+                if hrp and _G.AutoZoneRunning then hrp.CFrame = safetyZone3CFrame end
+                task.wait(3)
             else
                 task.wait(0.5)
             end
         else
-            task.wait(0.25)
+            task.wait(0.2)
         end
     end
 end)
 
-UpdateLoader(72, "Đã load xong: Auto Attack + Auto Ammo + Quest + Zone")
+----------------------------------------------------
+-- AUTO NUÔI (KAITUN) — RUNTIME WORKERS
+----------------------------------------------------
 
---==================================================
--- FINAL READY
---==================================================
+-- Character respawn handler: re-teleport về hide spot 1
+LocalPlayer.CharacterAdded:Connect(function()
+    if KaitunState.Enabled and KaitunState.Diet ~= "None" then
+        task.wait(1.5)
+        if KaitunState.Enabled then
+            StopSkyMode()
+            KaitunState.CurrentSpot = nil
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            KaitunState.LastHP = (hum and hum.Health) or 100
+            TeleportToHideSpot("1")
+            if SetKaitunStatus then
+                SetKaitunStatus("🔄 Respawn → tele hide spot 1", Color3.fromRGB(80, 200, 255))
+            end
+        end
+    end
+end)
 
-UpdateLoader(84, "Đã hoàn tất Runtime Systems")
+-- WORKER 1: Smart Eat (Meat/Herb) — escalation 100/200/300/500m
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if not KaitunState.Enabled then goto continue end
+        if KaitunState.Diet == "None" then goto continue end
+        if KaitunState.CurrentSpot == "sky" then goto continue end
+        if KaitunState.IsEating then goto continue end
+        if _G.AutoEatActive or _G.AutoHerbActive then goto continue end
+        if IsExecutingEatOrHerb then goto continue end
 
--- Give the library one tiny scheduling slice so its initial UI/layout can settle.
-task.wait()
+        local hunger = GetStatValue("hunger")
+        -- Nếu không đọc được hunger → fallback: giả định đói
+        if hunger == nil then hunger = 0.4 end
 
-UpdateLoader(100, "Đã load xong toàn bộ Primeval Earth Hub")
+        -- Critical hunger → shutdown game
+        if hunger < KAITUN_CONFIG.CRITICAL_HUNGER then
+            if SetKaitunStatus then
+                SetKaitunStatus("⚠ HUNGER CRITICAL (<10%) — SHUTDOWN GAME!", Color3.fromRGB(255, 50, 50))
+            end
+            pcall(function()
+                game:GetService("StarterGui"):SetCore("SendNotification", {
+                    Title = "Auto Nuôi — CRITICAL";
+                    Text = "Hunger < 10%, shutting down game để bảo toàn progress.";
+                    Duration = 5;
+                })
+            end)
+            task.wait(2)
+            pcall(function()
+                LocalPlayer:Kick("Auto Nuôi: Hunger critical (<10%). Shutdown để bảo toàn progress.")
+            end)
+            return
+        end
 
--- Close loader without freezing the script.
-Tween(LoaderTitle, 0.18, {TextTransparency = 1})
-Tween(ProgressBG, 0.18, {BackgroundTransparency = 1})
-Tween(ProgressBar, 0.18, {BackgroundTransparency = 1})
-Tween(StepLabel, 0.18, {TextTransparency = 1})
-Tween(PercentLabel, 0.18, {TextTransparency = 1})
+        -- Nếu hunger >= stop threshold → không ăn
+        if hunger >= KAITUN_CONFIG.HUNGER_STOP then
+            if KaitunState.NoFoodSince ~= 0 then
+                KaitunState.NoFoodSince = 0
+            end
+            goto continue
+        end
 
-local closeTween = Tween(LoaderFrame, 0.22, {
-    Size = UDim2.fromOffset(0, 0),
-})
+        -- Nếu hunger < start threshold → cần ăn
+        if hunger < KAITUN_CONFIG.HUNGER_START or KaitunState.NoFoodSince ~= 0 then
+            local keywords = (KaitunState.Diet == "Meat")
+                and EAT_CONFIG.STRICT_MEAT_KEYWORDS
+                or EAT_CONFIG.STRICT_HERB_KEYWORDS
 
-if closeTween then
-    pcall(function() closeTween.Completed:Wait() end)
-end
+            local target = nil
+            local radiusUsed = 0
 
+            -- Escalation: 100m → 200m → 300m → 500m
+            for i, radius in ipairs(KAITUN_CONFIG.SCAN_RADII) do
+                if not KaitunState.Enabled then break end
+                target = ScanNearbyTargetAtRadius(keywords, radius)
+                if target then
+                    radiusUsed = radius
+                    break
+                end
+                task.wait(KAITUN_CONFIG.SCAN_COOLDOWNS[i] or 0.5)
+            end
+
+            if target then
+                KaitunState.NoFoodSince = 0
+                KaitunState.IsEating = true
+                if SetKaitunStatus then
+                    SetKaitunStatus(string.format("🍽 Đang ăn %s (tìm thấy %dm)...",
+                        KaitunState.Diet, radiusUsed), Color3.fromRGB(100, 255, 100))
+                end
+                -- Dùng PerformBlink có sẵn (save CFrame → blink → eat → return)
+                PerformBlink(target)
+                KaitunState.IsEating = false
+                task.wait(0.3)
+            else
+                -- Không tìm thấy food trong 500m
+                if KaitunState.NoFoodSince == 0 then
+                    KaitunState.NoFoodSince = os.clock()
+                end
+
+                local elapsed = os.clock() - KaitunState.NoFoodSince
+                if elapsed > KAITUN_CONFIG.NO_FOOD_TIMEOUT then
+                    -- Anti-stuck: tele hide spot 1, chờ 10s
+                    if SetKaitunStatus then
+                        SetKaitunStatus(string.format("⚠ Không thấy food %ds → tele hide spot 1 chờ %ds",
+                            math.floor(elapsed), KAITUN_CONFIG.NO_FOOD_RETRY_DELAY),
+                            Color3.fromRGB(255, 200, 50))
+                    end
+                    TeleportToHideSpot("1")
+                    task.wait(KAITUN_CONFIG.NO_FOOD_RETRY_DELAY)
+                    KaitunState.NoFoodSince = 0
+                else
+                    if SetKaitunStatus then
+                        SetKaitunStatus(string.format("🔍 Không thấy food 500m (chờ %ds)...",
+                            math.ceil(KAITUN_CONFIG.NO_FOOD_TIMEOUT - elapsed)),
+                            Color3.fromRGB(255, 200, 50))
+                    end
+                end
+            end
+        end
+
+        ::continue::
+    end
+end)
+
+-- WORKER 2: Smart Rest — dựa trên stamina thực (không phụ thuộc quest)
+task.spawn(function()
+    local restRemote = ReplicatedStorage:WaitForChild("Remotes").Character.Rest
+    local isRestingActive = false
+    while true do
+        task.wait(0.5)
+        if not KaitunState.Enabled then
+            if isRestingActive then
+                pcall(function() restRemote:InvokeServer(false) end)
+                isRestingActive = false
+            end
+            goto continue
+        end
+
+        local stamina = GetStatValue("stamina")
+        if stamina == nil then goto continue end
+
+        if stamina < KAITUN_CONFIG.STAMINA_START and not isRestingActive then
+            pcall(function() restRemote:InvokeServer(true) end)
+            isRestingActive = true
+        elseif stamina >= KAITUN_CONFIG.STAMINA_STOP and isRestingActive then
+            pcall(function() restRemote:InvokeServer(false) end)
+            isRestingActive = false
+        end
+
+        ::continue::
+    end
+end)
+
+-- WORKER 3: Hide Spot Monitor — attack detection + switch + sky timeout
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if not KaitunState.Enabled then goto continue end
+        if KaitunState.Diet == "None" then goto continue end
+
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health <= 0 then goto continue end
+
+        local now = os.clock()
+        local currentHP = hum.Health
+
+        -- SKY MODE: kiểm tra timeout 60s
+        if KaitunState.CurrentSpot == "sky" then
+            if (now - KaitunState.SkyStartTime) >= KAITUN_CONFIG.SKY_DURATION then
+                if IsSpotSafe("1") then
+                    if SetKaitunStatus then
+                        SetKaitunStatus("🛬 Hết 60s sky → trở về spot 1", Color3.fromRGB(100, 255, 100))
+                    end
+                    TeleportToHideSpot("1")
+                elseif IsSpotSafe("2") then
+                    if SetKaitunStatus then
+                        SetKaitunStatus("🛬 Hết 60s sky → spot 1 unsafe → spot 2", Color3.fromRGB(100, 255, 100))
+                    end
+                    TeleportToHideSpot("2")
+                else
+                    -- Cả 2 unsafe → ở sky thêm 60s
+                    KaitunState.SkyStartTime = now
+                    if SetKaitunStatus then
+                        SetKaitunStatus("🛬 Cả 2 spot unsafe → ở sky thêm 60s", Color3.fromRGB(255, 200, 50))
+                    end
+                end
+            end
+            KaitunState.LastHP = currentHP
+            goto continue
+        end
+
+        -- DETECT HP DROP
+        local hpDrop = KaitunState.LastHP - currentHP
+        if hpDrop >= KAITUN_CONFIG.HP_DROP_THRESHOLD then
+            local hasEnemy, enemyType = ScanEnemyNear(hrp.Position, KAITUN_CONFIG.ENEMY_ATTACK_RADIUS)
+
+            if hasEnemy then
+                -- ATTACK THẬT → switch spot
+                KaitunState.LastActualAttack = now
+                if SetKaitunStatus then
+                    SetKaitunStatus(string.format("⚔ Bị %s attack! Đang switch...",
+                        enemyType or "enemy"), Color3.fromRGB(255, 80, 80))
+                end
+                local switched = TrySwitchSpot("attack by " .. (enemyType or "?"))
+                if not switched then
+                    if KaitunState.UnsafeSince == 0 then
+                        KaitunState.UnsafeSince = now
+                    end
+                    if (now - KaitunState.UnsafeSince) >= KAITUN_CONFIG.UNSAFE_FAILSAFE then
+                        -- Failsafe: 30s không switch được → force sky
+                        if SetKaitunStatus then
+                            SetKaitunStatus("⚠ 30s không switch được → FORCE SKY", Color3.fromRGB(255, 50, 50))
+                        end
+                        TeleportToHideSpot("sky")
+                        KaitunState.UnsafeSince = 0
+                    end
+                else
+                    KaitunState.UnsafeSince = 0
+                end
+            else
+                -- BLEED EFFECT → không switch, chỉ notify
+                if (now - KaitunState.LastActualAttack) > KAITUN_CONFIG.BLEED_TOLERANCE then
+                    if SetKaitunStatus then
+                        SetKaitunStatus(string.format("🩸 Bleed effect (HP -%d, no enemy) — đang chờ heal...",
+                            math.floor(hpDrop)), Color3.fromRGB(255, 180, 80))
+                    end
+                end
+            end
+        else
+            -- Không mất máu → reset unsafe timer
+            if KaitunState.UnsafeSince ~= 0 and (now - KaitunState.LastActualAttack) > 5 then
+                KaitunState.UnsafeSince = 0
+            end
+        end
+
+        KaitunState.LastHP = currentHP
+
+        -- RETURN TO HIDE: nếu pet không ở hide spot nào + đủ điều kiện → tele về
+        if KaitunState.CurrentSpot ~= "1" and KaitunState.CurrentSpot ~= "2"
+           and KaitunState.CurrentSpot ~= "sky" then
+            local hunger = GetStatValue("hunger") or 1
+            local thirst = GetStatValue("thirst") or 1
+            if hunger >= KAITUN_CONFIG.HIDE_HUNGER_MIN and thirst >= KAITUN_CONFIG.HIDE_THIRST_MIN then
+                if IsSpotSafe("1") then
+                    TeleportToHideSpot("1")
+                    if SetKaitunStatus then
+                        SetKaitunStatus("🏠 Đủ điều kiện → trở về hide spot 1", Color3.fromRGB(100, 255, 100))
+                    end
+                end
+            end
+        end
+
+        ::continue::
+    end
+end)
+
+-- WORKER 4: Kaitun Status Display — cập nhật định kỳ
+task.spawn(function()
+    while true do
+        task.wait(2)
+        if not KaitunState.Enabled then goto continue end
+
+        local hunger  = GetStatValue("hunger")
+        local thirst  = GetStatValue("thirst")
+        local stamina = GetStatValue("stamina")
+
+        local hungerStr  = hunger  and string.format("%.0f%%", hunger * 100)  or "?"
+        local thirstStr  = thirst  and string.format("%.0f%%", thirst * 100)  or "?"
+        local staminaStr = stamina and string.format("%.0f%%", stamina * 100) or "?"
+
+        local spotStr = KaitunState.CurrentSpot or "—"
+        local dietStr = KaitunState.Diet
+
+        if KaitunState.Diet == "None" then
+            if SetKaitunStatus then
+                SetKaitunStatus("⚠ Chưa chọn chế độ ăn (Meat/Herb) — Kaitun đang chờ", Color3.fromRGB(255, 80, 80))
+            end
+        elseif KaitunState.CurrentSpot == "sky" then
+            local remaining = KAITUN_CONFIG.SKY_DURATION - (os.clock() - KaitunState.SkyStartTime)
+            if SetKaitunStatus then
+                SetKaitunStatus(string.format("🚀 Sky mode — còn %ds | H:%s T:%s S:%s | Diet:%s",
+                    math.max(0, math.ceil(remaining)), hungerStr, thirstStr, staminaStr, dietStr),
+                    Color3.fromRGB(150, 200, 255))
+            end
+        else
+            if SetKaitunStatus then
+                SetKaitunStatus(string.format("🏠 Spot %s | H:%s T:%s S:%s | Diet:%s | Quest:%s",
+                    spotStr, hungerStr, thirstStr, staminaStr, dietStr, tostring(_G.CurrentQuest)),
+                    Color3.fromRGB(200, 200, 200))
+            end
+        end
+
+        ::continue::
+    end
+end)
+
+----------------------------------------------------
+
+
+----------------------------------------------------
+-- LOADER FINAL — chỉ đóng HUD khi mọi thứ đã sẵn sàng
+----------------------------------------------------
+LoaderStage(8)
+LoaderStage(9)
+
+LoaderComplete = true
+
+-- Loader vẫn là lớp trên cùng cho tới khi animation kết thúc.
+-- Meizu Window đã được dựng hoàn chỉnh và vẫn đang đóng trong giai đoạn này.
+LoaderTween(LoaderTitle, 0.22, {TextTransparency = 1})
+LoaderTween(ProgressBG, 0.22, {BackgroundTransparency = 1})
+LoaderTween(ProgressBar, 0.22, {BackgroundTransparency = 1})
+LoaderTween(StepLabel, 0.22, {TextTransparency = 1})
+LoaderTween(PercentLabel, 0.22, {TextTransparency = 1})
+
+local closeTween = LoaderTween(LoaderFrame, 0.25, {Size = UDim2.new(0, 0, 0, 0)})
+closeTween.Completed:Wait()
 if LoaderGui and LoaderGui.Parent then
     LoaderGui:Destroy()
 end
 
-pcall(function()
-    Window:Toggle(true)
-end)
+-- Chỉ bây giờ mới cho Meizu UI xuất hiện.
+-- Main/controls đã được dựng đầy đủ từ trước nên không có hiện tượng menu load từng phần.
+Window:Toggle(true)
 
 pcall(function()
     MeizuLibrary:Notify({
@@ -2394,13 +2599,3 @@ pcall(function()
         Duration = 4,
     })
 end)
-
-pcall(function()
-    StarterGui:SetCore("SendNotification", {
-        Title = "Meizu Hub",
-        Text = "Loaded successfully!",
-        Icon = "rbxassetid://94377325741905",
-        Duration = 4,
-    })
-end)
-
