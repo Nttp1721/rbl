@@ -1469,7 +1469,7 @@ local EAT_CONFIG = {
     CYCLE_INTERVAL = 1.0,
     STAY_DURATION = 0.32,
     INTERACTION_INTERVAL = 0.11,
-    MAX_TARGETS_CHECKED = 120,
+    MAX_TARGETS_CHECKED = 200,
     STRICT_MEAT_KEYWORDS = {"carcass", "meat", "corpse", "deadbody", "ribs", "flesh"},
     STRICT_HERB_KEYWORDS = {"bush", "plant", "grass", "foliage", "herb", "fern", "leaves", "berry", "shrub"}
 }
