@@ -1337,6 +1337,67 @@ MeizuLibrary.CreateWindow = function(a, b)
                     Refresh(false)
                 end,
             }
+
+            --// Cập nhật danh sách option động (hỗ trợ cả dd:Refresh(list) lẫn dd.Refresh(list))
+            local function UpdateOptions(newOptions)
+                if not Card.Parent then return end
+                if newOptions == nil then newOptions = options end
+                local copy = {}
+                if typeof(newOptions) == "table" then
+                    for _, v in ipairs(newOptions) do table.insert(copy, v) end
+                end
+                options = copy
+
+                -- bỏ lựa chọn không còn tồn tại trong list mới
+                local valid = {}
+                for _, v in ipairs(options) do valid[v] = true end
+                if multi then
+                    for k in pairs(selected) do
+                        if not valid[k] then selected[k] = nil end
+                    end
+                elseif selected ~= nil and not valid[selected] then
+                    selected = nil
+                end
+
+                listH = math.min(#options * 26 + 10, 150)
+                BuildOptions()
+                Refresh(false)
+
+                -- nếu đang mở thì co/giãn lại cho khớp list mới
+                if open then
+                    Tween(Card, 0.2, {Size = UDim2.new(1, 0, 0, headH + listH + 6)}, Enum.EasingStyle.Quint)
+                    Tween(List, 0.2, {Size = UDim2.new(1, -16, 0, listH)}, Enum.EasingStyle.Quint)
+                end
+            end
+
+            local function ArgOf(a, b)
+                -- gọi bằng dấu ":" thì tham số đầu là chính el
+                if a == el then return b end
+                return a
+            end
+
+            el.UpdateOptions = function(a, b) UpdateOptions(ArgOf(a, b)) end
+            el.Refresh       = el.UpdateOptions
+            el.SetOptions    = el.UpdateOptions
+            el.GetOptions = function() return options end
+            el.AddOption = function(a, b)
+                local opt = ArgOf(a, b)
+                if opt == nil then return end
+                local new = {}
+                for _, v in ipairs(options) do table.insert(new, v) end
+                table.insert(new, opt)
+                UpdateOptions(new)
+            end
+            el.RemoveOption = function(a, b)
+                local opt = ArgOf(a, b)
+                local new = {}
+                for _, v in ipairs(options) do
+                    if v ~= opt then table.insert(new, v) end
+                end
+                UpdateOptions(new)
+            end
+            el.Clear = function() UpdateOptions({}) end
+
             BindFlag(el, cfg.Flag, GetSelected())
             AddSearch(Card, cfg.Title)
             return el
