@@ -1,9 +1,4 @@
--- ============================================================
---  AUTO CHEST COLLECTOR (Standalone)
---  Game: Blox Fruits
---  Function: Tự động lụm chest, dừng khi có "Fist of Darkness"
---            (key râu đen để summon Darkbeard)
---  Không load library obfuscated, chạy độc lập.
+
 -- ============================================================
 
 -- Đợi game load
