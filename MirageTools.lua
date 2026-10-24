@@ -1,11 +1,4 @@
 -- ============================================================
---  MIRAGE ISLAND TOOLS (BananaCat logic + MeizuLibrary1)
---  Game: Blox Fruits
---  Functions:
---    1. Lụm bánh răng (Blue Gear) trên Mirage Island để gạt cần V4
---    2. Teleport đến NPC Advanced Fruit Dealer (bán trái ác quỷ)
---    3. Teleport đến Mirage Island (nếu đã spawn)
---    4. Tự động đi thuyền ra biển tìm Mirage Island
 -- ============================================================
 
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
