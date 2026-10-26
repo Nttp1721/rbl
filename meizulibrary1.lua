@@ -1,28 +1,4 @@
---[[
-    ███╗   ███╗███████╗██╗███████╗██╗   ██╗
-    ████╗ ████║██╔════╝██║██╔════╝╚██╗ ██╔╝
-    ██╔████╔██║█████╗  ██║███████╗ ╚████╔╝
-    ██║╚██╔╝██║██╔══╝  ██║╚════██║  ╚██╔╝
-    ██║ ╚═╝ ██║███████╗██║███████║   ██║
-    ╚═╝     ╚═╝╚══════╝╚═╝╚══════╝   ╚═╝
-    MEIZU LIBRARY v2.5 — LIQUID GLASS EDITION (Fluent-inspired)
-    =========================================================
-    API:
-      Library:CreateWindow{Title, SubTitle, Logo, Theme, Accent, ToggleKeybind,
-                           ToggleUIButton, ToggleImage, ToggleText, Size, InfoPanel}
-      Window:CreateTab(name, iconId, order, desc) / Window:SelectTab(1)
-      Window:Toggle(state) / Window:Dialog{Title, Content, Buttons}
-      Window:SetToggleImage(assetId | số | URL | nil)  -- đổi hình nút nổi (mặc định = LOGO CŨ của bạn)
-      Window:GetToggleImage()                          -- lấy hình nút nổi đang dùng
-      Window:SetTabInfo(desc)                          -- đặt dòng giải thích cho tab hiện tại (panel bên phải)
-      Tab/Section:CreateButton / CreateToggle / CreateSlider / CreateDropdown
-                  CreateMultiDropdown / CreateKeybind / CreateInput
-                  CreateColorPicker / CreateParagraph / CreateSection
-      Library:Notify{Title, Content, Duration} / Library:ApplyTheme("Dark")
-      Library:ApplyAccent(Color3) / Library:SetRainbow(bool)
-      Library:SaveSettings(name) / Library:LoadSettings(name) / Library:Destroy()
-      Library.Flags --> giá trị theo Flag
-]]
+
 
 --// ================== CẤU HÌNH NHANH ==================
 local TOGGLE_BUTTON_SIZE     = UDim2.new(0, 50, 0, 50)                                  -- Nút nổi
@@ -38,8 +14,11 @@ local FALLBACK_TOGGLE_IMG    = "rbxassetid://10734950309"
 -- ICON CÀI ĐẶT Ở TRONG MENU (tab Settings trên sidebar dùng icon này)
 local SETTINGS_TAB_ICON      = "rbxassetid://10734950309"
 
--- Panel bên phải: hiện TÊN TAB + GIẢI THÍCH (đặt InfoPanel = false trong CreateWindow để tắt)
-local INFO_PANEL_WIDTH       = 148
+-- Thanh info TRÊN ĐỈNH vùng nội dung (cụm bên phải): hiện ICON + TÊN TAB + GIẢI THÍCH
+-- (đặt InfoPanel = false trong CreateWindow để tắt)
+local INFO_BAR_HEIGHT        = 54
+-- Khoảng cao tổng bị chiếm ở đỉnh Content: margin 40 + thanh 54 + hở 6
+local INFO_BAR_TOTAL         = 40 + INFO_BAR_HEIGHT + 6
 
 -- Bo góc nút nổi kiểu Liquid Glass (squircle iOS — không tròn hoàn hảo)
 local TOGGLE_BUTTON_RADIUS   = 15
@@ -56,7 +35,7 @@ local FONT_BLACK  = Enum.Font.SourceSansBold       -- thay thế GothamBlack
 --// ====================================================
 
 local MeizuLibrary = {
-    Version       = "2.5",
+    Version       = "2.6",
     Flags         = {},
     Theme         = "Dark",
     Accent        = Color3.fromRGB(88, 101, 242),
@@ -808,59 +787,102 @@ MeizuLibrary.CreateWindow = function(a, b)
     local Content = New("Frame", {
         Name = "Content", BackgroundColor3 = T("Window"),
         Position = UDim2.new(0, SIDEBAR_W - 14, 0, 0),
-        Size = UDim2.new(1, -(SIDEBAR_W + INFO_PANEL_WIDTH + 6), 1, 0),
+        Size = UDim2.new(1, -(SIDEBAR_W + 6), 1, 0),
         BorderSizePixel = 0, Parent = Main,
     })
     Register(Content, {BackgroundColor3 = "Window"})
     New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = Content})
 
-    --// ============ PANEL BÊN PHẢI — TÊN TAB + GIẢI THÍCH ============
-    -- Như Maru Hub: cột phải hiển thị tab đang chọn & dòng mô tả tác dụng của nó
-    local InfoPanel, InfoBadge, InfoIcon, InfoLetter, InfoName, InfoDesc, InfoBadgeScale
+    --// ===== THANH INFO TRÊN ĐỈNH VÙNG NỘI DUNG — ICON + TÊN TAB + GIẢI THÍCH =====
+    -- Đúng vị trí user chỉ (đỉnh của cụm nội dung bên phải): một dải kính nhỏ cho biết
+    -- đang ở tab nào, icon gì và tab đó CÓ TÁC DỤNG GÌ. Nằm dưới dải kéo (36px)
+    -- nên không đè nút Min/Close, các element bên dưới được dồn xuống → không lọt vào nhau.
+    local InfoPanel, InfoBadge, InfoIcon, InfoLetter, InfoName, InfoDesc, InfoBadgeScale, InfoCountLabel
     if config.InfoPanel ~= false then
         InfoPanel = New("Frame", {
             Name = "InfoPanel",
             BackgroundColor3 = T("Sidebar"),
-            Position = UDim2.new(1, -(INFO_PANEL_WIDTH + 10), 0, 44),
-            Size = UDim2.new(0, INFO_PANEL_WIDTH, 1, -54),
-            BorderSizePixel = 0, Parent = Main,
+            Position = UDim2.new(0, 10, 0, 40),
+            Size = UDim2.new(1, -20, 0, INFO_BAR_HEIGHT),
+            BorderSizePixel = 0, Parent = Content,
         })
         Register(InfoPanel, {BackgroundColor3 = "Sidebar"})
         New("UICorner", {CornerRadius = UDim.new(0, 12), Parent = InfoPanel})
-        local IPStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.4, Parent = InfoPanel})
+        local IPStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.35, Parent = InfoPanel})
         Register(IPStroke, {Color = "Stroke"})
-
-        local InfoCaption = New("TextLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.new(0, 14, 0, 12),
-            Size = UDim2.new(1, -28, 0, 12),
-            Font = FONT_BOLD, TextSize = 10,
-            TextColor3 = T("SubText"), TextXAlignment = Enum.TextXAlignment.Left,
-            Text = MeizuLibrary:_Translate("Current Tab"),
+        local IPHalo = New("UIStroke", {Color = MeizuLibrary.Accent, Thickness = 2, Transparency = 0.9, Parent = InfoPanel})
+        RegisterAccent(IPHalo, "Color")
+        -- gradient kính: đỉnh hứng sáng, thân trầm dần — chất "liquid glass" tĩnh
+        New("UIGradient", {
+            Rotation = 90,
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+                ColorSequenceKeypoint.new(0.55, Color3.fromRGB(235, 238, 248)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(206, 211, 229)),
+            }),
             Parent = InfoPanel,
         })
-        Register(InfoCaption, {TextColor3 = "SubText"})
-        pcall(function() InfoCaption:SetAttribute("MeizuLocKey", "Current Tab") end)
+        -- gloss tràn đỉnh + bóng trong (độ sâu kính — tĩnh, không tốn vòng lặp)
+        local IPGloss = New("Frame", {
+            Name = "IPGloss",
+            Size = UDim2.new(1, 0, 0.42, 0),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0, ZIndex = 2, Parent = InfoPanel,
+        })
+        New("UICorner", {CornerRadius = UDim.new(0, 12), Parent = IPGloss})
+        New("UIGradient", {
+            Rotation = 90,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.6),
+                NumberSequenceKeypoint.new(1, 1),
+            }),
+            Parent = IPGloss,
+        })
+        New("ImageLabel", {
+            Name = "IPShade", BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            Image = "rbxassetid://6014261993", ImageColor3 = Color3.fromRGB(0, 0, 0),
+            ImageTransparency = 0.9, ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(49, 49, 450, 450),
+            ZIndex = 2, BorderSizePixel = 0, Parent = InfoPanel,
+        })
 
+        -- Badge icon tab (kính gradient + gloss vi mô + chữ cái dự phòng)
         InfoBadge = New("Frame", {
             Name = "InfoBadge",
-            Position = UDim2.new(0, 14, 0, 30),
-            Size = UDim2.fromOffset(46, 46),
+            AnchorPoint = Vector2.new(0, 0.5),
+            Position = UDim2.new(0, 9, 0.5, 0),
+            Size = UDim2.fromOffset(34, 34),
             BackgroundColor3 = T("Tab"),
             BorderSizePixel = 0, Parent = InfoPanel,
         })
         Register(InfoBadge, {BackgroundColor3 = "Tab"})
-        New("UICorner", {CornerRadius = UDim.new(0, 13), Parent = InfoBadge})
-        local IBStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.35, Parent = InfoBadge})
+        New("UICorner", {CornerRadius = UDim.new(0, 11), Parent = InfoBadge})
+        local IBStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.3, Parent = InfoBadge})
         Register(IBStroke, {Color = "Stroke"})
         New("UIGradient", {
             Rotation = 115,
             Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.25),
-                NumberSequenceKeypoint.new(0.6, 0.7),
-                NumberSequenceKeypoint.new(1, 0.92),
+                NumberSequenceKeypoint.new(0, 0.2),
+                NumberSequenceKeypoint.new(0.6, 0.62),
+                NumberSequenceKeypoint.new(1, 0.9),
             }),
             Parent = InfoBadge,
+        })
+        local IBGloss = New("Frame", {
+            Name = "IBGloss",
+            Size = UDim2.new(1, 0, 0.5, 0),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0, ZIndex = 2, Parent = InfoBadge,
+        })
+        New("UICorner", {CornerRadius = UDim.new(0, 11), Parent = IBGloss})
+        New("UIGradient", {
+            Rotation = 90,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.55),
+                NumberSequenceKeypoint.new(1, 1),
+            }),
+            Parent = IBGloss,
         })
         InfoBadgeScale = New("UIScale", {Scale = 1, Parent = InfoBadge})
 
@@ -869,16 +891,17 @@ MeizuLibrary.CreateWindow = function(a, b)
             BackgroundTransparency = 1,
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromOffset(27, 27),
+            Size = UDim2.fromOffset(20, 20),
             ScaleType = Enum.ScaleType.Fit,
-            Visible = false, Parent = InfoBadge,
+            ZIndex = 3, Visible = false, Parent = InfoBadge,
         })
         InfoLetter = New("TextLabel", {
             Name = "InfoLetter",
             BackgroundTransparency = 1,
             Size = UDim2.fromScale(1, 1),
-            Font = FONT_BOLD, TextSize = 20,
+            Font = FONT_BOLD, TextSize = 16,
             TextColor3 = MeizuLibrary.Accent,
+            ZIndex = 3,
             Text = "—", Parent = InfoBadge,
         })
         RegisterAccent(InfoLetter, "TextColor3")
@@ -886,41 +909,83 @@ MeizuLibrary.CreateWindow = function(a, b)
         InfoName = New("TextLabel", {
             Name = "InfoName",
             BackgroundTransparency = 1,
-            Position = UDim2.new(0, 14, 0, 86),
-            Size = UDim2.new(1, -28, 0, 38),
-            Font = FONT_BOLD, TextSize = 15,
+            Position = UDim2.new(0, 52, 0, 8),
+            Size = UDim2.new(1, -186, 0, 17),
+            Font = FONT_BOLD, TextSize = 14,
             TextColor3 = T("Text"),
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Top,
-            TextWrapped = true,
             TextTruncate = Enum.TextTruncate.AtEnd,
             Text = "—", Parent = InfoPanel,
         })
         Register(InfoName, {TextColor3 = "Text"})
 
-        local InfoDivider = New("Frame", {
-            Name = "InfoDivider",
-            BackgroundColor3 = T("Stroke"),
-            BackgroundTransparency = 0.45,
-            Position = UDim2.new(0, 14, 0, 130),
-            Size = UDim2.new(1, -28, 0, 1),
-            BorderSizePixel = 0, Parent = InfoPanel,
-        })
-        Register(InfoDivider, {BackgroundColor3 = "Stroke"})
-
         InfoDesc = New("TextLabel", {
             Name = "InfoDesc",
             BackgroundTransparency = 1,
-            Position = UDim2.new(0, 14, 0, 138),
-            Size = UDim2.new(1, -28, 1, -150),
-            Font = FONT_MAIN, TextSize = 11,
+            Position = UDim2.new(0, 52, 0, 26),
+            Size = UDim2.new(1, -186, 0, 24),
+            Font = FONT_MAIN, TextSize = 10,
             TextColor3 = T("SubText"),
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Top,
             TextWrapped = true,
+            TextTruncate = Enum.TextTruncate.AtEnd,
             Text = "", Parent = InfoPanel,
         })
         Register(InfoDesc, {TextColor3 = "SubText"})
+
+        -- Vạch phân cách + chip đếm số mục ở MÉP PHẢI (đúng "từ góc bên phải" user chỉ)
+        local IPDivider = New("Frame", {
+            Name = "IPDivider",
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, -128, 0.5, 0),
+            Size = UDim2.new(0, 1, 0, 28),
+            BackgroundColor3 = T("Stroke"),
+            BackgroundTransparency = 0.5,
+            BorderSizePixel = 0, Parent = InfoPanel,
+        })
+        Register(IPDivider, {BackgroundColor3 = "Stroke"})
+
+        local InfoCount = New("Frame", {
+            Name = "InfoCount",
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, -10, 0.5, 0),
+            Size = UDim2.new(0, 0, 0, 22),
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundColor3 = T("Tab"),
+            BorderSizePixel = 0, Parent = InfoPanel,
+        })
+        New("UICorner", {CornerRadius = UDim.new(0, 11), Parent = InfoCount})
+        local ICStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.45, Parent = InfoCount})
+        Register(ICStroke, {Color = "Stroke"})
+        New("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            HorizontalAlignment = Enum.HorizontalAlignment.Center,
+            Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder, Parent = InfoCount,
+        })
+        New("UIPadding", {
+            PaddingLeft = UDim.new(0, 9), PaddingRight = UDim.new(0, 9), Parent = InfoCount,
+        })
+        local InfoCountDot = New("Frame", {
+            Name = "InfoCountDot",
+            Size = UDim2.fromOffset(5, 5),
+            BackgroundColor3 = MeizuLibrary.Accent,
+            BorderSizePixel = 0, LayoutOrder = 1, Parent = InfoCount,
+        })
+        RegisterAccent(InfoCountDot, "BackgroundColor3")
+        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = InfoCountDot})
+        InfoCountLabel = New("TextLabel", {
+            Name = "InfoCountLabel",
+            BackgroundTransparency = 1,
+            Size = UDim2.new(0, 0, 0, 14),
+            AutomaticSize = Enum.AutomaticSize.X,
+            Font = FONT_BOLD, TextSize = 10,
+            TextColor3 = T("SubText"),
+            Text = "—", LayoutOrder = 2, Parent = InfoCount,
+        })
+        Register(InfoCountLabel, {TextColor3 = "SubText"})
     end
 
     --// VÙNG LOGO + TÊN SCRIPT (như Maru Hub — logo tròn bên trái, tên + phiên bản bên phải)
@@ -1115,13 +1180,16 @@ MeizuLibrary.CreateWindow = function(a, b)
     Grip.MouseEnter:Connect(function() Tween(Grip, 0.15, {BackgroundTransparency = 0.3, Size = UDim2.new(0, 48, 0, 4)}) end)
     Grip.MouseLeave:Connect(function() Tween(Grip, 0.2, {BackgroundTransparency = 0.6, Size = UDim2.new(0, 36, 0, 4)}) end)
 
+    -- TabContainer bị đẩy xuống dưới thanh info → element KHÔNG BAO GIỜ lọt vào vùng info
+    local topOffset = InfoPanel and INFO_BAR_TOTAL or 8
     local TabContainer = New("Frame", {
         BackgroundTransparency = 1,
-        Size = UDim2.fromScale(1, 1),
+        Position = UDim2.new(0, 0, 0, topOffset),
+        Size = UDim2.new(1, 0, 1, -topOffset),
         Parent = Content,
     })
 
-    --// ============ BỘ MÔ TẢ TAB TỰ ĐỘNG (cho panel bên phải) ============
+    --// ============ BỘ MÔ TẢ TAB TỰ ĐỘNG (cho thanh info trên vùng nội dung) ============
     -- Tác dụng của từng nhóm tab — chọn theo từ khoá trong tên tab, hỗ trợ vi/en
     local TAB_AUTO_DESC = {
         _default = {
@@ -1194,7 +1262,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         },
     }
 
-    --// ============ CẬP NHẬT PANEL THÔNG TIN (tên tab + giải thích) ============
+    --// ===== CẬP NHẬT THANH INFO (icon + tên tab + giải thích + số mục) =====
     local function UpdateInfoPanel(tab)
         if not InfoPanel or not tab then return end
         local locName = MeizuLibrary:_Translate(tab._Name or "")
@@ -1229,6 +1297,12 @@ MeizuLibrary.CreateWindow = function(a, b)
             desc = d[MeizuLibrary.Language] or d.vi
         end
         InfoDesc.Text = desc
+
+        -- Chip số mục ở mép phải: đếm phần tử đang có trong tab (toggle/button/slider...)
+        if InfoCountLabel then
+            local n = tab._Elements and #tab._Elements or 0
+            InfoCountLabel.Text = tostring(n) .. (MeizuLibrary.Language == "vi" and " mục" or " items")
+        end
 
         -- Hiệu ứng nhẹ mỗi lần đổi tab: icon nảy, chữ hiện dần
         InfoBadgeScale.Scale = 0.78
@@ -2331,7 +2405,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         RegisterAccent(Scroll, "ScrollBarImageColor3")
         New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = Scroll})
         New("UIPadding", {
-            PaddingTop = UDim.new(0, 36), PaddingBottom = UDim.new(0, 12),
+            PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 12),
             PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), Parent = Scroll})
 
         function Tab:Select()
@@ -2545,8 +2619,11 @@ MeizuLibrary.CreateWindow = function(a, b)
         Tween(Card, 0.25, {GroupTransparency = 0})
     end
 
-    --// ============ NÚT NỔI — LIQUID GLASS (iOS 26 style) ============
-    -- Cấu trúc 5 lớp: bóng đổ → thân kính mờ → màu nhấn loang → vệt sáng specular → rim viền kính
+    --// ========= NÚT NỔI — LIQUID GLASS 3.0 (siêu thực, 9 lớp vật liệu) =========
+    -- Vật lý kính thật: 2 lớp bóng đổ (ambient + contact) → thân kính tinted trong suốt
+    -- → màng frosted → 2 điểm khúc xạ (trên-trái & dưới-phải) → logo → bóng trong (độ dày)
+    -- → gloss đỉnh nghiêng theo chuột → phản chiếu accent → ĐIỂM SÁNG CHẠY THEO CHUỘT
+    -- → shimmer quét chéo ×2 → rim sắc tố xoay liên tục → jelly rung khi thả.
     if config.ToggleUIButton ~= false then
         local RADIUS = TOGGLE_BUTTON_RADIUS or 15
 
@@ -2565,15 +2642,27 @@ MeizuLibrary.CreateWindow = function(a, b)
         -- chính khiến Liquid Glass trước đây trông "không có hiệu ứng".
         New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = ToggleBtn})
 
-        -- Bóng đổ mềm (đặt TRONG nút để tự theo khi kéo)
+        -- Bóng đổ 2 LỚP (ambient rộng mềm + contact sát đậm) — đặt TRONG nút để tự theo khi kéo
         New("ImageLabel", {
-            Name = "Shadow", BackgroundTransparency = 1,
+            Name = "ShadowAmbient", BackgroundTransparency = 1,
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.new(1, 44, 1, 44),
+            Size = UDim2.new(1, 72, 1, 72),
             Image = "rbxassetid://6014261993",
             ImageColor3 = Color3.fromRGB(0, 0, 0),
-            ImageTransparency = 0.5,
+            ImageTransparency = 0.72,
+            ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(49, 49, 450, 450),
+            ZIndex = 147, Parent = ToggleBtn,
+        })
+        New("ImageLabel", {
+            Name = "ShadowContact", BackgroundTransparency = 1,
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 3),
+            Size = UDim2.new(1, 34, 1, 34),
+            Image = "rbxassetid://6014261993",
+            ImageColor3 = Color3.fromRGB(0, 0, 0),
+            ImageTransparency = 0.45,
             ScaleType = Enum.ScaleType.Slice,
             SliceCenter = Rect.new(49, 49, 450, 450),
             ZIndex = 148, Parent = ToggleBtn,
@@ -2585,16 +2674,17 @@ MeizuLibrary.CreateWindow = function(a, b)
             Name = "GlassBase",
             Size = UDim2.fromScale(1, 1),
             BackgroundColor3 = Color3.fromRGB(14, 16, 24),
-            BackgroundTransparency = 0.22,
+            BackgroundTransparency = 0.28,
             BorderSizePixel = 0, ZIndex = 150, Parent = ToggleBtn,
         })
         New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = GlassBase})
         New("UIGradient", {
             Rotation = 90,
-            Color = ColorSequence.new(
-                Color3.fromRGB(44, 48, 64),   -- đỉnh hửng sáng (bắt sáng trời)
-                Color3.fromRGB(13, 15, 22)    -- đáy trầm xuống (chiều sâu kính)
-            ),
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(58, 62, 82)),    -- đỉnh hứng sáng trời
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(28, 31, 44)),  -- giữa chuyển tiếp
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(11, 13, 20)),    -- đáy trầm (chiều sâu kính)
+            }),
             Parent = GlassBase,
         })
         New("UIStroke", {
@@ -2621,7 +2711,8 @@ MeizuLibrary.CreateWindow = function(a, b)
             Parent = GlassSheen,
         })
 
-        -- Lớp 2: điểm sáng khúc xạ (caustic light) góc trên — như ánh kính thật
+        -- Lớp 2: ĐIỂM KHÚC XẠ KÉP — caustic trên-trái (ánh trời) + dưới-phải (bắt sáng
+        -- bật ngược từ mặt đất, màu nhấn) — kính thật luôn có 2 vùng sáng đối xứng chéo
         New("ImageLabel", {
             Name = "Caustic", BackgroundTransparency = 1,
             AnchorPoint = Vector2.new(0.5, 0.5),
@@ -2629,18 +2720,39 @@ MeizuLibrary.CreateWindow = function(a, b)
             Size = UDim2.new(0.62, 0, 0.44, 0),
             Image = "rbxassetid://6014261993",
             ImageColor3 = Color3.fromRGB(255, 255, 255),
-            ImageTransparency = 0.8,
+            ImageTransparency = 0.76,
             ScaleType = Enum.ScaleType.Slice,
             SliceCenter = Rect.new(49, 49, 450, 450),
             ZIndex = 152, Parent = ToggleBtn,
         })
+        local CausticBR = New("ImageLabel", {
+            Name = "CausticBR", BackgroundTransparency = 1,
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.72, 0, 0.76, 0),
+            Size = UDim2.new(0.5, 0, 0.34, 0),
+            Image = "rbxassetid://6014261993",
+            ImageColor3 = MeizuLibrary.Accent,
+            ImageTransparency = 0.88,
+            ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(49, 49, 450, 450),
+            ZIndex = 152, BorderSizePixel = 0, Parent = ToggleBtn,
+        })
+        RegisterAccent(CausticBR, "ImageColor3")
 
-        -- Viền kính: rim sáng trắng + halo màu nhấn — GIỜ ĐÃ BO TRÒN ĐÚNG nhờ UICorner của ToggleBtn
+
+        -- Rim SẮC TỐ (chromatic dispersion): ánh trắng tán màu lạnh/ấm dọc viền —
+        -- đúng hiện tượng tán sắc khi ánh sáng xuyên lớp kính dày
         local RimStroke = New("UIStroke", {
             Color = Color3.fromRGB(255, 255, 255),
             Thickness = 1.5, Transparency = 0.25, Parent = ToggleBtn,
         })
         local rimGrad = New("UIGradient", {
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+                ColorSequenceKeypoint.new(0.3, Color3.fromRGB(185, 214, 255)),  -- tán lạnh
+                ColorSequenceKeypoint.new(0.62, Color3.fromRGB(255, 238, 205)), -- tán ấm
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255)),
+            }),
             Transparency = NumberSequence.new({
                 NumberSequenceKeypoint.new(0, 0.05),
                 NumberSequenceKeypoint.new(0.6, 0.45),
@@ -2686,31 +2798,46 @@ MeizuLibrary.CreateWindow = function(a, b)
             ZIndex = 157, Parent = ToggleBtn,
         })
         New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = ShimmerClip})
-        local Shimmer = New("Frame", {
-            Name = "Shimmer",
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.new(-0.35, 0, 0.5, 0),
-            Size = UDim2.new(0, 24, 2.4, 0),
-            Rotation = 22,
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = 0.42,
-            BorderSizePixel = 0, ZIndex = 157, Parent = ShimmerClip,
-        })
-        New("UIGradient", {
-            Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 1),
-                NumberSequenceKeypoint.new(0.5, 0.25),
-                NumberSequenceKeypoint.new(1, 1),
-            }),
-            Parent = Shimmer,
-        })
+        local function MakeShimmer(name, width, peak, rot)
+            local sh = New("Frame", {
+                Name = name,
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.new(-0.35, 0, 0.5, 0),
+                Size = UDim2.new(0, width, 2.4, 0),
+                Rotation = rot,
+                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+                BackgroundTransparency = 0, -- nền ĐẶC, gradient lo toàn bộ độ mờ (nhân trong suốt = vô hình!)
+                BorderSizePixel = 0, ZIndex = 157, Parent = ShimmerClip,
+            })
+            New("UIGradient", {
+                Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 1),
+                    NumberSequenceKeypoint.new(0.5, 1 - peak),
+                    NumberSequenceKeypoint.new(1, 1),
+                }),
+                Parent = sh,
+            })
+            return sh
+        end
+        local Shimmer  = MakeShimmer("Shimmer", 18, 0.7, 22)    -- vệt chính: mỏng, lõi sáng (op 70%)
+        local Shimmer2 = MakeShimmer("Shimmer2", 34, 0.28, 22)  -- vệt phụ: rộng, mờ (op 28%)
         task.spawn(function()
             while ShimmerClip.Parent and not MeizuLibrary.Destroyed do
-                if Shimmer.Parent then
+                if Shimmer and Shimmer.Parent then
                     Shimmer.Position = UDim2.new(-0.35, 0, 0.5, 0)
-                    Tween(Shimmer, 0.9, {Position = UDim2.new(1.35, 0, 0.5, 0)}, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+                    Tween(Shimmer, 0.8, {Position = UDim2.new(1.35, 0, 0.5, 0)}, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
                 end
-                task.wait(3.2)
+                task.wait(2.8)
+            end
+        end)
+        task.spawn(function()
+            task.wait(1.4)  -- vệt phụ lệch pha — kính "sống" liên tục, không rỗng
+            while ShimmerClip.Parent and not MeizuLibrary.Destroyed do
+                if Shimmer2 and Shimmer2.Parent then
+                    Shimmer2.Position = UDim2.new(-0.45, 0, 0.5, 0)
+                    Tween(Shimmer2, 1.15, {Position = UDim2.new(1.45, 0, 0.5, 0)}, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+                end
+                task.wait(2.8)
             end
         end)
 
@@ -2737,11 +2864,11 @@ MeizuLibrary.CreateWindow = function(a, b)
             BorderSizePixel = 0, ZIndex = 156, Parent = ToggleBtn,
         })
         New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = TopGloss})
-        New("UIGradient", {
+        local glossGrad = New("UIGradient", {
             Rotation = 90,
             Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.62),
-                NumberSequenceKeypoint.new(0.5, 0.88),
+                NumberSequenceKeypoint.new(0, 0.55),
+                NumberSequenceKeypoint.new(0.5, 0.86),
                 NumberSequenceKeypoint.new(1, 1),
             }),
             Parent = TopGloss,
@@ -2767,6 +2894,42 @@ MeizuLibrary.CreateWindow = function(a, b)
                 NumberSequenceKeypoint.new(1, 0.8),
             }),
             Parent = BottomGlow,
+        })
+
+        -- Lớp 5: bóng TRONG đáy kính (inner shadow) — kính thật dày bao giờ cũng có
+        -- vành tối lõm vào mép, tạo cảm giác ĐỘ DÀY vật liệu thay vì miếng decal
+        New("ImageLabel", {
+            Name = "InnerShade", BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            Image = "rbxassetid://6014261993",
+            ImageColor3 = Color3.fromRGB(0, 0, 0),
+            ImageTransparency = 0.86,
+            ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(49, 49, 450, 450),
+            ZIndex = 155, BorderSizePixel = 0, Parent = ToggleBtn,
+        })
+
+        -- Lớp 6: ĐIỂM SÁNG CHẠY THEO CHUỘT (specular hover) — linh hồn của kính lỏng:
+        -- rê tới đâu, vệt khúc xạ dội theo tới đó như thể có nguồn sáng thật chiếu vào
+        local HoverClip = New("Frame", {
+            Name = "HoverClip",
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            ClipsDescendants = true,
+            ZIndex = 158, BorderSizePixel = 0, Parent = ToggleBtn,
+        })
+        New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = HoverClip})
+        local HoverLight = New("ImageLabel", {
+            Name = "HoverLight", BackgroundTransparency = 1,
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.35),
+            Size = UDim2.new(0.95, 0, 0.95, 0),
+            Image = "rbxassetid://6014261993",
+            ImageColor3 = Color3.fromRGB(255, 255, 255),
+            ImageTransparency = 1,
+            ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(49, 49, 450, 450),
+            ZIndex = 158, BorderSizePixel = 0, Parent = HoverClip,
         })
 
         --// Áp dụng hình nút nổi: nhận "rbxassetid://ID", số ID, hoặc URL PNG
@@ -2805,26 +2968,69 @@ MeizuLibrary.CreateWindow = function(a, b)
         end
         task.spawn(function() ApplyImage(TOGGLE_BUTTON_IMAGE) end)
 
-        --// Vật lý mềm kiểu Liquid: nhịp thở + nhấn nén + hover nở ra
+        --// Vật lý mềm LIQUID 3.0: thở + nén nhấn + hover nở + JELLY RUNG khi thả
+        -- + điểm specular chạy theo chuột (đã trừ GuiInset — chuẩn cả PC lẫn tablet)
         local BtnScale = New("UIScale", {Scale = 0, Parent = ToggleBtn})
         local pressCur, pressTarget = 0, 1   -- mở màn: nút "phồng" lên từ 0
         local hoverCur, hoverTarget = 1, 1
         local breathT = 0
         local rimRot = 0
+        local jellyKick = 0                  -- xung rung lỏng khi thả nút
+        -- Specular: toạ độ tương đối 0..1 trong nút (con trỏ chuột/ngón tay)
+        local GuiService = game:GetService("GuiService")
+        local specCur, specTarget = Vector2.new(0.5, 0.35), Vector2.new(0.5, 0.35)
+        local specHover = false
+        local function setSpecFromScreen(sx, sy)
+            local ok, inset = pcall(function() return GuiService:GetGuiInset() end)
+            local ix, iy = 0, 0
+            if ok and inset then ix, iy = inset.X, inset.Y end
+            local abs, size = ToggleBtn.AbsolutePosition, ToggleBtn.AbsoluteSize
+            if size.X <= 0 or size.Y <= 0 then return end
+            local u = (sx - ix - abs.X) / size.X
+            local v = (sy - iy - abs.Y) / size.Y
+            specTarget = Vector2.new(math.clamp(u, 0.12, 0.88), math.clamp(v, 0.12, 0.88))
+        end
         local beatConn = RunService.Heartbeat:Connect(function(dt)
             breathT = breathT + dt
-            rimRot = (rimRot + dt * 42) % 360           -- rim sáng xoay LIÊN TỤC (kính lỏng chuyển động)
+            rimRot = (rimRot + dt * 42) % 360           -- rim xoay LIÊN TỤC (kính lỏng chuyển động)
             if rimGrad and rimGrad.Parent then rimGrad.Rotation = rimRot end
             local k = math.min(dt * 9, 1)
             pressCur  = pressCur  + (pressTarget  - pressCur)  * k
             hoverCur  = hoverCur  + (hoverTarget  - hoverCur)  * k
-            local breath = 1 + 0.03 * math.sin(breathT * 1.9)  -- thở nhẹ như jelly
-            BtnScale.Scale = pressCur * hoverCur * breath
+            local breath = 1 + 0.03 * math.sin(breathT * 1.9)      -- thở nhẹ như jelly
+            jellyKick = jellyKick * math.exp(-dt * 5.5)
+            local wob = math.sin(breathT * 15) * 0.05 * jellyKick  -- dao động tắt dần
+            BtnScale.Scale = pressCur * hoverCur * breath * (1 + wob)
+            -- Specular lerp mượt theo chuột + gloss nghiêng theo hướng sáng (parallax kính)
+            specCur = specCur:Lerp(specTarget, math.min(dt * 10, 1))
+            if HoverLight and HoverLight.Parent then
+                HoverLight.Position = UDim2.fromScale(specCur.X, specCur.Y)
+                local wantT = specHover and 0.55 or 1
+                HoverLight.ImageTransparency = HoverLight.ImageTransparency
+                    + (wantT - HoverLight.ImageTransparency) * math.min(dt * 8, 1)
+            end
+            if glossGrad and glossGrad.Parent then
+                glossGrad.Rotation = 90 + (specCur.X - 0.5) * 9
+            end
         end)
         table.insert(MeizuLibrary._Connections, beatConn)
 
-        ToggleBtn.MouseEnter:Connect(function() hoverTarget = 1.06 end)
-        ToggleBtn.MouseLeave:Connect(function() hoverTarget = 1 end)
+        ToggleBtn.MouseEnter:Connect(function()
+            hoverTarget = 1.06
+            specHover = true
+        end)
+        ToggleBtn.MouseLeave:Connect(function()
+            hoverTarget = 1
+            specHover = false
+            specTarget = Vector2.new(0.5, 0.35)
+        end)
+        ToggleBtn.MouseMoved:Connect(function(x, y) setSpecFromScreen(x, y) end)
+        ToggleBtn.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+                setSpecFromScreen(input.Position.X, input.Position.Y)
+            end
+        end)
 
         --// Click vs Drag + hiệu ứng nén khi giữ
         local pressedPos = nil
@@ -2837,6 +3043,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         ToggleBtn.InputEnded:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 pressTarget = 1
+                jellyKick = 1  -- XUNG JELLY: kính rung lỏng 1 nhịp rồi tắt dần khi buông tay
                 if pressedPos and (input.Position - pressedPos).Magnitude < 8 then
                     Window:Toggle()
                 end
@@ -2898,7 +3105,7 @@ MeizuLibrary.CreateWindow = function(a, b)
     local SettingsTab = Window:CreateTab("Settings", SETTINGS_TAB_ICON, 9999)
     SettingsTab:CreateParagraph({
         Title = "Meizu Library v" .. MeizuLibrary.Version,
-        Content = "<b>Liquid Glass Edition</b> — kính lỏng chân thực: thân kính tối, gloss tràn trên logo, rim xoay liên tục, shimmer quét chéo.\nNút nổi GIỮ LOGO CŨ của bạn; icon cài đặt trong menu dùng rbxassetid://10734950309.\nMới: vùng logo + tên script góc trái và panel bên phải hiện tên tab + giải thích.\nDesign by NTTP1721. Cảm ơn bạn đã sử dụng!",
+        Content = "<b>Liquid Glass 3.0 — Siêu thực</b>: 9 lớp vật liệu kính — 2 lớp bóng đổ, thân kính trong 28%, khúc xạ kép, bóng trong tạo độ dày, rim tán sắc xoay liên tục, shimmer quét chéo x2, ĐIỂM SÁNG CHẠY THEO CHUỘT và rung jelly khi thả.\n<b>Thanh info trên đỉnh vùng nội dung</b>: hiện icon + tên tab + giải thích tác dụng + số mục, đúng góc phải như bạn chỉ — các element được dồn xuống nên không còn lọt vào nhau.\nNút nổi GIỮ LOGO CŨ của bạn; icon cài đặt trong menu dùng rbxassetid://10734950309.\nDesign by NTTP1721. Cảm ơn bạn đã sử dụng!",
     })
     SettingsTab:CreateKeybind({
         Title = "Toggle UI Keybind",
