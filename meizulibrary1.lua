@@ -1,5 +1,4 @@
 
-
 --// ================== CẤU HÌNH NHANH ==================
 local TOGGLE_BUTTON_SIZE     = UDim2.new(0, 50, 0, 50)                                  -- Nút nổi
 local TOGGLE_BUTTON_POSITION = UDim2.new(0.120833337 - 0.1, 0, 0.0952890813 + 0.01, 0)  -- Vị trí
@@ -23,6 +22,21 @@ local INFO_BAR_TOTAL         = 40 + INFO_BAR_HEIGHT + 6
 -- Bo góc nút nổi kiểu Liquid Glass (squircle iOS — không tròn hoàn hảo)
 local TOGGLE_BUTTON_RADIUS   = 15
 
+-- LIQUID GLASS 4.0 — cấu hình nhanh
+-- BackgroundBlur = true  → mở menu là nền game mờ + trầm lạnh (như iOS); false để tắt
+-- GlassLayer     = true  → cửa sổ trong suốt + gloss/viền sáng/caustic/sheen (chất kính)
+local GLASS_BACKGROUND_BLUR  = true
+local GLASS_WINDOW_LAYER     = true
+-- Độ trong suốt thân kính theo theme (Content / Sidebar) — chỉnh nếu muốn đậm/nhạt hơn
+local GLASS_TRANSPARENCY = {
+    Dark     = {Content = 0.30, Sidebar = 0.18},
+    Midnight = {Content = 0.30, Sidebar = 0.18},
+    Void     = {Content = 0.28, Sidebar = 0.16},
+    Light    = {Content = 0.45, Sidebar = 0.32},
+}
+local GLASS_BLUR_SIZE        = 14      -- cường độ làm mờ nền khi mở menu (0-20)
+local GLASS_BLUR_FADE        = 0.35    -- giây fade in/out của hiệu ứng mờ
+
 --// ========== FONT HỖ TRỢ TIẾNG VIỆT (FIX LỖI DẤU) ==========
 -- ⚠ Font Gotham của Roblox THIẾU ký tự tiếng Việt (ậ, ế, ở, ữ, ộ...)
 --   khiến chữ hiển thị lỗi dấu / mất chữ. Toàn library chuyển sang SourceSans:
@@ -35,7 +49,7 @@ local FONT_BLACK  = Enum.Font.SourceSansBold       -- thay thế GothamBlack
 --// ====================================================
 
 local MeizuLibrary = {
-    Version       = "2.6",
+    Version       = "2.7",
     Flags         = {},
     Theme         = "Dark",
     Accent        = Color3.fromRGB(88, 101, 242),
@@ -238,6 +252,99 @@ local function SafeCall(fn, ...)
         local ok, err = pcall(fn, unpack(args))
         if not ok then warn("[MeizuLibrary] Callback error: " .. tostring(err)) end
     end)
+end
+
+--// ==================== HAIRLINE (ĐƯỜNG CHỈ PHÂN CÁCH KIỂU iOS) ====================
+-- Đường kẻ mảnh 1px dùng để phân tách các vùng của menu cho thoáng, đỡ "tật tật".
+-- Hai đầu tự mờ dần (gradient) nên nhìn rất nhẹ, đúng chuẩn divider của iOS.
+local function Hairline(parent, vertical, pos, size, baseTransparency)
+    local line = New("Frame", {
+        Name = "Hairline",
+        BackgroundColor3 = T("Stroke"),
+        BackgroundTransparency = baseTransparency or 0.45,
+        Position = pos, Size = size,
+        BorderSizePixel = 0, ZIndex = 6, Parent = parent,
+    })
+    Register(line, {BackgroundColor3 = "Stroke"})
+    New("UIGradient", {
+        Rotation = vertical and 90 or 0,
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0,    1),    -- đầu trên/trái: biến mất
+            NumberSequenceKeypoint.new(0.14, 0.25), -- vào nhanh
+            NumberSequenceKeypoint.new(0.5,  0.02), -- giữa: rõ nhất
+            NumberSequenceKeypoint.new(0.86, 0.25), -- ra chậm
+            NumberSequenceKeypoint.new(1,    1),    -- đầu dưới/phải: biến mất
+        }),
+        Parent = line,
+    })
+    return line
+end
+
+--// ==================== LIQUID GLASS 4.0 — BỘ LÀM MỜ NỀN THẬT ====================
+-- Khi mở menu: tạo BlurEffect + ColorCorrectionEffect trong Lighting để thế giới
+-- phía sau CŨNG BỊ LÀM MỜ như iOS. Cửa sổ bán trong suốt nhìn xuyên thấy nền mờ
+-- → cảm giác "kính lỏng" thật sự chứ không phải giả lập bằng màu đặc nữa.
+-- An toàn: mọi thao tác bọc pcall; chỉ tác động instance do library tự tạo,
+-- không đụng blur/CC có sẵn của game; thoát library là khôi phục nguyên trạng.
+local GlassFX = {
+    Enabled   = GLASS_BACKGROUND_BLUR,
+    Blur      = nil,   -- BlurEffect do library tạo
+    CC        = nil,   -- ColorCorrectionEffect do library tạo
+    On        = false, -- đang bật?
+}
+
+local function GlassBuildRig()
+    if not GlassFX.Enabled or GlassFX.Blur then return end
+    pcall(function()
+        local Lighting = game:GetService("Lighting")
+        GlassFX.Blur = Instance.new("BlurEffect")
+        GlassFX.Blur.Name = "MeizuGlassBlur"
+        GlassFX.Blur.Size = 0
+        GlassFX.Blur.Parent = Lighting
+        GlassFX.CC = Instance.new("ColorCorrectionEffect")
+        GlassFX.CC.Name = "MeizuGlassTint"
+        GlassFX.CC.Brightness = 0
+        GlassFX.CC.Saturation = 0
+        GlassFX.CC.TintColor = Color3.fromRGB(255, 255, 255)
+        GlassFX.CC.Parent = Lighting
+    end)
+end
+
+-- Bật/tắt mờ nền với tween mượt (state = true → mở menu)
+local function GlassBlurTo(state)
+    if not GlassFX.Enabled then return end
+    if not GlassFX.Blur then GlassBuildRig() end
+    if not GlassFX.Blur or not GlassFX.CC then return end
+    if GlassFX.On == state then return end
+    GlassFX.On = state
+    pcall(function()
+        if state then
+            Tween(GlassFX.Blur, GLASS_BLUR_FADE, {Size = GLASS_BLUR_SIZE})
+            Tween(GlassFX.CC, GLASS_BLUR_FADE, {
+                Saturation = -0.16,
+                Brightness = -0.03,
+                TintColor  = Color3.fromRGB(206, 219, 255), -- ánh kính lạnh
+            })
+        else
+            Tween(GlassFX.Blur, GLASS_BLUR_FADE * 0.8, {Size = 0})
+            Tween(GlassFX.CC, GLASS_BLUR_FADE * 0.8, {
+                Saturation = 0, Brightness = 0,
+                TintColor  = Color3.fromRGB(255, 255, 255),
+            })
+        end
+    end)
+end
+
+function MeizuLibrary:SetBackgroundBlur(enabled)
+    GlassFX.Enabled = (enabled == true)
+    if not GlassFX.Enabled then
+        GlassBlurTo(false)
+        GlassFX.On = false
+        pcall(function()
+            if GlassFX.Blur then GlassFX.Blur:Destroy() GlassFX.Blur = nil end
+            if GlassFX.CC then GlassFX.CC:Destroy() GlassFX.CC = nil end
+        end)
+    end
 end
 
 local function Ripple(parent, x, y)
@@ -706,6 +813,13 @@ end
 function MeizuLibrary:Destroy()
     if self.Destroyed then return end
     self.Destroyed = true
+    -- Dọn hiệu ứng mờ nền (kính lỏng) để không ảnh hưởng game sau khi gỡ
+    -- (KHÔNG dùng SetBackgroundBlur ở đây — nó sẽ tắt vĩnh viễn GlassFX khi tạo lại window)
+    pcall(function()
+        GlassFX.On = false
+        if GlassFX.Blur then GlassFX.Blur:Destroy() GlassFX.Blur = nil end
+        if GlassFX.CC then GlassFX.CC:Destroy() GlassFX.CC = nil end
+    end)
     if self._RainbowConn then self._RainbowConn:Disconnect() self._RainbowConn = nil end
     for _, c in ipairs(self._Connections) do
         pcall(function() c:Disconnect() end)
@@ -733,6 +847,8 @@ MeizuLibrary.CreateWindow = function(a, b)
     if typeof(config.Accent) == "Color3" then MeizuLibrary.Accent = config.Accent end
     if config.ToggleKeybind then MeizuLibrary.ToggleKeybind = config.ToggleKeybind end
     if config.Language == "en" or config.Language == "vi" then MeizuLibrary.Language = config.Language end
+    -- Mờ nền khi mở menu: bật mặc định, CreateWindow{BackgroundBlur = false} để tắt
+    MeizuLibrary:SetBackgroundBlur(config.BackgroundBlur ~= false and GLASS_BACKGROUND_BLUR)
 
     local Window = {_Tabs = {}, _CurrentTab = nil, _BootSelected = false}
     MeizuLibrary._Window = Window
@@ -793,6 +909,159 @@ MeizuLibrary.CreateWindow = function(a, b)
     Register(Content, {BackgroundColor3 = "Window"})
     New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = Content})
 
+    --// ========== LIQUID GLASS 4.0 — THÂN KÍNH CỬA SỔ (iOS REALISTIC) ==========
+    -- Với Lighting blur (bật khi mở menu), các lớp trong suốt dưới đây cho phép
+    -- nhìn THẤY thế giới mờ phía sau → chất "liquid glass" thật sự:
+    --   Main(base tint) → Sidebar/Content(kính trong) → gloss đỉnh + viền hứng sáng
+    --   + caustic khúc xạ góc + sheen quét chậm.
+    -- Nếu config.Glass = false → giữ nguyên thân đặc như bản cũ.
+    local glassT = GLASS_TRANSPARENCY[MeizuLibrary.Theme] or GLASS_TRANSPARENCY.Dark
+    local glassOn = (config.Glass ~= false) and GLASS_WINDOW_LAYER
+    if glassOn then
+        Main.BackgroundTransparency = 0.06
+        Sidebar.BackgroundTransparency = glassT.Sidebar
+        Content.BackgroundTransparency = glassT.Content
+        -- Đổi theme → cập nhật lại độ trong cho đúng tông (Dark đục hơn, Light thoáng hơn)
+        OnThemeChange(function()
+            local gt = GLASS_TRANSPARENCY[MeizuLibrary.Theme] or GLASS_TRANSPARENCY.Dark
+            if Sidebar.Parent then Sidebar.BackgroundTransparency = gt.Sidebar end
+            if Content.Parent then Content.BackgroundTransparency = gt.Content end
+        end)
+    end
+
+    if glassOn then
+        -- (1) GLOSS ĐỈNH — màng sáng hứng nhẹ ở 45% thân trên, dấu hiệu nhận dạng kính iOS
+        local WinGloss = New("Frame", {
+            Name = "WinGloss",
+            Size = UDim2.new(1, 0, 0.45, 0),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0, ZIndex = 8, Parent = Main,
+        })
+        New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = WinGloss})
+        New("UIGradient", {
+            Rotation = 90,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0,    0.93),
+                NumberSequenceKeypoint.new(0.35, 0.965),
+                NumberSequenceKeypoint.new(1,    1),
+            }),
+            Parent = WinGloss,
+        })
+
+        -- (2) BÓNG ĐÁY — thân kính lún nhẹ xuống dưới → chiều sâu
+        local WinShade = New("Frame", {
+            Name = "WinShade",
+            AnchorPoint = Vector2.new(0, 1),
+            Position = UDim2.fromScale(0, 1),
+            Size = UDim2.new(1, 0, 0.32, 0),
+            BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+            BorderSizePixel = 0, ZIndex = 8, Parent = Main,
+        })
+        New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = WinShade})
+        New("UIGradient", {
+            Rotation = 90,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 1),
+                NumberSequenceKeypoint.new(0.5, 0.97),
+                NumberSequenceKeypoint.new(1, 0.92),
+            }),
+            Parent = WinShade,
+        })
+
+        -- (3) VIỀN HỨNG SÁNG TRONG — nét sáng mảnh dọc mép trên như ánh phản chiếu của kính
+        local InnerRim = New("Frame", {
+            Name = "InnerRim",
+            Position = UDim2.fromOffset(1, 1),
+            Size = UDim2.new(1, -2, 1, -2),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0, ZIndex = 9, Parent = Main,
+        })
+        New("UICorner", {CornerRadius = UDim.new(0, 13), Parent = InnerRim})
+        local RimS = New("UIStroke", {
+            Color = Color3.fromRGB(255, 255, 255),
+            Thickness = 1, Transparency = 0.82, Parent = InnerRim,
+        })
+        New("UIGradient", {
+            Rotation = 90,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0,    0.25), -- đỉnh sáng rõ
+                NumberSequenceKeypoint.new(0.45, 0.8),
+                NumberSequenceKeypoint.new(1,    1),    -- đáy tan mất
+            }),
+            Parent = RimS,
+        })
+
+        -- (4) CAUSTIC KHÚC XẠ — đốm sáng khúc xạ góc trên trái, đúng vật lý kính lỏng
+        New("ImageLabel", {
+            Name = "WinCaustic", BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(-30, -30),
+            Size = UDim2.fromOffset(320, 210),
+            Image = "rbxassetid://6014261993",
+            ImageColor3 = Color3.fromRGB(255, 255, 255),
+            ImageTransparency = 0.93,
+            ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(49, 49, 450, 450),
+            BorderSizePixel = 0, ZIndex = 8, Parent = Main,
+        })
+
+        -- (5) SHEEN QUÉT CHẬM — dải sáng mảnh đi ngang cửa sổ mỗi ~8s, kính "sống"
+        local SheenClip = New("Frame", {
+            Name = "SheenClip",
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            ClipsDescendants = true,
+            BorderSizePixel = 0, ZIndex = 8, Parent = Main,
+        })
+        local Sheen = New("Frame", {
+            Name = "Sheen",
+            Position = UDim2.fromOffset(-140, 0),
+            Size = UDim2.new(0, 110, 1, 0),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0, ZIndex = 8, Parent = SheenClip,
+        })
+        New("UIGradient", { -- dọc thuần, gradient NGANG: không xoay → không bao giờ tràn clip
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0,    1),
+                NumberSequenceKeypoint.new(0.5,  0.955),
+                NumberSequenceKeypoint.new(1,    1),
+            }),
+            Parent = Sheen,
+        })
+        task.spawn(function() -- vòng lặp quét: tránh tích luỹ delta, tự dừng khi library bị gỡ
+            local t0 = os.clock()
+            while Main.Parent do
+                if isOpen then
+                    local dt = os.clock() - t0
+                    local cycle = 8
+                    local p = (dt % cycle) / cycle
+                    if p < 0.28 then
+                        local k = p / 0.28
+                        Sheen.Position = UDim2.fromOffset(-140 + (W + 320) * k, 0)
+                        Sheen.Visible = true
+                    else
+                        Sheen.Visible = false
+                    end
+                else
+                    Sheen.Visible = false
+                end
+                task.wait(0.06)
+            end
+        end)
+    end
+
+    --// ============ ĐƯỜNG CHỈ PHÂN CÁCH CÁC VÙNG (kiểu iOS — 1px, hai đầu mờ) ============
+    -- Dọc: ranh giới Sidebar | Nội dung — đúng chỗ user vẽ nét trên hình
+    Hairline(Main, true, UDim2.new(0, SIDEBAR_W - 14, 0, 12), UDim2.new(0, 1, 1, -24), 0.4)
+    -- Ngang (sidebar): dưới ô Tìm kiếm, trên danh sách tab
+    Hairline(Sidebar, false, UDim2.new(0, 14, 0, 91), UDim2.new(0, SIDEBAR_W - 28, 0, 1), 0.42)
+    -- Ngang (sidebar): trên thẻ người chơi ở đáy cột trái
+    Hairline(Sidebar, false, UDim2.new(0, 14, 1, -56), UDim2.new(0, SIDEBAR_W - 28, 0, 1), 0.55)
+    if config.InfoPanel ~= false then
+        -- Ngang (nội dung): dưới thanh info, trên khu element — tách sạch "đầu bảng"
+        -- (chỉ vẽ khi CÓ thanh info; nếu tắt InfoPanel thì element bắt đầu từ y=8)
+        Hairline(Content, false, UDim2.new(0, 6, 0, INFO_BAR_TOTAL - 3), UDim2.new(1, -12, 0, 1), 0.42)
+    end
+
     --// ===== THANH INFO TRÊN ĐỈNH VÙNG NỘI DUNG — ICON + TÊN TAB + GIẢI THÍCH =====
     -- Đúng vị trí user chỉ (đỉnh của cụm nội dung bên phải): một dải kính nhỏ cho biết
     -- đang ở tab nào, icon gì và tab đó CÓ TÁC DỤNG GÌ. Nằm dưới dải kéo (36px)
@@ -808,6 +1077,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         })
         Register(InfoPanel, {BackgroundColor3 = "Sidebar"})
         New("UICorner", {CornerRadius = UDim.new(0, 12), Parent = InfoPanel})
+        InfoPanel.BackgroundTransparency = 0.14 -- thanh info là tấm kính riêng nổi trên thân
         local IPStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.35, Parent = InfoPanel})
         Register(IPStroke, {Color = "Stroke"})
         local IPHalo = New("UIStroke", {Color = MeizuLibrary.Accent, Thickness = 2, Transparency = 0.9, Parent = InfoPanel})
@@ -1073,6 +1343,7 @@ MeizuLibrary.CreateWindow = function(a, b)
     })
     Register(SearchBox, {BackgroundColor3 = "Input", PlaceholderColor3 = "Placeholder", TextColor3 = "Text"})
     New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = SearchBox})
+    SearchBox.BackgroundTransparency = 0.18 -- ô tìm kiếm cũng là một mảng kính nhỏ
     New("UIPadding", {PaddingLeft = UDim.new(0, 10), Parent = SearchBox})
     pcall(function() SearchBox:SetAttribute("MeizuLocKey", "Search...") end)
 
@@ -1096,6 +1367,7 @@ MeizuLibrary.CreateWindow = function(a, b)
     })
     Register(PlayerCard, {BackgroundColor3 = "Element"})
     New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = PlayerCard})
+    PlayerCard.BackgroundTransparency = 0.22 -- kính mờ đụng hàng thân cửa sổ
     local Avatar = New("ImageLabel", {
         BackgroundColor3 = T("Tab"),
         Position = UDim2.new(0, 5, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5),
@@ -1349,6 +1621,8 @@ MeizuLibrary.CreateWindow = function(a, b)
                 })
             end
             New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = Card})
+            -- Kính mỏng trên thẻ element: hơi xuyên qua nền blur → liền mạch với thân kính
+            Card.BackgroundTransparency = 0.09
             local Stroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.4, Parent = Card})
             Register(Card, {BackgroundColor3 = "Element"})
             Register(Stroke, {Color = "Stroke"})
@@ -1438,6 +1712,9 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Parent = Head,
             })
             Register(SecLabel, {TextColor3 = "SubText"})
+            -- Đường chỉ mảnh dưới tiêu đề Section: phân tách "đầu mục" với danh sách element
+            -- (iOS grouped-list style — mỏng 1px, hai đầu mờ dần)
+            Hairline(Sec, false, UDim2.new(0, 2, 0, 24), UDim2.new(1, -4, 0, 1), 0.5)
             local SectionObj = {}
             BindElements(SectionObj, Sec, tab)
             return SectionObj
@@ -2470,6 +2747,8 @@ MeizuLibrary.CreateWindow = function(a, b)
     local function SetOpen(state)
         if state == isOpen then return end
         isOpen = state
+        -- LIQUID GLASS 4.0: mở menu → làm mờ nền game thật (như iOS); đóng → nhả về 0
+        GlassBlurTo(state)
         if state then
             Main.Visible = true
             Main.GroupTransparency = 1
@@ -3105,7 +3384,7 @@ MeizuLibrary.CreateWindow = function(a, b)
     local SettingsTab = Window:CreateTab("Settings", SETTINGS_TAB_ICON, 9999)
     SettingsTab:CreateParagraph({
         Title = "Meizu Library v" .. MeizuLibrary.Version,
-        Content = "<b>Liquid Glass 3.0 — Siêu thực</b>: 9 lớp vật liệu kính — 2 lớp bóng đổ, thân kính trong 28%, khúc xạ kép, bóng trong tạo độ dày, rim tán sắc xoay liên tục, shimmer quét chéo x2, ĐIỂM SÁNG CHẠY THEO CHUỘT và rung jelly khi thả.\n<b>Thanh info trên đỉnh vùng nội dung</b>: hiện icon + tên tab + giải thích tác dụng + số mục, đúng góc phải như bạn chỉ — các element được dồn xuống nên không còn lọt vào nhau.\nNút nổi GIỮ LOGO CŨ của bạn; icon cài đặt trong menu dùng rbxassetid://10734950309.\nDesign by NTTP1721. Cảm ơn bạn đã sử dụng!",
+        Content = "<b>Liquid Glass 4.0 — Chuẩn iOS</b>: mở menu là nền game bị làm mờ + trầm lạnh thật sự (Lighting blur), cửa sổ trong suốt nhìn xuyên thấy thế giới phía sau, phủ gloss đỉnh, viền hứng sáng, caustic khúc xạ và sheen quét chậm. Nút nổi vẫn giữ nguyên bộ 9 lớp kính có điểm sáng chạy theo chuột.\n<b>Đường chỉ phân cách</b>: nét mảnh 1px hai đầu mờ tách các vùng sidebar | nội dung | đáy cột trái | dưới tiêu đề từng Section — menu thoáng, dễ nhìn hơn hẳn.\n<b>Thanh info</b>: icon + tên tab + giải thích tác dụng + số mục ở đỉnh vùng nội dung.\nNút nổi GIỮ LOGO CŨ của bạn; icon cài đặt trong menu dùng rbxassetid://10734950309.\nDesign by NTTP1721. Cảm ơn bạn đã sử dụng!",
     })
     SettingsTab:CreateKeybind({
         Title = "Toggle UI Keybind",
