@@ -12,7 +12,7 @@
                            ToggleUIButton, ToggleImage, ToggleText, Size}
       Window:CreateTab(name, iconId, order) / Window:SelectTab(1)
       Window:Toggle(state) / Window:Dialog{Title, Content, Buttons}
-      Window:SetToggleImage(assetIdHoặcUrl | nil)  -- đổi hình nút nổi
+      Window:SetToggleImage(assetIdOrUrl | nil)  -- đổi ảnh logo/nút nổi
       Tab/Section:CreateButton / CreateToggle / CreateSlider / CreateDropdown
                   CreateMultiDropdown / CreateKeybind / CreateInput
                   CreateColorPicker / CreateParagraph / CreateSection
@@ -23,18 +23,17 @@
 ]]
 
 --// ================== CẤU HÌNH NHANH ==================
-local TOGGLE_BUTTON_SIZE     = UDim2.new(0, 50, 0, 50)                                  -- Nút nổi
-local TOGGLE_BUTTON_POSITION = UDim2.new(0.120833337 - 0.1, 0, 0.0952890813 + 0.01, 0)  -- Vị trí
+local TOGGLE_BUTTON_SIZE     = UDim2.fromOffset(50, 50)
+-- Vị trí neo theo tỉ lệ màn hình; có thể đổi ở đây nếu muốn.
+local TOGGLE_BUTTON_POSITION = UDim2.new(0.0208, 0, 0.12, 0)
 
--- Hình mặc định của nút nổi (URL PNG hoặc rbxassetid://ID)
-local TOGGLE_BUTTON_IMAGE    = "https://i.ibb.co/S7rpHJJN/meizuxp.png"
-
--- Bo góc nút nổi theo kiểu testtintro.lua (KHÔNG tròn hoàn hảo)
-local TOGGLE_BUTTON_RADIUS   = 12
+-- Asset mặc định cho logo trên thanh đầu và nút nổi.
+local TOGGLE_BUTTON_IMAGE    = "rbxassetid://10734950309"
+local TOGGLE_BUTTON_RADIUS   = 14
 --// ====================================================
 
 local MeizuLibrary = {
-    Version       = "2.3",
+    Version       = "2.4",
     Flags         = {},
     Theme         = "Dark",
     Accent        = Color3.fromRGB(88, 101, 242),
@@ -69,20 +68,51 @@ MeizuLibrary._LocEntries = {}
 
 MeizuLibrary.LanguageMap = {
     ["Settings"] = {vi="Cài đặt", en="Settings"},
+    ["Main"] = {vi="Chính", en="Main"},
+    ["Home"] = {vi="Trang chủ", en="Home"},
+    ["Player"] = {vi="Người chơi", en="Player"},
+    ["Visuals"] = {vi="Hiển thị", en="Visuals"},
+    ["Movement"] = {vi="Di chuyển", en="Movement"},
+    ["Utility"] = {vi="Tiện ích", en="Utility"},
     ["Theme"] = {vi="Chủ đề", en="Theme"},
     ["Accent Color"] = {vi="Màu nhấn", en="Accent Color"},
     ["Rainbow Accent"] = {vi="Màu nhấn cầu vồng", en="Rainbow Accent"},
-    ["Sound Effects"] = {vi="Âm thanh", en="Sound Effects"},
-    ["Toggle UI Keybind"] = {vi="Phím bật/tắt UI", en="Toggle UI Keybind"},
-    ["Config Name"] = {vi="Tên config", en="Config Name"},
-    ["Save Config"] = {vi="Lưu config", en="Save Config"},
-    ["Load Config"] = {vi="Tải config", en="Load Config"},
-    ["Unload Library"] = {vi="Gỡ Library", en="Unload Library"},
+    ["Sound Effects"] = {vi="Hiệu ứng âm thanh", en="Sound Effects"},
+    ["Toggle UI Keybind"] = {vi="Phím bật/tắt giao diện", en="Toggle UI Keybind"},
+    ["Config Name"] = {vi="Tên cấu hình", en="Config Name"},
+    ["Save Config"] = {vi="Lưu cấu hình", en="Save Config"},
+    ["Load Config"] = {vi="Tải cấu hình", en="Load Config"},
+    ["Unload Library"] = {vi="Gỡ thư viện", en="Unload Library"},
     ["Language"] = {vi="Ngôn ngữ", en="Language"},
     ["Search..."] = {vi="Tìm kiếm...", en="Search..."},
+    ["Launcher Icon"] = {vi="Ảnh nút nổi", en="Launcher Icon"},
+    ["Apply Launcher Icon"] = {vi="Áp dụng ảnh biểu tượng", en="Apply Launcher Icon"},
+    ["Reset Launcher Icon"] = {vi="Khôi phục ảnh mặc định", en="Reset Launcher Icon"},
+    ["Enter image ID or rbxassetid://..."] = {vi="Nhập ID ảnh hoặc rbxassetid://...", en="Enter image ID or rbxassetid://..."},
+    ["Change the floating button and header logo."] = {vi="Đổi ảnh logo trên nút nổi và thanh đầu.", en="Change the floating button and header logo."},
+    ["Đổi ảnh logo trên nút nổi và thanh đầu."] = {vi="Đổi ảnh logo trên nút nổi và thanh đầu.", en="Change the floating button and header logo."},
+    ["Cancel"] = {vi="Hủy", en="Cancel"},
+    ["Close"] = {vi="Đóng", en="Close"},
+    ["Close UI"] = {vi="Đóng giao diện", en="Close UI"},
+    ["Unload"] = {vi="Gỡ thư viện", en="Unload"},
+    ["Xoá toàn bộ UI khỏi game"] = {vi="Xoá toàn bộ UI khỏi game", en="Remove the entire UI from the game"},
+    ["Remove the entire UI from the game"] = {vi="Xoá toàn bộ UI khỏi game", en="Remove the entire UI from the game"},
+    ["Dialog"] = {vi="Thông báo", en="Dialog"},
+    ["OK"] = {vi="Đồng ý", en="OK"},
+    ["Color"] = {vi="Màu sắc", en="Color"},
+    ["Select..."] = {vi="Chọn...", en="Select..."},
+    ["Type here..."] = {vi="Nhập tại đây...", en="Type here..."},
+    ["Button"] = {vi="Nút", en="Button"},
+    ["Toggle"] = {vi="Công tắc", en="Toggle"},
+    ["Slider"] = {vi="Thanh trượt", en="Slider"},
+    ["Dropdown"] = {vi="Danh sách", en="Dropdown"},
+    ["Keybind"] = {vi="Phím tắt", en="Keybind"},
+    ["Input"] = {vi="Ô nhập", en="Input"},
+    ["__BrandSubtitle"] = {vi="GIAO DIỆN CAO CẤP  •  LIQUID GLASS", en="PREMIUM INTERFACE  •  LIQUID GLASS"},
 }
 
 function MeizuLibrary:_Translate(key)
+    key = tostring(key or "")
     local row = self.LanguageMap[key]
     if type(row) == "table" then
         return row[self.Language] or row.en or key
@@ -101,6 +131,13 @@ function MeizuLibrary:_ApplyLocalization()
         if descKey and (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then
             pcall(function() obj.Text = self:_Translate(descKey) end)
         end
+        local placeholderKey = obj:GetAttribute("MeizuLocPlaceholder")
+        if placeholderKey and obj:IsA("TextBox") then
+            pcall(function() obj.PlaceholderText = self:_Translate(placeholderKey) end)
+        end
+    end
+    for _, refresh in ipairs(self._LocEntries) do
+        pcall(refresh)
     end
 end
 
@@ -629,11 +666,38 @@ function MeizuLibrary:LoadSettings(name)
         if flag == "__language" then
             self.Language = (v == "en") and "en" or "vi"
         elseif flag == "__toggleimage" then
-            -- fixed launcher image: ignore legacy override data
+            self:SetToggleImage(v)
         else
             local el = self._FlagElems[flag]
             if el then pcall(el.Set, Deserialize(v)) end
         end
+    end
+    self:_ApplyLocalization()
+    return true
+end
+
+function MeizuLibrary:SetToggleImage(image)
+    if self.Destroyed then return false, "Library đã bị gỡ." end
+    if image == nil or tostring(image):match("^%s*$") then
+        image = TOGGLE_BUTTON_IMAGE
+    end
+    local raw = image
+    if type(image) == "number" then image = "rbxassetid://" .. tostring(image) end
+    image = tostring(image):match("^%s*(.-)%s*$")
+    local asset = ResolveImageAsset(image)
+    if not asset then
+        return false, "Không thể xử lý ảnh. Hãy dùng ID Roblox hoặc URL ảnh được executor hỗ trợ."
+    end
+    self._ToggleImage = tostring(raw)
+    if self._ToggleImageLabel and self._ToggleImageLabel.Parent then
+        self._ToggleImageLabel.Image = asset
+        self._ToggleImageLabel.Visible = true
+    end
+    if self._ToggleLetterLabel and self._ToggleLetterLabel.Parent then
+        self._ToggleLetterLabel.Visible = false
+    end
+    if self._HeaderLogoLabel and self._HeaderLogoLabel.Parent then
+        self._HeaderLogoLabel.Image = asset
     end
     return true
 end
@@ -653,6 +717,8 @@ function MeizuLibrary:Destroy()
     end
     self._ThemeObjs, self._AccentObjs, self._ThemeHooks, self._FlagElems = {}, {}, {}, {}
     self._NotifHolder = nil
+    self._LocEntries = {}
+    self._ToggleImageLabel, self._ToggleLetterLabel, self._HeaderLogoLabel = nil, nil, nil
 end
 
 --// ============================ CREATE WINDOW ============================
@@ -667,7 +733,17 @@ MeizuLibrary.CreateWindow = function(a, b)
     if config.Theme and MeizuLibrary.Themes[config.Theme] then MeizuLibrary.Theme = config.Theme end
     if typeof(config.Accent) == "Color3" then MeizuLibrary.Accent = config.Accent end
     if config.ToggleKeybind then MeizuLibrary.ToggleKeybind = config.ToggleKeybind end
-    if config.Language == "en" or config.Language == "vi" then MeizuLibrary.Language = config.Language end
+    if config.Language == "en" or config.Language == "vi" then
+        MeizuLibrary.Language = config.Language
+    elseif type(readfile) == "function" then
+        pcall(function()
+            local saved = HttpService:JSONDecode(readfile(MeizuLibrary.Folder .. "/language.json"))
+            if type(saved) == "table" and (saved.Language == "vi" or saved.Language == "en") then
+                MeizuLibrary.Language = saved.Language
+            end
+        end)
+    end
+    local initialToggleImage = config.ToggleImage or TOGGLE_BUTTON_IMAGE
 
     local Window = {_Tabs = {}, _CurrentTab = nil, _BootSelected = false}
     MeizuLibrary._Window = Window
@@ -761,6 +837,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         Parent = Sidebar,
     })
     Register(SearchBox, {BackgroundColor3 = "Input", PlaceholderColor3 = "Placeholder", TextColor3 = "Text"})
+    SearchBox:SetAttribute("MeizuLocPlaceholder", "Search...")
     New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = SearchBox})
     New("UIPadding", {PaddingLeft = UDim.new(0, 10), Parent = SearchBox})
 
@@ -853,6 +930,76 @@ MeizuLibrary.CreateWindow = function(a, b)
         Parent = Content,
     })
 
+    -- Header tinh gọn lấp khoảng trống phía trên; phần bên phải là vùng kéo cửa sổ.
+    -- Nội dung tab đã chừa 36 px PaddingTop nên header không đè lên control đầu tiên.
+    local BrandHeader = New("Frame", {
+        Name = "BrandHeader",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 14, 0, 4),
+        Size = UDim2.new(1, -96, 0, 28),
+        Active = false,
+        ZIndex = 10,
+        Parent = Content,
+    })
+    local BrandLogo = New("ImageLabel", {
+        Name = "BrandLogo",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, 3),
+        Size = UDim2.fromOffset(22, 22),
+        Image = TOGGLE_BUTTON_IMAGE,
+        ScaleType = Enum.ScaleType.Fit,
+        ZIndex = 11,
+        Parent = BrandHeader,
+    })
+    MeizuLibrary._HeaderLogoLabel = BrandLogo
+    if config.ToggleUIButton == false and initialToggleImage ~= TOGGLE_BUTTON_IMAGE then
+        task.spawn(function()
+            MeizuLibrary:SetToggleImage(initialToggleImage)
+        end)
+    end
+    local BrandTitle = New("TextLabel", {
+        Name = "BrandTitle",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 30, 0, 0),
+        Size = UDim2.new(0, 175, 0, 15),
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+        Text = string.upper(tostring(config.Title or "MEIZU LIBRARY")),
+        TextColor3 = T("Text"),
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 11,
+        Parent = BrandHeader,
+    })
+    Register(BrandTitle, {TextColor3 = "Text"})
+    local BrandSubtitle = New("TextLabel", {
+        Name = "BrandSubtitle",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 30, 0, 14),
+        Size = UDim2.new(0, 175, 0, 11),
+        Font = Enum.Font.Gotham,
+        TextSize = 8,
+        Text = (MeizuLibrary.Language == "vi") and "GIAO DIỆN CAO CẤP  •  LIQUID GLASS" or "PREMIUM INTERFACE  •  LIQUID GLASS",
+        TextColor3 = T("SubText"),
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 11,
+        Parent = BrandHeader,
+    })
+    Register(BrandSubtitle, {TextColor3 = "SubText"})
+    BrandSubtitle:SetAttribute("MeizuLocKey", "__BrandSubtitle")
+
+    local HeaderDragArea = New("Frame", {
+        Name = "HeaderDragArea",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 220, 0, 0),
+        Size = UDim2.new(1, -300, 0, 32),
+        Active = true,
+        ZIndex = 12,
+        Parent = Content,
+    })
+    MakeDraggable(HeaderDragArea, Main)
+
     --// ==================== ELEMENT FACTORY ====================
     local function BindElements(target, container, tab)
         if target.CreateSection then return end
@@ -907,6 +1054,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Parent = Card,
             })
             Register(Title, {TextColor3 = "Text"})
+            Title:SetAttribute("MeizuLocKey", tostring(title or ""))
             if desc then
                 local Desc = New("TextLabel", {
                     BackgroundTransparency = 1,
@@ -919,11 +1067,17 @@ MeizuLibrary.CreateWindow = function(a, b)
                     Parent = Card,
                 })
                 Register(Desc, {TextColor3 = "SubText"})
+                Desc:SetAttribute("MeizuLocDesc", tostring(desc or ""))
             end
         end
 
         local function AddSearch(Card, text)
-            table.insert(tab._Elements, {Frame = Card, Text = string.lower(tostring(text or ""))})
+            local key = tostring(text or "")
+            table.insert(tab._Elements, {
+                Frame = Card,
+                Text = string.lower(key),
+                TextKey = key,
+            })
         end
 
         local function BindFlag(el, flag, initial)
@@ -963,6 +1117,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Parent = Head,
             })
             Register(SecLabel, {TextColor3 = "SubText"})
+            SecLabel:SetAttribute("MeizuLocKey", tostring(name or ""))
             local SectionObj = {}
             BindElements(SectionObj, Sec, tab)
             return SectionObj
@@ -1160,7 +1315,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 TextColor3 = T("SubText"),
                 TextXAlignment = Enum.TextXAlignment.Right,
                 TextTruncate = Enum.TextTruncate.AtEnd,
-                Text = multi and "0 selected" or "Select...",
+                Text = multi and ((MeizuLibrary.Language == "vi") and "0 mục đã chọn" or "0 selected") or MeizuLibrary:_Translate("Select..."),
                 Parent = Card,
             })
             Register(SelectedLabel, {TextColor3 = "SubText"})
@@ -1252,7 +1407,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                     local list = {}
                     for k in pairs(selected) do table.insert(list, tostring(k)) end
                     table.sort(list)
-                    SelectedLabel.Text = (#list > 0) and table.concat(list, ", ") or "0 selected"
+                    SelectedLabel.Text = (#list > 0) and table.concat(list, ", ") or ((MeizuLibrary.Language == "vi") and "0 mục đã chọn" or "0 selected")
                     for _, Opt in ipairs(OptionBtns) do
                         local isSel = selected[Opt.Text] == true
                         local d = Opt:FindFirstChild("Dot")
@@ -1264,7 +1419,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                         end
                     end
                 else
-                    SelectedLabel.Text = selected and tostring(selected) or "Select..."
+                    SelectedLabel.Text = selected and tostring(selected) or MeizuLibrary:_Translate("Select...")
                     for _, Opt in ipairs(OptionBtns) do
                         local isSel = Opt.Text == tostring(selected)
                         Tween(Opt, 0.2, {TextColor3 = isSel and MeizuLibrary.Accent or T("Text")})
@@ -1321,6 +1476,9 @@ MeizuLibrary.CreateWindow = function(a, b)
             BuildOptions()
             Refresh(false)
             OnThemeChange(function() Refresh(false) end)
+            table.insert(MeizuLibrary._LocEntries, function()
+                if Card and Card.Parent then Refresh(false) end
+            end)
 
             local el = {
                 Frame = Card,
@@ -1507,6 +1665,9 @@ MeizuLibrary.CreateWindow = function(a, b)
                 BorderSizePixel = 0, Parent = Card,
             })
             Register(Box, {BackgroundColor3 = "Input", PlaceholderColor3 = "Placeholder", TextColor3 = "Text"})
+            if MeizuLibrary.LanguageMap[cfg.Placeholder or "Type here..."] then
+                Box:SetAttribute("MeizuLocPlaceholder", cfg.Placeholder or "Type here...")
+            end
             New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = Box})
             New("UIPadding", {PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = Box})
 
@@ -1803,6 +1964,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                     LayoutOrder = 1, Parent = Card,
                 })
                 Register(TitleLabel, {TextColor3 = "Text"})
+                TitleLabel:SetAttribute("MeizuLocKey", tostring(cfg.Title))
             end
 
             if cfg.Content ~= nil then
@@ -1816,6 +1978,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                     LayoutOrder = 2, Parent = Card,
                 })
                 Register(ContentLabel, {TextColor3 = "SubText"})
+                ContentLabel:SetAttribute("MeizuLocDesc", tostring(cfg.Content))
             end
 
             AddSearch(Card, cfg.Title or cfg.Content)
@@ -1904,6 +2067,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             Parent = Btn,
         })
         Register(Label, {TextColor3 = "SubText"})
+        Label:SetAttribute("MeizuLocKey", tostring(name or ""))
 
         Btn.MouseEnter:Connect(function()
             if Window._CurrentTab ~= Tab then Tween(Btn, 0.15, {BackgroundTransparency = 0.55}) end
@@ -2019,6 +2183,10 @@ MeizuLibrary.CreateWindow = function(a, b)
         SetOpen(state)
     end
 
+    function Window:SetToggleImage(assetIdOrUrl)
+        return MeizuLibrary:SetToggleImage(assetIdOrUrl)
+    end
+
     MinBtn.Activated:Connect(function() Window:Toggle(false) end)
     CloseBtn.Activated:Connect(function()
         Window:Dialog({
@@ -2086,6 +2254,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             Text = cfg.Title or "Dialog", ZIndex = 302, Parent = Card,
         })
         Register(DTitle, {TextColor3 = "Text"})
+        DTitle:SetAttribute("MeizuLocKey", tostring(cfg.Title or "Dialog"))
 
         if contentH > 0 then
             local DContent = New("TextLabel", {
@@ -2099,6 +2268,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 ZIndex = 302, Parent = Card,
             })
             Register(DContent, {TextColor3 = "SubText"})
+            DContent:SetAttribute("MeizuLocDesc", tostring(cfg.Content))
         end
 
         local function Dismiss()
@@ -2120,6 +2290,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 ZIndex = 302, BorderSizePixel = 0, Parent = Card,
             })
             New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = B})
+            B:SetAttribute("MeizuLocKey", tostring(bn.Title or "OK"))
             if not isPrimary then
                 Register(B, {BackgroundColor3 = "Input"})
                 Register(B, {TextColor3 = "SubText"})
@@ -2149,15 +2320,101 @@ MeizuLibrary.CreateWindow = function(a, b)
             Size = TOGGLE_BUTTON_SIZE,
             Position = TOGGLE_BUTTON_POSITION,
             BackgroundColor3 = T("Sidebar"),
+            BackgroundTransparency = 0.12,
             BorderSizePixel = 0,
             Active = true,
             ZIndex = 150,
             Parent = ScreenGui,
         })
         Register(ToggleBtn, {BackgroundColor3 = "Sidebar"})
-        New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = ToggleBtn}) -- BO GÓC KIỂU TESTINTRO
-        local BtnStroke = New("UIStroke", {Color = MeizuLibrary.Accent, Thickness = 1.5, Transparency = 0.25, Parent = ToggleBtn})
+        New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = ToggleBtn})
+        local BtnStroke = New("UIStroke", {Color = MeizuLibrary.Accent, Thickness = 1.4, Transparency = 0.24, Parent = ToggleBtn})
         RegisterAccent(BtnStroke, "Color")
+
+        -- Liquid-glass layer: kính mờ giả lập bằng gradient, viền sáng và highlight.
+        local GlassClip = New("Frame", {
+            Name = "GlassClip",
+            BackgroundTransparency = 1,
+            Size = UDim2.fromScale(1, 1),
+            ClipsDescendants = true,
+            BorderSizePixel = 0,
+            ZIndex = 154,
+            Parent = ToggleBtn,
+        })
+        New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = GlassClip})
+        local GlassFill = New("Frame", {
+            Name = "GlassFill",
+            BackgroundColor3 = Color3.fromRGB(220, 231, 255),
+            BackgroundTransparency = 0.88,
+            Size = UDim2.fromScale(1, 1),
+            BorderSizePixel = 0,
+            ZIndex = 154,
+            Parent = GlassClip,
+        })
+        New("UICorner", {CornerRadius = UDim.new(0, RADIUS), Parent = GlassFill})
+        New("UIGradient", {
+            Rotation = 65,
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+                ColorSequenceKeypoint.new(0.48, Shade(MeizuLibrary.Accent, 1.28)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255)),
+            }),
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.42),
+                NumberSequenceKeypoint.new(0.52, 0.78),
+                NumberSequenceKeypoint.new(1, 0.32),
+            }),
+            Parent = GlassFill,
+        })
+        local GlassStroke = New("UIStroke", {
+            Color = Color3.fromRGB(255, 255, 255),
+            Thickness = 1,
+            Transparency = 0.62,
+            Parent = GlassClip,
+        })
+        local GlassHighlight = New("Frame", {
+            Name = "GlassHighlight",
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BackgroundTransparency = 0.84,
+            Position = UDim2.new(0.14, 0, 0.06, 0),
+            Size = UDim2.new(0.72, 0, 0, 3),
+            BorderSizePixel = 0,
+            ZIndex = 155,
+            Parent = GlassClip,
+        })
+        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = GlassHighlight})
+
+        local LiquidSheen = New("Frame", {
+            Name = "LiquidSheen",
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BackgroundTransparency = 0.82,
+            Position = UDim2.new(-0.8, 0, -0.15, 0),
+            Size = UDim2.new(0.42, 0, 1.3, 0),
+            Rotation = 22,
+            BorderSizePixel = 0,
+            ZIndex = 155,
+            Parent = GlassClip,
+        })
+        New("UIGradient", {
+            Rotation = 0,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 1),
+                NumberSequenceKeypoint.new(0.5, 0.18),
+                NumberSequenceKeypoint.new(1, 1),
+            }),
+            Parent = LiquidSheen,
+        })
+        task.spawn(function()
+            while ToggleBtn.Parent and not MeizuLibrary.Destroyed do
+                LiquidSheen.Position = UDim2.new(-0.8, 0, -0.15, 0)
+                LiquidSheen.BackgroundTransparency = 0.82
+                Tween(LiquidSheen, 1.25, {
+                    Position = UDim2.new(1.15, 0, -0.15, 0),
+                    BackgroundTransparency = 0.94,
+                }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+                task.wait(3.1)
+            end
+        end)
 
         -- Bóng đổ mềm
         New("ImageLabel", {
@@ -2208,14 +2465,15 @@ MeizuLibrary.CreateWindow = function(a, b)
         })
         RegisterAccent(ToggleLetter, "TextColor3")
 
-        -- Fixed Meizu launcher image: deliberately no public image changer.
+        -- Giữ tham chiếu để setting có thể đổi ảnh nút nổi và logo trên header.
+        MeizuLibrary._ToggleImageLabel = ToggleImageL
+        MeizuLibrary._ToggleLetterLabel = ToggleLetter
+        MeizuLibrary._HeaderLogoLabel = BrandLogo
         task.spawn(function()
-            local asset = ResolveImageAsset(TOGGLE_BUTTON_IMAGE)
-            if asset and ToggleImageL and ToggleImageL.Parent then
-                ToggleImageL.Image = asset
-                ToggleImageL.Visible = true
-                ToggleLetter.Visible = false
-                MeizuLibrary._ToggleImage = TOGGLE_BUTTON_IMAGE
+            local ok = MeizuLibrary:SetToggleImage(initialToggleImage)
+            if not ok and ToggleImageL and ToggleImageL.Parent then
+                ToggleImageL.Visible = false
+                ToggleLetter.Visible = true
             end
         end)
 
@@ -2238,8 +2496,16 @@ MeizuLibrary.CreateWindow = function(a, b)
 
         local BtnScale = New("UIScale", {Scale = 0, Parent = ToggleBtn})
         Tween(BtnScale, 0.5, {Scale = 1}, Enum.EasingStyle.Back)
-        ToggleBtn.MouseEnter:Connect(function() Tween(BtnScale, 0.2, {Scale = 1.08}) end)
-        ToggleBtn.MouseLeave:Connect(function() Tween(BtnScale, 0.25, {Scale = 1}) end)
+        ToggleBtn.MouseEnter:Connect(function()
+            Tween(BtnScale, 0.22, {Scale = 1.06}, Enum.EasingStyle.Quint)
+            Tween(GlassStroke, 0.18, {Transparency = 0.36})
+            Tween(GlassHighlight, 0.18, {BackgroundTransparency = 0.68})
+        end)
+        ToggleBtn.MouseLeave:Connect(function()
+            Tween(BtnScale, 0.25, {Scale = 1}, Enum.EasingStyle.Quint)
+            Tween(GlassStroke, 0.24, {Transparency = 0.62})
+            Tween(GlassHighlight, 0.24, {BackgroundTransparency = 0.84})
+        end)
 
         -- Pulse sóng lan khi UI ẩn
         local PulseRing = New("Frame", {
@@ -2274,7 +2540,10 @@ MeizuLibrary.CreateWindow = function(a, b)
         for _, t in ipairs(Window._Tabs) do
             for _, e in ipairs(t._Elements) do
                 if e.Frame and e.Frame.Parent then
-                    e.Frame.Visible = (q == "") or (string.find(e.Text, q, 1, true) ~= nil)
+                    local translated = string.lower(MeizuLibrary:_Translate(e.TextKey or e.Text or ""))
+                    e.Frame.Visible = (q == "")
+                        or (string.find(e.Text or "", q, 1, true) ~= nil)
+                        or (string.find(translated, q, 1, true) ~= nil)
                 end
             end
         end
@@ -2290,6 +2559,37 @@ MeizuLibrary.CreateWindow = function(a, b)
         Title = "Meizu Library v" .. MeizuLibrary.Version,
         Content = "Modern UI Library — Design by NTTP1721.\nCảm ơn bạn đã sử dụng!",
     })
+    local toggleImageInput = SettingsTab:CreateInput({
+        Title = "Launcher Icon",
+        Description = (MeizuLibrary.Language == "vi") and "Đổi ảnh logo trên nút nổi và thanh đầu." or "Change the floating button and header logo.",
+        Placeholder = "Enter image ID or rbxassetid://...",
+        Default = tostring(initialToggleImage),
+        Flag = "__launcher_image",
+    })
+    SettingsTab:CreateButton({
+        Title = "Apply Launcher Icon",
+        Callback = function()
+            local ok, err = Window:SetToggleImage(toggleImageInput.Get())
+            MeizuLibrary:Notify({
+                Title = (MeizuLibrary.Language == "vi") and "Biểu tượng" or "Launcher Icon",
+                Content = ok and ((MeizuLibrary.Language == "vi") and "Đã cập nhật ảnh biểu tượng." or "Launcher image updated.") or tostring(err or ((MeizuLibrary.Language == "vi") and "ID ảnh không hợp lệ hoặc executor không tải được ảnh." or "Invalid image ID or image could not be loaded.")),
+                Duration = 4,
+            })
+        end,
+    })
+    SettingsTab:CreateButton({
+        Title = "Reset Launcher Icon",
+        Callback = function()
+            toggleImageInput.Set(TOGGLE_BUTTON_IMAGE)
+            local ok = Window:SetToggleImage(TOGGLE_BUTTON_IMAGE)
+            MeizuLibrary:Notify({
+                Title = (MeizuLibrary.Language == "vi") and "Biểu tượng" or "Launcher Icon",
+                Content = ok and ((MeizuLibrary.Language == "vi") and "Đã khôi phục ảnh mặc định." or "Default image restored.") or "Could not restore the default image.",
+                Duration = 4,
+            })
+        end,
+    })
+
     SettingsTab:CreateKeybind({
         Title = "Toggle UI Keybind",
         Default = MeizuLibrary.ToggleKeybind,
