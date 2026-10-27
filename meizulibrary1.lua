@@ -12,7 +12,7 @@ local TOGGLE_BUTTON_RADIUS   = 12
 -- Kiểu nút nổi: "LiquidGlass" (kính lỏng kiểu iOS 26) | "Classic" (nền đặc như bản cũ)
 local TOGGLE_BUTTON_STYLE       = "LiquidGlass"
 local TOGGLE_BUTTON_GLASS_TINT  = Color3.fromRGB(12, 16, 30)   -- màu ám của kính
-local TOGGLE_BUTTON_GLASS_ALPHA = 0.47                         -- độ trong của thân kính (0 = đặc, 1 = trong suốt hoàn toàn)
+local TOGGLE_BUTTON_GLASS_ALPHA = 0.67                         -- độ trong của thân kính (0 = đặc, 1 = trong suốt hoàn toàn)
 
 -- Icon của tab "Cài đặt" tự tạo (đổi bằng config.SettingsIcon)
 local SETTINGS_TAB_ICON      = "rbxassetid://10734950309"
