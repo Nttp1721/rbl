@@ -1,4 +1,4 @@
-local MeizuLibrary = loadstring(https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/lib.lua)()   -- library v3.0 của bạn, KHÔNG ĐỔI GÌ
+local MeizuLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/lib.lua"))()   -- library v3.0 của bạn, KHÔNG ĐỔI GÌ
 local Window = MeizuLibrary:CreateWindow{ Title = "MEIZU HUB" }
 local Tab = Window:CreateTab("Chính", "rbxassetid://10734950309")
 
