@@ -388,7 +388,7 @@ local MEIZU_LIBRARY_URL =
 -- Neu khong upload: moi thu van chay binh thuong, chi co tinh nang tu load lai
 -- sau teleport la khong hoat dong.
 local MEIZU_SCRIPT_URL =
-        "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuHub-BloxFruits.lua"
+        "https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/meizublf.lua"
 local Library = getgenv().MeizuLibrary
 if not Library then
         Library = loadstring(game:HttpGet(MEIZU_LIBRARY_URL))()
