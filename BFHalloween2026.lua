@@ -47,6 +47,17 @@
       TỰ BAY LẠI sát bí ngô, không bỏ quả giữa chừng.
     • AUTO BẬT BUSO HAKI (Aura): CommF_:InvokeServer("Buso") — kỹ thuật
       lấy từ Banana Cat Hub → đập bí ngô đau hơn hẳn.
+
+    ═══ UPDATE v2.3 — ỔN ĐỊNH: HẾT "TỰ TELE CHỖ TRỐNG" ═══
+    • Ưu tiên bí ngô nằm TRONG vùng PumpkinPatch (quả THẬT) — lược bỏ
+      pumpkin TRANG TRÍ ở spawn/safe zone (bay tới chỉ để đứng trống).
+    • Quả đập hoài không mất máu → cấm 120s (trước 15s) → không bay
+      đi bếp lại quả giả nữa.
+    • Nhặt đồ KHÔNG dịch chuyển nhân vật khi farm đang bật (hết bị kéo
+      sang nhặt "Candy Corn" trang trí ở khu Gacha).
+    • Auto Gõ Cửa / Gacha: khi farm bật chỉ bấm prompt TRONG TẦM đánh,
+      KHÔNG tween đi nơi khác + cooldown 6s/prompt → hết spam lỗi
+      "[DIALOGUE] there's already an active dialogue".
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -365,7 +376,7 @@ local MZ_World = {
         drops    = {},
         prompts  = {},
 }
-local blacklist = {} -- [model] = os.clock() khi bị treo quá lâu
+local blacklist = {} -- [model] = THỜI ĐIỂM HẾT HẠN ban (quả giả 120s / khó tới 30s)
 
 local function splitCsv(csv)
         local list = {}
@@ -452,9 +463,9 @@ local function refreshPumpkins(force)
         MZ_World.drops    = drops
         MZ_World.prompts  = prompts
 
-        -- dọn blacklist cũ (30s là đủ, đừng treo lâu làm farm tưởng "tắt")
+        -- dọn blacklist ĐÃ HẾT HẠN (t = thời điểm hết hạn)
         for m, t in pairs(blacklist) do
-                if (now - t) > 15 or m.Parent == nil then
+                if now > t or m.Parent == nil then
                         blacklist[m] = nil
                 end
         end
@@ -470,7 +481,8 @@ end
 
 local function pumpkinValid(model, fromPos)
         if not model or model.Parent == nil then return false end
-        if blacklist[model] then return false end
+        local bl = blacklist[model]
+        if bl and os.clock() < bl then return false end
         local r = modelRoot(model)
         if not r then return false end
         local hum = model:FindFirstChildOfClass("Humanoid")
@@ -791,8 +803,15 @@ local function safeStandPos(pos)
         return Vector3.new(pos.X, baseY + 3.5, pos.Z)
 end
 
+-- CHỐN "TELE LẠC": ưu tiên bí ngô nằm TRONG vùng PumpkinPatch (quả THẬT),
+-- lược bỏ pumpkin TRANG TRÍ ở spawn/safe zone (đập không ăn damage).
+-- Hết quả gần patch mới chịu dùng quả ngoài vùng (fallback như bản cũ).
+local PATCH_RANGE = 400 -- studs tính từ mốc PumpkinPatch
+
 local function pickNearest(rootPos)
-        local best, bestD = nil, math.huge
+        local best, bestD = nil, math.huge           -- dự phòng: mọi quả hợp lệ
+        local bestReal, bestRealD = nil, math.huge   -- ưu tiên: quả trong vùng patch
+        local patches = MZ_World.patches
         for _, m in ipairs(refreshPumpkins()) do -- đọc cache (không quét đè)
                 if pumpkinValid(m, rootPos) then
                         local r = modelRoot(m)
@@ -801,9 +820,19 @@ local function pickNearest(rootPos)
                                 if d < bestD then
                                         best, bestD = m, d
                                 end
+                                if #patches > 0 and d < bestRealD then
+                                        for _, p in ipairs(patches) do
+                                                local pr = modelRoot(p)
+                                                if pr and (r.Position - pr.Position).Magnitude <= PATCH_RANGE then
+                                                        bestReal, bestRealD = m, d
+                                                        break
+                                                end
+                                        end
+                                end
                         end
                 end
         end
+        if bestReal then return bestReal, bestRealD end
         return best, bestD
 end
 
@@ -848,7 +877,8 @@ local function smashUntilDead(target, myGen)
                         return false -- quá xa hẳn so với tầm đập → chọn quả khác
                 end
                 if os.clock() - startClock > 35 then
-                        blacklist[target] = os.clock() -- quá lâu không chết → tạm bỏ
+                        -- quá lâu không chết → khả năng là pumpkin giả → ban 120s
+                        blacklist[target] = os.clock() + 120
                         return false
                 end
 
@@ -883,8 +913,9 @@ local function smashUntilDead(target, myGen)
                                         State.StatusText = "Remote không ăn damage → chuyển sang M1 ảo..."
                                         notify("Fast Attack", "Remote không gây damage → tự chuyển sang M1 ảo.", "warning")
                                 else
-                                        blacklist[target] = os.clock()
-                                        return false -- M1 cũng không ăn → bỏ quả này
+                                        -- đập hoài không mất máu → PUMPKIN GIẢ / trang trí → ban 120s
+                                        blacklist[target] = os.clock() + 120
+                                        return false
                                 end
                         end
                 end
@@ -914,14 +945,17 @@ local function farmLoop()
                                 if not target then
                                         noneCount = noneCount + 1
                                         State.StatusText = "Hết bí ngô gần — dò lại map..."
-                                        -- dò lại map NGAY + thả blacklist cũ để bay được
-                                        -- sang vùng xa, không đứng im chờ respawn
+                                        -- dò lại map NGAY; chỉ thả ban SẮP HẾT HẠN (<8s),
+                                        -- GIỮ ban dài (quả giả/trang trí) để không bay lại
                                         refreshPumpkins(true)
                                         local now = os.clock()
                                         for m, t in pairs(blacklist) do
-                                                if (now - t) > 8 or m.Parent == nil then
+                                                if (t - now) < 8 or m.Parent == nil then
                                                         blacklist[m] = nil
                                                 end
+                                        end
+                                        if noneCount >= 5 then
+                                                State.StatusText = "Không thấy bí ngô khả dụng — chờ respawn..."
                                         end
                                         task.wait(0.6)
                                         return
@@ -961,7 +995,7 @@ local function farmLoop()
                                         local r2 = getRoot()
                                         if rp2 and r2
                                                 and (rp2.Position - r2.Position).Magnitude > State.HitRange + 10 then
-                                                blacklist[target] = os.clock()
+                                                blacklist[target] = os.clock() + 30
                                                 State.StatusText = "Bỏ qua bí ngô khó tới..."
                                         end
                                 end
@@ -1006,11 +1040,11 @@ local function farmLoop()
                                                                 State.StandDist or 4, 3, 12))),
                                                         State.TweenSpeed, 3, true)
                                         else
-                                                -- map trống thật sự → dò lại + thả blacklist cũ
+                                                -- map trống thật sự → dò lại + thả ban sắp hết hạn
                                                 refreshPumpkins(true)
                                                 local now = os.clock()
                                                 for m2, t2 in pairs(blacklist) do
-                                                        if (now - t2) > 8 or m2.Parent == nil then
+                                                        if (t2 - now) < 8 or m2.Parent == nil then
                                                                 blacklist[m2] = nil
                                                         end
                                                 end
@@ -1051,8 +1085,10 @@ local function pickupLoop()
                                                                 firetouchinterest(root, p, 0)
                                                                 firetouchinterest(root, p, 1)
                                                         end)
-                                                        -- chỉ dịch chuyển khi KHÔNG đang bay farm (tránh giật nhân vật)
-                                                        if not fired and d <= 200 and not MZ_Tween.running then
+                                                        -- CHỈ dịch chuyển khi FARM ĐANG TẮT — hết bị kéo sang
+                                                        -- nhặt "Candy Corn" trang trí giữa lúc farm bí ngô
+                                                        if not fired and d <= State.PickupRadius
+                                                                and not MZ_Tween.running and not State.FarmPumpkin then
                                                                 pcall(function()
                                                                         root.CFrame = CFrame.new(p.Position + Vector3.new(0, 2, 0))
                                                                 end)
@@ -1090,11 +1126,27 @@ local function promptPart(prompt)
         return holder:FindFirstChildWhichIsA("BasePart", true)
 end
 
+-- chống spam lỗi "[DIALOGUE] there's already an active dialogue":
+-- mỗi prompt chỉ fire 1 lần / 6 giây
+local promptLastFired = {}
+
 local function promptLoop(keywordsGetter, radiusGetter, statusKey)
         while State[statusKey] do
                 local root = getRoot()
-                if root then
+                if not root then
+                        task.wait(1)
+                elseif State.FarmPumpkin and MZ_Tween.running then
+                        -- FIX "tự tele chỗ không có bí ngô": farm đang BAY → prompt
+                        -- (gõ cửa / gacha) KHÔNG được tranh quyền điều khiển nhân vật
+                        task.wait(1)
+                else
+                        local farmOn = State.FarmPumpkin
                         refreshPumpkins() -- cache chung — không quét lại map (giảm lag)
+                        local maxD = radiusGetter()
+                        if farmOn then
+                                -- farm bật: chỉ bấm prompt TRONG TẦM đánh, KHÔNG tween xa
+                                maxD = math.min(maxD, State.HitRange + 30)
+                        end
                         local best, bestD, bestPart = nil, math.huge, nil
                         for _, pr in ipairs(MZ_World.prompts) do
                                 if not State[statusKey] then break end
@@ -1109,14 +1161,14 @@ local function promptLoop(keywordsGetter, radiusGetter, statusKey)
                                         local part = promptPart(pr)
                                         if part then
                                                 local d = (part.Position - root.Position).Magnitude
-                                                if d <= radiusGetter() and d < bestD then
+                                                if d <= maxD and d < bestD then
                                                         best, bestD, bestPart = pr, d, part
                                                 end
                                         end
                                 end
                         end
                         if best then
-                                if bestD > 10 then
+                                if bestD > 10 and not farmOn then
                                         local away = (root.Position - bestPart.Position)
                                         if away.Magnitude > 0.1 then
                                                 local goal = bestPart.CFrame + away.Unit * 6
@@ -1126,15 +1178,17 @@ local function promptLoop(keywordsGetter, radiusGetter, statusKey)
                                         end
                                 end
                                 if State[statusKey] and bestPart then
-                                        faceTarget(bestPart.Position)
-                                        pcall(firePrompt, best)
+                                        local last = promptLastFired[best]
+                                        if not last or os.clock() - last > 6 then
+                                                promptLastFired[best] = os.clock()
+                                                faceTarget(bestPart.Position)
+                                                pcall(firePrompt, best)
+                                        end
                                 end
                                 task.wait(1)
                         else
                                 task.wait(1.2)
                         end
-                else
-                        task.wait(1)
                 end
         end
 end
@@ -1861,4 +1915,4 @@ if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
 notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026!\nBật tab [Farm Bí Ngô] để bắt đầu.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v2.2 (liên tục + sát + buso) | Library: Meizu v3.1")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v2.3 (ổn định, hết tele lạc) | Library: Meizu v3.1")
