@@ -25,6 +25,19 @@
         MeizuHub-Halloween2026.lua
     rồi chạy bằng:
         loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/MeizuHub-Halloween2026.lua"))()
+
+    ═══ UPDATE v2.1 — FIX THEO FEEDBACK ═══
+    • FIX "bật farm xong tự tắt khi tele tới bí ngô": bản cũ click chuột ảo
+      NGAY GIỮA MÀN HÌNH → cú click rơi trúng cửa sổ Hub đang mở → tự bấm
+      trúng toggle Farm → farm tắt. Giờ script tự tìm điểm màn hình KHÔNG
+      có UI để click + tự thu nhỏ Hub khi farm (Ctrl trái mở lại).
+    • Đánh M1 GIẢ LẬP NGƯỜI THẬT: nhấn-giữ chuột 40-90ms, nhịp 0.30-0.42s
+      ngẫu nhiên, quay người + camera vào bí ngô → server mới cộng damage.
+    • FIX "bay chui xuống nước": tween dò mặt đất/mặt nước bằng raycast,
+      luôn giữ 3-3.5 studs phía trên → không chìm dưới biển nữa.
+    • GIẢM LAG: 1 cache quét map duy nhất (tối đa 1 lần/1.2s) thay vì
+      5-10 lần GetDescendants mỗi giây; noclip dùng list cache;
+      ESP giới hạn 100 vật thể.
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -44,6 +57,7 @@ local VirtualUser     = game:GetService("VirtualUser")
 local VIM             = game:GetService("VirtualInputManager")
 local TeleportService = game:GetService("TeleportService")
 local HttpService     = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -56,7 +70,7 @@ local State = {
         TweenSpeed    = 350,
         HitRange      = 30,
         HitDelay      = 0.12,
-        FastAttack    = true,
+        FastAttack    = false, -- remote thường bị server chặn → mặc định M1 người thật
         Noclip        = true,
         PickupDrops   = true,
         PickupRadius  = 60,
@@ -79,8 +93,9 @@ local State = {
         GachaKeywords = "roll,gacha,witch,brew,potion,haunt,spooky",
 
         -- Khác
-        AntiAFK   = true,
-        NoFX      = false,
+        AntiAFK     = true,
+        NoFX        = false,
+        HideUIFarm  = true, -- thu nhỏ Hub khi farm (chống click ảo bấm nhầm nút)
 }
 
 local Connections = {}
@@ -153,8 +168,36 @@ function MZ_Tween.cancel()
         MZ_Tween.running = false
 end
 
+-- Raycast tìm mặt đất / MẶT NƯỚC dưới 1 điểm (fix lỗi bay chui xuống nước)
+local RayParams = RaycastParams.new()
+RayParams.FilterType = Enum.RaycastFilterType.Exclude
+RayParams.IgnoreWater = false -- bắt buộc false để dò được mặt nước
+local rayBuildClock = 0
+
+local function groundYAt(pos)
+        local now = os.clock()
+        if now - rayBuildClock > 2 then
+                rayBuildClock = now
+                local list = {}
+                local c = getChar()
+                if c then table.insert(list, c) end
+                local folder = workspace:FindFirstChild("Characters")
+                if folder then table.insert(list, folder) end
+                RayParams.FilterDescendantsInstances = list
+        end
+        local hit = workspace:Raycast(
+                Vector3.new(pos.X, pos.Y + 60, pos.Z),
+                Vector3.new(0, -500, 0), RayParams)
+        if hit then
+                return hit.Position.Y, (hit.Material == Enum.Material.Water)
+        end
+        return nil, false
+end
+
 -- Trả về true nếu tới nơi (trong stopDist), false nếu hủy / kẹt / chết
-function MZ_Tween.to(targetCFrame, speed, stopDist)
+-- groundSafe (mặc định BẬT): dọc đường bay tự giữ tối thiểu 3 studs trên
+-- mặt đất / 3.5 studs trên mặt nước → KHÔNG bao giờ chui xuống biển nữa.
+function MZ_Tween.to(targetCFrame, speed, stopDist, groundSafe)
         local root = getRoot()
         local char = getChar()
         local hum = getHum()
@@ -171,7 +214,7 @@ function MZ_Tween.to(targetCFrame, speed, stopDist)
         stopDist = tonumber(stopDist) or 4
         local goalPos = targetCFrame.Position
         local startTime = os.clock()
-        local maxTime = (root.Position - goalPos).Magnitude / speed + 12 -- timeout an toàn
+        local maxTime = (root.Position - goalPos).Magnitude / speed + 15 -- timeout an toàn
         local lastDist = math.huge
         local lastProgress = os.clock()
 
@@ -192,11 +235,11 @@ function MZ_Tween.to(targetCFrame, speed, stopDist)
                 local delta = goalPos - cur
                 local dist = delta.Magnitude
 
-                -- watchdog chống kẹt: 4s không tiến bộ thì thoát
+                -- watchdog chống kẹt: 5s không tiến bộ thì thoát
                 if dist < lastDist - 1 then
                         lastDist = dist
                         lastProgress = os.clock()
-                elseif os.clock() - lastProgress > 4 then
+                elseif os.clock() - lastProgress > 5 then
                         break
                 end
 
@@ -208,6 +251,18 @@ function MZ_Tween.to(targetCFrame, speed, stopDist)
 
                 local step = math.min(speed * dt, dist)
                 local newPos = cur + delta.Unit * step
+
+                -- FIX "bay dưới nước": giữ độ cao an toàn so với đất/nước dọc đường
+                if groundSafe ~= false then
+                        local gY, isWater = groundYAt(newPos)
+                        if gY then
+                                local minY = gY + (isWater and 3.5 or 3)
+                                if newPos.Y < minY then
+                                        newPos = Vector3.new(newPos.X, minY, newPos.Z)
+                                end
+                        end
+                end
+
                 r.CFrame = CFrame.new(newPos)
                 r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                 r.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
@@ -220,16 +275,27 @@ function MZ_Tween.to(targetCFrame, speed, stopDist)
         return ok
 end
 
--- ════════════════════════════ 6. NOCLIP ═══════════════════════════════════
+-- ════════════════════════════ 6. NOCLIP (bản nhẹ — giảm lag) ══════════════
+-- Dùng lại danh sách part đã cache (làm mới 1s/lần) thay vì GetDescendants
+-- 60 lần/giây như bản cũ.
+local noclipParts, noclipChar, noclipClock = {}, nil, 0
 table.insert(Connections, RunService.Stepped:Connect(function()
-        if State.Noclip then
-                local c = LocalPlayer.Character
-                if c then
-                        for _, p in ipairs(c:GetDescendants()) do
-                                if p:IsA("BasePart") and p.CanCollide then
-                                        p.CanCollide = false
-                                end
+        if not State.Noclip then return end
+        local c = LocalPlayer.Character
+        if not c then return end
+        if c ~= noclipChar or os.clock() - noclipClock > 1 then
+                noclipChar = c
+                noclipClock = os.clock()
+                noclipParts = {}
+                for _, p in ipairs(c:GetDescendants()) do
+                        if p:IsA("BasePart") then
+                                table.insert(noclipParts, p)
                         end
+                end
+        end
+        for _, p in ipairs(noclipParts) do
+                if p.Parent and p.CanCollide then
+                        p.CanCollide = false
                 end
         end
 end))
@@ -279,41 +345,114 @@ do
         end
 end
 
--- ════════════════════════════ 9. QUÉT BÍ NGÔ ══════════════════════════════
+-- ════════════════════════════ 9. QUÉT MAP (CACHE DUY NHẤT — GIẢM LAG) ═════
 -- Bí ngô = Model tên "Pumpkin" (theo ESP gốc của bạn). PumpkinPatch = mốc vùng.
-local pumpkinCache = {}
-local cacheClock = 0
+-- ⚠ GIẢM LAG: trước đây farm / ESP / nhặt đồ / prompt MỖI CÁI tự chạy
+-- workspace:GetDescendants() → quét cả map 5-10 lần/giây → lag nặng.
+-- Giờ chỉ có 1 bảng cache duy nhất: cả game tối đa quét 1 lần / 1.2s,
+-- mọi tính năng (farm, ESP, nhặt đồ, gõ cửa, gacha, đếm) đọc từ đây.
+local MZ_World = {
+        built    = 0,
+        sig      = "",
+        pumpkins = {},
+        patches  = {},
+        drops    = {},
+        prompts  = {},
+}
 local blacklist = {} -- [model] = os.clock() khi bị treo quá lâu
+
+local function splitCsv(csv)
+        local list = {}
+        for kw in (csv or ""):lower():gmatch("[^,]+") do
+                kw = kw:match("^%s*(.-)%s*$")
+                if kw ~= "" then table.insert(list, kw) end
+        end
+        return list
+end
+
+local function matchKeyword(text, csv)
+        text = (text or ""):lower()
+        for kw in (csv or ""):lower():gmatch("[^,]+") do
+                kw = kw:match("^%s*(.-)%s*$")
+                if kw ~= "" and text:find(kw, 1, true) then
+                        return true
+                end
+        end
+        return false
+end
+
+-- KHÔNG nhặt part của chính quả bí ngô (tránh dịch chuyển nhân vật loạn xạ)
+local function isPumpkinModelPart(p)
+        local anc = p:FindFirstAncestorOfClass("Model")
+        while anc do
+                if anc.Name:lower():find("pumpkin") then return true end
+                anc = anc:FindFirstAncestorOfClass("Model")
+        end
+        return false
+end
+
+local function worldSignature()
+        return (State.PickupKeywords or "") .. "|" .. (State.KnockKeywords or "")
+                .. "|" .. (State.GachaKeywords or "") .. "|" .. (State.FilterMode or "")
+end
+
+local pickupKw = splitCsv(State.PickupKeywords)
 
 local function refreshPumpkins(force)
         local now = os.clock()
-        if not force and (now - cacheClock) < 2.5 then
-                return pumpkinCache
+        local sig = worldSignature()
+        if not force and (now - MZ_World.built) < 1.2 and MZ_World.sig == sig then
+                return MZ_World.pumpkins
         end
-        cacheClock = now
-        local list = {}
+        MZ_World.built = now
+        MZ_World.sig = sig
+        pickupKw = splitCsv(State.PickupKeywords)
+
+        local pumpkins, patches, drops, prompts = {}, {}, {}, {}
+        local myChar = LocalPlayer.Character
         for _, d in ipairs(workspace:GetDescendants()) do
-                if d:IsA("Model") then
-                        local n = d.Name
-                        local ln = n:lower()
-                        if ln:find("pumpkin") and not ln:find("patch") then
-                                -- bỏ boss / bí ngô lớn đặc biệt
-                                if not (ln:find("great") or ln:find("boss") or ln:find("king")) then
-                                        table.insert(list, d)
+                local cls = d.ClassName
+                if cls == "Model" then
+                        local ln = d.Name:lower()
+                        if ln:find("pumpkin") then
+                                if ln:find("patch") then
+                                        table.insert(patches, d)
+                                elseif not (ln:find("great") or ln:find("boss") or ln:find("king")) then
+                                        table.insert(pumpkins, d)
                                 end
                         elseif ln:find("patch") then
-                                -- patch để ESP riêng, không đưa vào farm
+                                table.insert(patches, d)
+                        end
+                elseif cls == "ProximityPrompt" then
+                        table.insert(prompts, d)
+                elseif cls == "BasePart" then
+                        if #pickupKw > 0 then
+                                local name = d.Name:lower()
+                                for _, kw in ipairs(pickupKw) do
+                                        if name:find(kw, 1, true) then
+                                                if not (myChar and d:IsDescendantOf(myChar))
+                                                        and not isPumpkinModelPart(d) then
+                                                        table.insert(drops, d)
+                                                end
+                                                break
+                                        end
+                                end
                         end
                 end
         end
-        -- dọn blacklist cũ (30s là đủ, đừng treo 60s làm farm tưởng "tắt")
+
+        MZ_World.pumpkins = pumpkins
+        MZ_World.patches  = patches
+        MZ_World.drops    = drops
+        MZ_World.prompts  = prompts
+
+        -- dọn blacklist cũ (30s là đủ, đừng treo lâu làm farm tưởng "tắt")
         for m, t in pairs(blacklist) do
                 if (now - t) > 30 or m.Parent == nil then
                         blacklist[m] = nil
                 end
         end
-        pumpkinCache = list
-        return list
+        return pumpkins
 end
 
 local function modelRoot(model)
@@ -431,7 +570,8 @@ local function snapshotChanged(a, b)
         return false
 end
 
--- Cách đánh hiện tại: "remote" (nhanh) → tự chuyển "m1" nếu server không ăn damage
+-- Cách đánh: MẶC ĐỊNH "m1" = giả lập NGƯỜI THẬT (server chỉ cộng damage khi
+-- đánh như người chơi thật). "remote" chỉ dùng khi bật toggle riêng.
 local AtkMethod = State.FastAttack and "remote" or "m1"
 
 -- Đánh bằng remote — GIỐNG HỆT gói người chơi thật:
@@ -466,20 +606,97 @@ local function hitPumpkinRemote(model, myPos)
         end)
 end
 
--- Đánh bằng M1 ảo: quay camera vào bí ngô + Activate + click chuột ảo
+-- Kiểm tra 1 điểm màn hình có nằm TRONG cửa sổ Hub không (Hub nằm trong
+-- CoreGui nên GetGuiObjectsAtPosition không thấy → phải tự soi bounds)
+local function pointInHub(x, y)
+        local ok, res = pcall(function()
+                local sg = Library and Library._ScreenGui
+                if not sg or not sg.Enabled then return false end
+                for _, f in ipairs(sg:GetChildren()) do
+                        if f:IsA("Frame") and f.Visible
+                                and f.AbsoluteSize.X > 50 and f.AbsoluteSize.Y > 30 then
+                                local px, py = f.AbsolutePosition.X, f.AbsolutePosition.Y
+                                if x >= px and x <= px + f.AbsoluteSize.X
+                                        and y >= py and y <= py + f.AbsoluteSize.Y then
+                                        return true
+                                end
+                        end
+                end
+                return false
+        end)
+        return ok and res or false
+end
+
+-- Tìm điểm click TRỐNG trên màn hình (không có UI nào nằm dưới đó).
+-- ⚠ FIX LỖI "FARM TỰ TẮT": bản cũ click NGAY GIỮA MÀN HÌNH — cú click ảo
+-- rơi trúng cửa sổ Hub đang mở → tự bấm trúng toggle Farm → farm tắt!
+local function safeClickPoint()
+        local cam = workspace.CurrentCamera
+        if not cam then return nil end
+        local vp = cam.ViewportSize
+        local candidates = {
+                Vector2.new(vp.X * 0.50, vp.Y * 0.50),
+                Vector2.new(vp.X * 0.50, vp.Y * 0.40),
+                Vector2.new(vp.X * 0.50, vp.Y * 0.60),
+                Vector2.new(vp.X * 0.38, vp.Y * 0.50),
+                Vector2.new(vp.X * 0.62, vp.Y * 0.50),
+                Vector2.new(vp.X * 0.30, vp.Y * 0.38),
+                Vector2.new(vp.X * 0.70, vp.Y * 0.38),
+                Vector2.new(vp.X * 0.30, vp.Y * 0.62),
+                Vector2.new(vp.X * 0.70, vp.Y * 0.62),
+                Vector2.new(vp.X * 0.20, vp.Y * 0.50),
+                Vector2.new(vp.X * 0.80, vp.Y * 0.50),
+                Vector2.new(vp.X * 0.08, vp.Y * 0.50),
+                Vector2.new(vp.X * 0.92, vp.Y * 0.50),
+        }
+        for _, c in ipairs(candidates) do
+                local blocked = pointInHub(c.X, c.Y)
+                if not blocked then
+                        local okG, guis = pcall(function()
+                                return UserInputService:GetGuiObjectsAtPosition(c.X, c.Y)
+                        end)
+                        if okG and type(guis) == "table" and #guis > 0 then
+                                blocked = true
+                        end
+                end
+                if not blocked then
+                        return c
+                end
+        end
+        return nil -- màn hình bị UI che kín → dùng fallback Activate
+end
+
+-- M1 GIẢ LẬP NGƯỜI THẬT (bản cũ bấm 0ms tại giữa màn hình → không ăn damage
+-- và tự bấm nhầm UI). Bản mới:
+--   • di chuyển chuột tới điểm trống → NHẤN GIỮ 40-90ms → nhả (như tay thật)
+--   • jitter ±8px mỗi phát như người thật
+--   • không có VIM / màn hình kín UI → fallback tool:Activate()
 local function hitPumpkinM1(aimPos)
         aimCamera(aimPos)
+        if VIM then
+                local pt = safeClickPoint()
+                if pt then
+                        local x = pt.X + math.random(-8, 8)
+                        local y = pt.Y + math.random(-6, 6)
+                        pcall(function()
+                                VIM:SendMouseMoveEvent(x, y, game)
+                        end)
+                        task.wait(0.02)
+                        pcall(function()
+                                VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
+                        end)
+                        task.wait(0.04 + math.random() * 0.05) -- giữ chuột như người thật
+                        pcall(function()
+                                VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+                        end)
+                        return
+                end
+        end
         local char = getChar()
         local tool = char and char:FindFirstChildOfClass("Tool")
         if tool then
                 pcall(function() tool:Activate() end)
         end
-        pcall(function()
-                local cam = workspace.CurrentCamera
-                local x, y = cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2
-                VIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
-                VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
-        end)
 end
 
 -- Điểm vào duy nhất: chọn cách đánh theo AtkMethod
@@ -492,9 +709,20 @@ local function doHit(model, aimPos, myPos)
 end
 
 -- ════════════════════════════ 11. AUTO FARM BÍ NGÔ ════════════════════════
+-- Điểm đứng an toàn: nâng 3.5 studs trên mặt đất/MẶT NƯỚC dưới điểm đó
+-- (fix lỗi đứng chìm dưới nước khi bí ngô gần bờ biển)
+local function safeStandPos(pos)
+        local gY, isWater = groundYAt(pos)
+        local baseY = pos.Y
+        if gY then
+                baseY = math.max(baseY, gY + (isWater and 1.5 or 0.5))
+        end
+        return Vector3.new(pos.X, baseY + 3.5, pos.Z)
+end
+
 local function pickNearest(rootPos)
         local best, bestD = nil, math.huge
-        for _, m in ipairs(refreshPumpkins(true)) do
+        for _, m in ipairs(refreshPumpkins()) do -- đọc cache (không quét đè)
                 if pumpkinValid(m, rootPos) then
                         local r = modelRoot(m)
                         if r then
@@ -534,7 +762,7 @@ local function smashUntilDead(target)
                 if (rp.Position - root.Position).Magnitude > State.HitRange + 10 then
                         return false -- bị kéo đi / bí ngô di chuyển → chọn lại
                 end
-                if os.clock() - startClock > 15 then
+                if os.clock() - startClock > 25 then
                         blacklist[target] = os.clock() -- quá lâu không chết → tạm bỏ
                         return false
                 end
@@ -545,8 +773,8 @@ local function smashUntilDead(target)
                 hits = hits + 1
 
                 task.wait(AtkMethod == "m1"
-                        and math.max(State.HitDelay, 0.28) -- M1 cần nhịp như người thật
-                        or math.max(State.HitDelay, 0.05))
+                        and (math.max(State.HitDelay, 0.30) + math.random() * 0.12) -- nhịp người thật 0.30–0.42s
+                        or math.max(State.HitDelay, 0.06))
 
                 -- mỗi 4 hit kiểm tra 1 lần xem có ăn máu không
                 if hits % 4 == 0 then
@@ -612,21 +840,26 @@ local function farmLoop()
                                 noneCount = 0
                                 local rp = modelRoot(target)
                                 if not rp then return end
-                                -- đứng cách bí ngô ~60% tầm đập để chắc chắn trong range
+                                -- M1 NGƯỜI THẬT cần đứng GẦN (6–12 studs) mới ăn damage,
+                                -- điểm đứng nâng trên mặt đất/nước để không chìm xuống biển
                                 local offsetDir = (root.Position - rp.Position)
-                                local standDist = math.max(State.HitRange * 0.55, 6)
+                                local standDist = math.clamp(State.HitRange * 0.35, 6, 12)
                                 local reached = true
                                 if offsetDir.Magnitude < 0.1 then
                                         -- đang đứng đè lên bí ngô → lùi nhẹ ra rồi đập luôn
                                         pcall(function()
-                                                getRoot().CFrame = CFrame.new(
-                                                        rp.Position + Vector3.new(standDist, 0, 0))
+                                                getRoot().CFrame = CFrame.new(safeStandPos(
+                                                        rp.Position + Vector3.new(standDist, 0, 0)))
                                         end)
                                 else
-                                        local goal = CFrame.new(rp.Position + offsetDir.Unit * standDist)
+                                        local flat = Vector3.new(offsetDir.X, 0, offsetDir.Z)
+                                        if flat.Magnitude < 0.1 then
+                                                flat = Vector3.new(1, 0, 0)
+                                        end
+                                        local goal = CFrame.new(safeStandPos(rp.Position + flat.Unit * standDist))
                                         State.StatusText = string.format("Đang bay tới bí ngô (%.0fm)", dist)
                                         equipFightingStyle()
-                                        reached = MZ_Tween.to(goal, State.TweenSpeed, 3)
+                                        reached = MZ_Tween.to(goal, State.TweenSpeed, 3.5, true)
                                 end
                                 if not State.FarmPumpkin then return end
                                 if reached then
@@ -644,10 +877,10 @@ local function farmLoop()
                                 end
                                 task.wait(0.1)
                         else -- "Đập trong tầm (đứng yên)"
-                                refreshPumpkins(true)
+                                refreshPumpkins()
                                 local rootPos = root.Position
                                 local found = 0
-                                for _, m in ipairs(pumpkinCache) do
+                                for _, m in ipairs(MZ_World.pumpkins) do
                                         if not State.FarmPumpkin then break end
                                         if pumpkinValid(m, rootPos) then
                                                 local rp = modelRoot(m)
@@ -657,8 +890,8 @@ local function farmLoop()
                                                         faceTarget(rp.Position)
                                                         doHit(m, rp.Position, rootPos)
                                                         task.wait(AtkMethod == "m1"
-                                                                and math.max(State.HitDelay, 0.28)
-                                                                or math.max(State.HitDelay, 0.05))
+                                                                and (math.max(State.HitDelay, 0.30) + math.random() * 0.12)
+                                                                or math.max(State.HitDelay, 0.06))
                                                 end
                                         end
                                 end
@@ -682,27 +915,7 @@ local function farmLoop()
 end
 
 -- ════════════════════════════ 12. NHẶT ĐỒ RƠI ═════════════════════════════
-local function matchKeyword(text, csv)
-        text = (text or ""):lower()
-        for kw in (csv or ""):lower():gmatch("[^,]+") do
-                kw = kw:match("^%s*(.-)%s*$")
-                if kw ~= "" and text:find(kw, 1, true) then
-                        return true
-                end
-        end
-        return false
-end
-
--- KHÔNG nhặt part của chính quả bí ngô (tránh dịch chuyển nhân vật loạn xạ)
-local function isPumpkinModelPart(p)
-        local anc = p:FindFirstAncestorOfClass("Model")
-        while anc do
-                if anc.Name:lower():find("pumpkin") then return true end
-                anc = anc:FindFirstAncestorOfClass("Model")
-        end
-        return false
-end
-
+-- Đọc từ MZ_World.drops (cache chung) — KHÔNG quét GetDescendants nữa (giảm lag)
 local function pickupLoop()
         if LoopLock.pickup then return end
         LoopLock.pickup = true
@@ -711,11 +924,10 @@ local function pickupLoop()
                         local root = getRoot()
                         local myChar = LocalPlayer.Character
                         if root and myChar then
-                                for _, p in ipairs(workspace:GetDescendants()) do
+                                refreshPumpkins() -- chỉ làm mới cache nếu đã quá 1.2s
+                                for _, p in ipairs(MZ_World.drops) do
                                         if not State.PickupDrops then break end
-                                        if p:IsA("BasePart") and not p:IsDescendantOf(myChar)
-                                                and not isPumpkinModelPart(p)
-                                                and matchKeyword(p.Name, State.PickupKeywords) then
+                                        if p.Parent then
                                                 local d = (p.Position - root.Position).Magnitude
                                                 if d <= State.PickupRadius then
                                                         local fired = pcall(function()
@@ -728,14 +940,14 @@ local function pickupLoop()
                                                                         root.CFrame = CFrame.new(p.Position + Vector3.new(0, 2, 0))
                                                                 end)
                                                         end
-                                                        task.wait(0.15)
+                                                        task.wait(0.12)
                                                 end
                                         end
                                 end
                         end
                 end)
                 if not ok then task.wait(1) end
-                task.wait(0.6)
+                task.wait(0.35)
         end
         LoopLock.pickup = false
 end
@@ -766,10 +978,11 @@ local function promptLoop(keywordsGetter, radiusGetter, statusKey)
         while State[statusKey] do
                 local root = getRoot()
                 if root then
+                        refreshPumpkins() -- cache chung — không quét lại map (giảm lag)
                         local best, bestD, bestPart = nil, math.huge, nil
-                        for _, pr in ipairs(workspace:GetDescendants()) do
+                        for _, pr in ipairs(MZ_World.prompts) do
                                 if not State[statusKey] then break end
-                                if pr:IsA("ProximityPrompt") and pr.Enabled
+                                if pr.Enabled and pr.Parent
                                         and matchKeyword(
                                                 table.concat({
                                                         pr.Name, pr.ActionText or "", pr.ObjectText or "",
@@ -830,8 +1043,15 @@ local function espClearAll()
         ESPObjects = {}
 end
 
+local ESP_CAP = 100 -- giới hạn số Highlight để không tụt FPS
+
 local function espApply(model, kind)
         if ESPObjects[model] then return end
+        local n = 0
+        for _ in pairs(ESPObjects) do
+                n = n + 1
+                if n >= ESP_CAP then return end
+        end
         local r = modelRoot(model)
         if not r then return end
         local hl = Instance.new("Highlight")
@@ -870,18 +1090,10 @@ local function espScan()
         local cam = workspace.CurrentCamera
         local camPos = cam and cam.CFrame.Position
         local maxR = State.ESPMaxRange
-        refreshPumpkins(true)
-
-        -- quét patch (mô hình tên chứa "patch")
-        local patches = {}
-        for _, d in ipairs(workspace:GetDescendants()) do
-                if d:IsA("Model") and d.Name:lower():find("patch") then
-                        table.insert(patches, d)
-                end
-        end
+        refreshPumpkins() -- cache chung — không quét đè (giảm lag)
 
         if State.ESP then
-                for _, m in ipairs(pumpkinCache) do
+                for _, m in ipairs(MZ_World.pumpkins) do
                         local r = modelRoot(m)
                         if r and camPos then
                                 if maxR <= 0 or (r.Position - camPos).Magnitude <= maxR then
@@ -891,7 +1103,7 @@ local function espScan()
                 end
         end
         if State.ESPPatch then
-                for _, m in ipairs(patches) do
+                for _, m in ipairs(MZ_World.patches) do
                         local r = modelRoot(m)
                         if r and camPos then
                                 if maxR <= 0 or (r.Position - camPos).Magnitude <= maxR then
@@ -1087,7 +1299,7 @@ local SecFarm = TabFarm:CreateSection("Auto Farm Bí Ngô")
 
 SecFarm:CreateToggle({
         Title = "Bật Auto Farm Bí Ngô",
-        Description = "Tự tìm + bay tới + đập bí ngô lấy Candy Corn",
+        Description = "Tự tìm + bay tới + đập bí ngô (M1 giả lập người thật)",
         Default = false,
         Callback = function(v)
                 State.FarmPumpkin = v
@@ -1097,6 +1309,15 @@ SecFarm:CreateToggle({
                                 task.spawn(pickupLoop)
                         end
                         notify("Farm Bí Ngô", "Đã BẬT auto farm bí ngô!", "success")
+                        -- chống bấm nhầm UI: tự thu nhỏ Hub sau 1.5s (Ctrl trái mở lại)
+                        if State.HideUIFarm and Window.IsOpen and Window:IsOpen() then
+                                task.delay(1.5, function()
+                                        if State.FarmPumpkin and Window.IsOpen and Window:IsOpen() then
+                                                pcall(function() Window:Toggle(false) end)
+                                                notify("Farm Bí Ngô", "Đã thu nhỏ Hub — nhấn CTRL TRÁI để mở lại.", "info")
+                                        end
+                                end)
+                        end
                 else
                         MZ_Tween.cancel()
                         State.StatusText = "Tắt"
@@ -1148,12 +1369,15 @@ SecFarm:CreateSlider({
 })
 
 SecFarm:CreateToggle({
-        Title = "Fast Attack (remote)",
-        Description = "Đập nhanh bằng RegisterHit — không ăn sẽ tự chuyển sang M1 ảo",
-        Default = true,
+        Title = "Chế độ Remote (RegisterHit)",
+        Description = "MẶC ĐỊNH TẮT — server đa số CHẶN remote với bí ngô (lỗi CChain: out of radius). Để TẮT = đánh M1 giả lập người thật, ăn damage ổn định.",
+        Default = false,
         Callback = function(v)
                 State.FastAttack = v
                 AtkMethod = v and "remote" or "m1"
+                if v then
+                        notify("Fast Attack", "Đang dùng remote — nếu bí ngô không mất máu thì hãy TẮT để quay về M1 người thật.", "warning")
+                end
         end,
 })
 
@@ -1173,6 +1397,18 @@ SecFarm:CreateToggle({
                 State.PickupDrops = v
                 if v and (State.FarmPumpkin or State.TrickOrTreat) then
                         task.spawn(pickupLoop)
+                end
+        end,
+})
+
+SecFarm:CreateToggle({
+        Title = "Tự thu nhỏ Hub khi farm",
+        Description = "KHUYẾN NGHỊ BẬT — ẩn UI để click ảo KHÔNG bấm nhầm nút Hub (chính là nguyên nhân farm tự tắt trước đây). Nhấn Ctrl trái để mở lại Hub.",
+        Default = true,
+        Callback = function(v)
+                State.HideUIFarm = v
+                if not v and Window.IsOpen and not Window:IsOpen() then
+                        pcall(function() Window:Toggle(true) end)
                 end
         end,
 })
@@ -1382,10 +1618,10 @@ SecMisc:CreateToggle({
 })
 
 SecMisc:CreateParagraph({
-        Title = "🛠️ Về lỗi console (StartBeam / PartType)",
-        Content = "Lỗi 'Beam is not a valid member of Part StartBeam' và 'unknown index from name=PartType' là lỗi DO GAME sinh ra (script hiệu ứng Hellfire Gas của game ở ReplicatedStorage.EffectContainer) — KHÔNG phải do script, không ảnh hưởng farm."
-                .. " Script đã cập nhật: gói tấn công giờ giống hệt người chơi thật (chỉ gửi part có rig) nên không còn kích hoạt lỗi này từ phía mình."
-                .. " Bật 'Giảm Lag' để bớt hiệu ứng Hellfire bị lỗi.",
+        Title = "🛠️ Về lỗi console trong game",
+        Content = "• 'Disabled is not a valid member of NumberValue ... Rage' → lỗi của CHÍNH GAME (script Race/Buff của Blox Fruits), không liên quan script này, không ảnh hưởng farm.\n"
+                .. "• 'CChain: out of radius' → xuất hiện khi bật Chế độ Remote (server từ chối hit). Mặc định remote đã TẮT nên lỗi này sẽ biến mất.\n"
+                .. "• 'StartBeam / PartType' → lỗi hiệu ứng Hellfire Gas của game. Bật 'Giảm Lag' để bớt hiệu ứng lỗi.",
 })
 
 SecMisc:CreateToggle({
@@ -1446,16 +1682,10 @@ task.spawn(function()
         while true do
                 pcall(function()
                         if statusPara and statusPara.SetContent then
-                                local pumpkins = refreshPumpkins()
-                                local patches = 0
-                                for _, d in ipairs(workspace:GetDescendants()) do
-                                        if d:IsA("Model") and d.Name:lower():find("patch") then
-                                                patches = patches + 1
-                                        end
-                                end
+                                refreshPumpkins() -- đọc từ cache chung (giảm lag)
                                 statusPara:SetContent(string.format(
                                         "🎃 Bí ngô trong map: %d   |   📍 PumpkinPatch: %d\n🎯 Trạng thái: %s",
-                                        #pumpkins, patches, State.StatusText or "Tắt"
+                                        #MZ_World.pumpkins, #MZ_World.patches, State.StatusText or "Tắt"
                                 ))
                         end
                 end)
