@@ -80,6 +80,7 @@ local State = {
 
         -- Khác
         AntiAFK   = true,
+        NoFX      = false,
 }
 
 local Connections = {}
@@ -383,39 +384,46 @@ local function faceTarget(pos)
 end
 
 -- Đập bí ngô: ưu tiên fast attack remote, fallback M1 ảo
+-- ⚠ FIX 12:19:0x console — gửi gói tin GIỐNG HỆT game thật:
+--   * BẮT BUỘC có CombatUtil (GetRigOfHitPart) — part không resolve được rig
+--     sẽ KHÔNG được gửi (game thật cũng không bao giờ gửi part không rig).
+--   * RegisterHit:FireServer(partĐầu, listCÒnLạI) — pair đầu bị remove khỏi list
+--     như attackMelee gốc của game → server không sinh hiệu ứng lạ
+--     ("unknown index from name=PartType" / lỗi StartBeam của EffectContainer).
 local function hitPumpkin(model)
         local root = getRoot()
         if not (root and model and model.Parent) then return end
         local myPos = root.Position
 
-        if State.FastAttack and RegisterHit then
+        if State.FastAttack and RegisterHit and CombatUtil then
                 local parts = {}
                 for _, p in ipairs(model:GetDescendants()) do
                         if p:IsA("BasePart") and (p.Position - myPos).Magnitude <= State.HitRange + 15 then
                                 table.insert(parts, p)
                         end
                 end
-                if #parts == 0 then return false end
-
-                local hitList = {}
-                for _, p in ipairs(parts) do
-                        local rig = p
-                        if CombatUtil then
+                if #parts > 0 then
+                        local hitList = {}
+                        for _, p in ipairs(parts) do
+                                local rig = nil
                                 pcall(function()
-                                        local r = CombatUtil:GetRigOfHitPart(p)
-                                        if r then rig = r end
+                                        rig = CombatUtil:GetRigOfHitPart(p)
                                 end)
+                                if rig then
+                                        table.insert(hitList, { rig, p })
+                                end
                         end
-                        table.insert(hitList, { rig, p })
+                        if #hitList > 0 then
+                                local first = table.remove(hitList, 1)
+                                local ok = pcall(function()
+                                        if RegisterAttack then
+                                                RegisterAttack:FireServer(0)
+                                        end
+                                        RegisterHit:FireServer(first[2], hitList)
+                                end)
+                                if ok then return true end
+                        end
                 end
-
-                local ok = pcall(function()
-                        if RegisterAttack then
-                                RegisterAttack:FireServer(0)
-                        end
-                        RegisterHit:FireServer(parts[1], hitList)
-                end)
-                if ok then return true end
         end
 
         -- Fallback: bấm M1 ảo vào giữa màn hình (đang đứng sát + quay mặt đúng)
@@ -784,6 +792,53 @@ local function espLabelLoop()
         LoopLock.espLabel = false
 end
 
+-- ════════════════════════════ 14b. GIẢM LAG / NO FX AN TOÀN ═══════════════
+-- Tắt hiệu ứng TRỰC QUAN an toàn (particle / lửa / khói / sáng).
+-- KHÔNG đụng Beam / Trail — vì script hiệu ứng của game tham chiếu chúng
+-- (VD lỗi "Beam is not a valid member of Part 'StartBeam'" của
+--  ReplicatedStorage.EffectContainer.Hellfire.Transformed.Z — lỗi game,
+--  mình không phá Beam để tránh làm lỗi nặng hơn).
+local NOFX_CLASSES = {
+        ParticleEmitter = true,
+        Fire = true,
+        Smoke = true,
+        Sparkles = true,
+        PointLight = true,
+        SurfaceLight = true,
+        SpotLight = true,
+}
+
+local nofxConn = nil
+
+local function nofxSweep(container)
+        for _, d in ipairs(container:GetDescendants()) do
+                if NOFX_CLASSES[d.ClassName] then
+                        pcall(function()
+                                d.Enabled = false
+                        end)
+                end
+        end
+end
+
+local function setNoFX(on)
+        if on then
+                if not nofxConn then
+                        nofxConn = workspace.DescendantAdded:Connect(function(d)
+                                if NOFX_CLASSES[d.ClassName] then
+                                        task.defer(function()
+                                                if d.Parent then
+                                                        pcall(function() d.Enabled = false end)
+                                                end
+                                        end)
+                                end
+                        end)
+                        table.insert(Connections, nofxConn)
+                end
+                nofxSweep(workspace)
+        end
+        -- khi tắt: không bật lại particle cũ (tránh kích hoạt lại effect lỗi)
+end
+
 -- ════════════════════════════ 15. HOP SERVER ══════════════════════════════
 getgenv().MZ_VisitedServers = getgenv().MZ_VisitedServers or {}
 
@@ -1150,6 +1205,26 @@ SecMisc:CreateToggle({
 })
 
 SecMisc:CreateToggle({
+        Title = "Giảm Lag (Tắt FX an toàn)",
+        Description = "Tắt particle/lửa/khói/đèn hiệu ứng — KHÔNG đụng Beam/Trail để không lỗi game",
+        Default = false,
+        Callback = function(v)
+                State.NoFX = v
+                pcall(function() setNoFX(v) end)
+                if v then
+                        notify("Giảm Lag", "Đã tắt FX an toàn (particle/lửa/khói/đèn).", "success")
+                end
+        end,
+})
+
+SecMisc:CreateParagraph({
+        Title = "🛠️ Về lỗi console (StartBeam / PartType)",
+        Content = "Lỗi 'Beam is not a valid member of Part StartBeam' và 'unknown index from name=PartType' là lỗi DO GAME sinh ra (script hiệu ứng Hellfire Gas của game ở ReplicatedStorage.EffectContainer) — KHÔNG phải do script, không ảnh hưởng farm."
+                .. " Script đã cập nhật: gói tấn công giờ giống hệt người chơi thật (chỉ gửi part có rig) nên không còn kích hoạt lỗi này từ phía mình."
+                .. " Bật 'Giảm Lag' để bớt hiệu ứng Hellfire bị lỗi.",
+})
+
+SecMisc:CreateToggle({
         Title = "Watermark FPS/Ping (Meizu Extras)",
         Default = false,
         Callback = function(v)
@@ -1230,6 +1305,7 @@ getgenv().MZ_Halloween_Unload = function()
         State.TrickOrTreat = false
         State.Gacha = false
         State.PickupDrops = false
+        State.NoFX = false
         MZ_Tween.cancel()
         espClearAll()
         for _, c in ipairs(Connections) do
