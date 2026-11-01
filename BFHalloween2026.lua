@@ -14,7 +14,7 @@
     • Tính năng   :
         [1] Auto Farm Bí Ngô (Jack O' Lantern Hunt) — 2 chế độ:
               + Tới gần từng bí ngô (tween + fast attack remote)
-              + Đập trong tầm (đứng yên, hit mọi bí ngô quanh mình)
+              + Đập trong tầm (hết tầm → tự bay đuổi, không đứng im)
         [2] ESP Bí Ngô + PumpkinPatch (Highlight + BillTag khoảng cách)
         [3] Auto Gõ Cửa (Trick-or-Treat mỗi giờ XX:00)
         [4] Auto Roll Gacha / Tương tác Phù Thủy (ProximityPrompt)
@@ -38,6 +38,15 @@
     • GIẢM LAG: 1 cache quét map duy nhất (tối đa 1 lần/1.2s) thay vì
       5-10 lần GetDescendants mỗi giây; noclip dùng list cache;
       ESP giới hạn 100 vật thể.
+
+    ═══ UPDATE v2.2 — FARM LIÊN TỤC + ĐÁNH SÁT + AUTO BUSO ═══
+    • Đánh bí ngô GẦN trước → hết gần thì TỰ BAY ra vùng XA đập tiếp,
+      không bao giờ đứng im chờ (farm liên tục).
+    • Bay đứng SÁT CẠNH bí ngô (3.5–5 studs, chỉnh bằng slider) — bản cũ
+      đứng 10+ studs nên M1 trượt ("đánh không dính"). Bị văng ra xa thì
+      TỰ BAY LẠI sát bí ngô, không bỏ quả giữa chừng.
+    • AUTO BẬT BUSO HAKI (Aura): CommF_:InvokeServer("Buso") — kỹ thuật
+      lấy từ Banana Cat Hub → đập bí ngô đau hơn hẳn.
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -69,6 +78,8 @@ local State = {
         FilterMode    = "Tất cả bí ngô",
         TweenSpeed    = 350,
         HitRange      = 30,
+        StandDist     = 4,    -- đứng SÁT CẠNH bí ngô khi đập (bản cũ đứng 10+ studs → M1 trượt)
+        AutoBuso      = true, -- tự bật Buso Haki (Aura) khi đánh
         HitDelay      = 0.12,
         FastAttack    = false, -- remote thường bị server chặn → mặc định M1 người thật
         Noclip        = true,
@@ -103,12 +114,7 @@ local Connections = {}
 -- KHAI BÁO SỚM để mọi hàm bên dưới (notify...) dùng chung 1 biến local
 local Library -- sẽ gán ở mục 16 (Nạp thư viện Meizu)
 
--- khóa chống chạy trùng loop (khi bật nhiều toggle cùng lúc)
-local LoopLock = {
-        pickup = false,
-        esp = false,
-        espLabel = false,
-}
+-- (các loop chống chạy trùng bằng "generation counter" — xem farmLoop / busoLoop)
 
 -- ════════════════════════════ 4. TIỆN ÍCH NHÂN VẬT ════════════════════════
 local function getChar()
@@ -448,7 +454,7 @@ local function refreshPumpkins(force)
 
         -- dọn blacklist cũ (30s là đủ, đừng treo lâu làm farm tưởng "tắt")
         for m, t in pairs(blacklist) do
-                if (now - t) > 30 or m.Parent == nil then
+                if (now - t) > 15 or m.Parent == nil then
                         blacklist[m] = nil
                 end
         end
@@ -708,6 +714,71 @@ local function doHit(model, aimPos, myPos)
         return "m1"
 end
 
+-- ════════════════════════════ 10b. AUTO BUSO HAKI ═════════════════════════
+-- Mượn kỹ thuật Banana Cat Hub: khi Buso BẬT, nhân vật có con _BusoLayer1
+-- (layer aura) hoặc HasBuso → chưa có thì CommF_:InvokeServer("Buso").
+local CommF = nil
+pcall(function()
+        CommF = game:GetService("ReplicatedStorage")
+                :WaitForChild("Remotes", 9):WaitForChild("CommF_", 9)
+end)
+
+local function ffcMatch(container, pattern)
+        if not container then return nil end
+        for _, c in ipairs(container:GetChildren()) do
+                if string.match(c.Name, pattern) then return c end
+        end
+        return nil
+end
+
+-- true = Buso đang BẬT (char chưa load → coi như bật để khỏi spam remote)
+local function busoActive()
+        local c = getChar()
+        if not c then return true end
+        return ffcMatch(c, "_BusoLayer1") ~= nil
+                or c:FindFirstChild("HasBuso") ~= nil
+end
+
+local function enableBuso()
+        if not CommF then return false end
+        if not busoActive() then
+                return pcall(function() CommF:InvokeServer("Buso") end)
+        end
+        return true
+end
+
+local BusoGen = 0
+local busoFails, busoWarned = 0, false
+
+local function busoLoop()
+        BusoGen = BusoGen + 1
+        local myGen = BusoGen
+        while State.AutoBuso and myGen == BusoGen do
+                local ok, err = pcall(function()
+                        local c = getChar()
+                        if c and not busoActive() then
+                                enableBuso()
+                                task.wait(1.5)
+                                if busoActive() then
+                                        busoFails = 0
+                                else
+                                        busoFails = busoFails + 1
+                                        if busoFails >= 3 and not busoWarned then
+                                                busoWarned = true
+                                                notify("Auto Buso",
+                                                        "Không bật được Buso — có thể bạn CHƯA MUA Haki Buso ($25.000 Beli) hoặc đang hết năng lượng Haki.",
+                                                        "warning")
+                                        end
+                                end
+                        end
+                end)
+                if not ok then
+                        warn("[MZ Halloween] busoLoop lỗi (tự tiếp tục): " .. tostring(err))
+                end
+                task.wait(1)
+        end
+end
+
 -- ════════════════════════════ 11. AUTO FARM BÍ NGÔ ════════════════════════
 -- Điểm đứng an toàn: nâng 3.5 studs trên mặt đất/MẶT NƯỚC dưới điểm đó
 -- (fix lỗi đứng chìm dưới nước khi bí ngô gần bờ biển)
@@ -736,11 +807,11 @@ local function pickNearest(rootPos)
         return best, bestD
 end
 
-local FarmLock = false -- chống chạy 2 vòng farm cùng lúc (bật/tắt liên tục)
+local FarmGen = 0 -- mỗi lần bật tăng gen → vòng cũ tự thoát, KHÔNG bao giờ "chết im"
 
 -- Đập 1 bí ngô tới khi chết. true = xong (chết/biến mất), false = bỏ quả này.
 -- CÓ đo tiến triển: 12 hit không thấy máu giảm/part mất → tự đổi cách đánh → bỏ.
-local function smashUntilDead(target)
+local function smashUntilDead(target, myGen)
         local startClock = os.clock()
         local hits = 0
         local noProgress = 0
@@ -750,7 +821,7 @@ local function smashUntilDead(target)
         -- không có tín hiệu gì cho tới lúc nổ) → phải cho ngân sách hit rộng hơn.
         local hasHum = (target:FindFirstChildOfClass("Humanoid") ~= nil)
 
-        while State.FarmPumpkin do
+        while State.FarmPumpkin and (not myGen or myGen == FarmGen) do
                 local char = getChar()
                 local root = getRoot()
                 if not (char and root) then return false end
@@ -759,10 +830,24 @@ local function smashUntilDead(target)
                 if hum and hum.Health <= 0 then return true end
                 local rp = modelRoot(target)
                 if not rp then return true end
-                if (rp.Position - root.Position).Magnitude > State.HitRange + 10 then
-                        return false -- bị kéo đi / bí ngô di chuyển → chọn lại
+                local distNow = (rp.Position - root.Position).Magnitude
+                if distNow > math.max(State.StandDist or 4, 3) + 9 then
+                        -- bị đẩy văng / bí ngô lăn xa → BAY LẠI đứng kế bên (không bỏ quả)
+                        local flat = Vector3.new(root.Position.X - rp.Position.X,
+                                0, root.Position.Z - rp.Position.Z)
+                        if flat.Magnitude < 0.1 then flat = Vector3.new(1, 0, 0) end
+                        State.StatusText = "Bị văng ra → bay lại sát bí ngô..."
+                        MZ_Tween.to(CFrame.new(safeStandPos(
+                                rp.Position + flat.Unit
+                                        * math.clamp(State.StandDist or 4, 3, 12))),
+                                State.TweenSpeed, 3, true)
+                        if not State.FarmPumpkin or (myGen and myGen ~= FarmGen) then
+                                return false
+                        end
+                elseif distNow > State.HitRange + 10 then
+                        return false -- quá xa hẳn so với tầm đập → chọn quả khác
                 end
-                if os.clock() - startClock > 25 then
+                if os.clock() - startClock > 35 then
                         blacklist[target] = os.clock() -- quá lâu không chết → tạm bỏ
                         return false
                 end
@@ -809,10 +894,10 @@ end
 
 -- Vòng farm chính — MỌI lỗi nhỏ đều pcall nên KHÔNG BAO GIỜ chết âm thầm
 local function farmLoop()
-        if FarmLock then return end
-        FarmLock = true
+        FarmGen = FarmGen + 1
+        local myGen = FarmGen
         local noneCount = 0
-        while State.FarmPumpkin do
+        while State.FarmPumpkin and myGen == FarmGen do
                 local ok, err = pcall(function()
                         local char, root, hum = getChar(), getRoot(), getHum()
                         if not (char and root and hum) or hum.Health <= 0 then
@@ -823,27 +908,32 @@ local function farmLoop()
                         end
 
                         if State.FarmMode == "Tới gần từng bí ngô" then
+                                -- Đánh GẦN trước (pickNearest luôn chọn quả gần nhất);
+                                -- hết quả gần → tự bay ra vùng XA, KHÔNG đứng im đợi
                                 local target, dist = pickNearest(root.Position)
                                 if not target then
                                         noneCount = noneCount + 1
-                                        State.StatusText = "Không thấy bí ngô — chờ respawn..."
-                                        -- chờ lâu quá thì xóa blacklist cũ để thử lại
-                                        if noneCount % 4 == 0 then
-                                                local now = os.clock()
-                                                for m, t in pairs(blacklist) do
-                                                        if (now - t) > 12 then blacklist[m] = nil end
+                                        State.StatusText = "Hết bí ngô gần — dò lại map..."
+                                        -- dò lại map NGAY + thả blacklist cũ để bay được
+                                        -- sang vùng xa, không đứng im chờ respawn
+                                        refreshPumpkins(true)
+                                        local now = os.clock()
+                                        for m, t in pairs(blacklist) do
+                                                if (now - t) > 8 or m.Parent == nil then
+                                                        blacklist[m] = nil
                                                 end
                                         end
-                                        task.wait(1.5)
+                                        task.wait(0.6)
                                         return
                                 end
                                 noneCount = 0
                                 local rp = modelRoot(target)
                                 if not rp then return end
-                                -- M1 NGƯỜI THẬT cần đứng GẦN (6–12 studs) mới ăn damage,
-                                -- điểm đứng nâng trên mặt đất/nước để không chìm xuống biển
+                                -- ĐỨNG SÁT CẠNH bí ngô (mặc định 3.5–5 studs) để M1
+                                -- không trượt; nâng trên mặt đất/nước khỏi chìm xuống biển
                                 local offsetDir = (root.Position - rp.Position)
-                                local standDist = math.clamp(State.HitRange * 0.35, 6, 12)
+                                local standDist = math.clamp(State.StandDist or 4, 3, 12)
+                                        + math.random() * 0.8
                                 local reached = true
                                 if offsetDir.Magnitude < 0.1 then
                                         -- đang đứng đè lên bí ngô → lùi nhẹ ra rồi đập luôn
@@ -864,7 +954,7 @@ local function farmLoop()
                                 if not State.FarmPumpkin then return end
                                 if reached then
                                         State.StatusText = "Đang đập bí ngô..."
-                                        smashUntilDead(target)
+                                        smashUntilDead(target, myGen)
                                 else
                                         -- không tới được (kẹt / game kéo về) → tạm bỏ quả này
                                         local rp2 = modelRoot(target)
@@ -876,7 +966,7 @@ local function farmLoop()
                                         end
                                 end
                                 task.wait(0.1)
-                        else -- "Đập trong tầm (đứng yên)"
+                        else -- "Đập trong tầm (tự đuổi khi trống)"
                                 refreshPumpkins()
                                 local rootPos = root.Position
                                 local found = 0
@@ -898,9 +988,34 @@ local function farmLoop()
                                 State.StatusText = found > 0
                                         and string.format("Đang đập trong tầm (%d bí ngô, %s)",
                                                 found, AtkMethod == "m1" and "M1 ảo" or "remote")
-                                        or "Đứng yên — không có bí ngô trong tầm"
-                                if found == 0 then
-                                        task.wait(0.8)
+                                        or "Không có bí ngô trong tầm..."
+                                -- KHÔNG đứng im đợi: hết bí ngô trong tầm → tự bay tới
+                                -- quả GẦN NHẤT (kể cả ở xa) rồi đập tiếp, farm liên tục
+                                if found == 0 and State.FarmPumpkin then
+                                        local target, dist = pickNearest(rootPos)
+                                        local rp = target and modelRoot(target)
+                                        if rp then
+                                                local away = (rootPos - rp.Position)
+                                                local flat = Vector3.new(away.X, 0, away.Z)
+                                                if flat.Magnitude < 0.1 then flat = Vector3.new(1, 0, 0) end
+                                                State.StatusText = string.format(
+                                                        "Trong tầm không có → bay tới (%.0fm)", dist or 0)
+                                                equipFightingStyle()
+                                                MZ_Tween.to(CFrame.new(safeStandPos(
+                                                        rp.Position + flat.Unit * math.clamp(
+                                                                State.StandDist or 4, 3, 12))),
+                                                        State.TweenSpeed, 3, true)
+                                        else
+                                                -- map trống thật sự → dò lại + thả blacklist cũ
+                                                refreshPumpkins(true)
+                                                local now = os.clock()
+                                                for m2, t2 in pairs(blacklist) do
+                                                        if (now - t2) > 8 or m2.Parent == nil then
+                                                                blacklist[m2] = nil
+                                                        end
+                                                end
+                                                task.wait(0.6)
+                                        end
                                 end
                         end
                 end)
@@ -910,16 +1025,18 @@ local function farmLoop()
                         task.wait(0.5)
                 end
         end
-        State.StatusText = "Tắt"
-        FarmLock = false
+        if myGen == FarmGen then
+                State.StatusText = "Tắt"
+        end
 end
 
 -- ════════════════════════════ 12. NHẶT ĐỒ RƠI ═════════════════════════════
 -- Đọc từ MZ_World.drops (cache chung) — KHÔNG quét GetDescendants nữa (giảm lag)
+local PickupGen = 0
 local function pickupLoop()
-        if LoopLock.pickup then return end
-        LoopLock.pickup = true
-        while State.PickupDrops do
+        PickupGen = PickupGen + 1
+        local myGen = PickupGen
+        while State.PickupDrops and myGen == PickupGen do
                 local ok = pcall(function()
                         local root = getRoot()
                         local myChar = LocalPlayer.Character
@@ -949,7 +1066,6 @@ local function pickupLoop()
                 if not ok then task.wait(1) end
                 task.wait(0.35)
         end
-        LoopLock.pickup = false
 end
 
 -- ════════════════════════════ 13. PROXIMITY PROMPT (Cửa / Gacha) ══════════
@@ -1130,21 +1246,24 @@ local function espScan()
         end
 end
 
+local EspGen = 0
 local function espLoop()
-        if LoopLock.esp then return end
-        LoopLock.esp = true
-        while State.ESP or State.ESPPatch do
+        EspGen = EspGen + 1
+        local myGen = EspGen
+        while (State.ESP or State.ESPPatch) and myGen == EspGen do
                 pcall(espScan)
                 task.wait(2)
         end
-        espClearAll()
-        LoopLock.esp = false
+        if myGen == EspGen then
+                espClearAll()
+        end
 end
 
+local EspLabelGen = 0
 local function espLabelLoop()
-        if LoopLock.espLabel then return end
-        LoopLock.espLabel = true
-        while State.ESP or State.ESPPatch do
+        EspLabelGen = EspLabelGen + 1
+        local myGen = EspLabelGen
+        while (State.ESP or State.ESPPatch) and myGen == EspLabelGen do
                 local cam = workspace.CurrentCamera
                 local camPos = cam and cam.CFrame.Position
                 if camPos then
@@ -1164,7 +1283,6 @@ local function espLabelLoop()
                 end
                 task.wait(0.4)
         end
-        LoopLock.espLabel = false
 end
 
 -- ════════════════════════════ 14b. GIẢM LAG / NO FX AN TOÀN ═══════════════
@@ -1299,7 +1417,7 @@ local SecFarm = TabFarm:CreateSection("Auto Farm Bí Ngô")
 
 SecFarm:CreateToggle({
         Title = "Bật Auto Farm Bí Ngô",
-        Description = "Tự tìm + bay tới + đập bí ngô (M1 giả lập người thật)",
+        Description = "Đập GẦN trước → hết gần tự bay ra XA (farm liên tục). Bay sát cạnh bí ngô khi đập.",
         Default = false,
         Callback = function(v)
                 State.FarmPumpkin = v
@@ -1326,9 +1444,31 @@ SecFarm:CreateToggle({
         end,
 })
 
+SecFarm:CreateToggle({
+        Title = "Tự Bật Buso Haki (Aura)",
+        Description = "Tự kích hoạt Haki Vũ Sắc khi đánh — đập bí ngô đau hơn hẳn, không cần bật tay.",
+        Default = true,
+        Callback = function(v)
+                State.AutoBuso = v
+                if v then
+                        enableBuso()
+                        task.spawn(busoLoop)
+                end
+        end,
+})
+
+SecFarm:CreateSlider({
+        Title = "Khoảng cách đứng khi đập",
+        Description = "Đứng SÁT CẠNH bí ngô để M1 không trượt (3–5 là sát nhất)",
+        Min = 3, Max = 12, Default = State.StandDist, Rounding = 1, Suffix = " studs",
+        Callback = function(v)
+                State.StandDist = v
+        end,
+})
+
 SecFarm:CreateDropdown({
         Title = "Chế độ farm",
-        Options = { "Tới gần từng bí ngô", "Đập trong tầm (đứng yên)" },
+        Options = { "Tới gần từng bí ngô", "Đập trong tầm (tự đuổi khi trống)" },
         Default = State.FarmMode,
         Callback = function(opt)
                 State.FarmMode = opt
@@ -1701,6 +1841,7 @@ getgenv().MZ_Halloween_Unload = function()
         State.TrickOrTreat = false
         State.Gacha = false
         State.PickupDrops = false
+        State.AutoBuso = false
         State.NoFX = false
         MZ_Tween.cancel()
         espClearAll()
@@ -1716,5 +1857,8 @@ end
 -- ════════════════════════════ 23. KHỞI ĐỘNG ═══════════════════════════════
 Window:SelectTab(1)
 refreshPumpkins(true)
+if State.AutoBuso then
+        task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
+end
 notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026!\nBật tab [Farm Bí Ngô] để bắt đầu.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween Event 2026 | Library: Meizu v3.1")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v2.2 (liên tục + sát + buso) | Library: Meizu v3.1")
