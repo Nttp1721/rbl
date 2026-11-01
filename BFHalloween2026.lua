@@ -246,10 +246,12 @@ table.insert(Connections, LocalPlayer.Idled:Connect(function()
 end))
 
 -- ════════════════════════════ 8. REMOTE FAST ATTACK ═══════════════════════
--- Giống Banana Cat Hub: bắn RegisterAttack(0) + RegisterHit(part, list)
--- riêng cho bí ngô (bí ngô KHÔNG nằm trong Workspace.Enemies nên
--- AttackAOE gốc không trúng → mình tự gom part của bí ngô).
-local RegisterAttack, RegisterHit, CombatUtil
+-- Flow người chơi thật (theo Banana Cat Hub):
+--   1) Mouse module:FireServer(0.35) → đăng ký cú vung, mở "cửa sổ đánh" server
+--   2) RegisterHit:FireServer(partĐầu, list cặp {rig, part})
+-- Bí ngô KHÔNG nằm trong Workspace.Enemies nên AttackAOE gốc không trúng
+-- → mình tự gom part của bí ngô và gửi đúng format trên.
+local RegisterAttack, RegisterHit, CombatUtil, MouseSwing
 do
         pcall(function()
                 local Net = game:GetService("ReplicatedStorage")
@@ -265,6 +267,12 @@ do
         pcall(function()
                 CombatUtil = require(game:GetService("ReplicatedStorage")
                         :WaitForChild("Modules"):WaitForChild("CombatUtil"))
+        end)
+        pcall(function()
+                local mm = require(game:GetService("ReplicatedStorage"):WaitForChild("Mouse", 9))
+                if type(mm) == "table" and type(mm.FireServer) == "function" then
+                        MouseSwing = mm -- thiếu gói này server có thể từ chối damage!
+                end
         end)
         if not RegisterHit then
                 warn("[MZ Halloween] Không tìm thấy remote RegisterHit → dùng fallback M1 thường")
@@ -298,9 +306,9 @@ local function refreshPumpkins(force)
                         end
                 end
         end
-        -- dọn blacklist cũ
+        -- dọn blacklist cũ (30s là đủ, đừng treo 60s làm farm tưởng "tắt")
         for m, t in pairs(blacklist) do
-                if (now - t) > 60 or m.Parent == nil then
+                if (now - t) > 30 or m.Parent == nil then
                         blacklist[m] = nil
                 end
         end
@@ -335,40 +343,48 @@ local STYLE_NAMES = {
         "Godhuman", "Sanguine Art",
 }
 
+-- khớp theo TÊN hoặc TOOLTIP (nhiều executor để ToolTip rỗng)
+local function isStyleTool(t)
+        if not t then return false end
+        local n = ((t.Name or "") .. " " .. (t.ToolTip or "")):lower()
+        for _, name in ipairs(STYLE_NAMES) do
+                if n:find(name:lower(), 1, true) then return true end
+        end
+        return false
+end
+
+local function equippedStyle()
+        local char = getChar()
+        local held = char and char:FindFirstChildOfClass("Tool")
+        if held and isStyleTool(held) then return held end
+        return nil
+end
+
+local StyleNotFoundNotified = false
+
 local function equipFightingStyle()
         local char = getChar()
         local hum = getHum()
-        if not (char and hum) then return end
+        if not (char and hum) or hum.Health <= 0 then return end
+        if equippedStyle() then return end -- đang cầm đúng style → khỏi equip lại
 
-        local function findIn(container)
-                if not container then return nil end
-                for _, t in ipairs(container:GetChildren()) do
-                        if t:IsA("Tool") then
-                                local tip = (t.ToolTip or ""):lower()
-                                for _, name in ipairs(STYLE_NAMES) do
-                                        if tip == name:lower() then
-                                                return t
-                                        end
-                                end
+        local tool
+        for _, t in ipairs(char:GetChildren()) do
+                if t:IsA("Tool") and isStyleTool(t) then tool = t break end
+        end
+        if not tool then
+                local bp = LocalPlayer:FindFirstChild("Backpack")
+                if bp then
+                        for _, t in ipairs(bp:GetChildren()) do
+                                if t:IsA("Tool") and isStyleTool(t) then tool = t break end
                         end
                 end
-                return nil
         end
-
-        -- đang cầm sẵn fighting style thì thôi
-        local held = char:FindFirstChildOfClass("Tool")
-        if held then
-                local tip = (held.ToolTip or ""):lower()
-                for _, name in ipairs(STYLE_NAMES) do
-                        if tip == name:lower() then return end
-                end
-        end
-
-        local tool = findIn(char) or findIn(LocalPlayer:FindFirstChild("Backpack"))
         if tool and not hum.Sit then
-                pcall(function()
-                        hum:EquipTool(tool)
-                end)
+                pcall(function() hum:EquipTool(tool) end)
+        elseif not tool and not StyleNotFoundNotified then
+                StyleNotFoundNotified = true
+                notify("Fighting Style", "Không thấy Fighting Style trong nhân vật/túi → M1 có thể không ăn. Hãy trang bị Combat trở lên!", "warning")
         end
 end
 
@@ -383,50 +399,76 @@ local function faceTarget(pos)
         end
 end
 
--- Đập bí ngô: ưu tiên fast attack remote, fallback M1 ảo
--- ⚠ FIX 12:19:0x console — gửi gói tin GIỐNG HỆT game thật:
---   * BẮT BUỘC có CombatUtil (GetRigOfHitPart) — part không resolve được rig
---     sẽ KHÔNG được gửi (game thật cũng không bao giờ gửi part không rig).
---   * RegisterHit:FireServer(partĐầu, listCÒnLạI) — pair đầu bị remove khỏi list
---     như attackMelee gốc của game → server không sinh hiệu ứng lạ
---     ("unknown index from name=PartType" / lỗi StartBeam của EffectContainer).
-local function hitPumpkin(model)
-        local root = getRoot()
-        if not (root and model and model.Parent) then return end
-        local myPos = root.Position
+-- quay camera nhìn về bí ngô để cú M1 ảo ăn đúng mục tiêu
+local function aimCamera(pos)
+        pcall(function()
+                local cam = workspace.CurrentCamera
+                if cam then
+                        cam.CFrame = CFrame.lookAt(cam.CFrame.Position, pos)
+                end
+        end)
+end
 
-        if State.FastAttack and RegisterHit and CombatUtil then
-                local parts = {}
+-- "ảnh chụp" bí ngô để biết cú đánh có ăn máu không (máu giảm / part biến mất)
+local function pumpkinSnapshot(model)
+        local s = { parts = 0, health = nil }
+        pcall(function()
+                local hum = model:FindFirstChildOfClass("Humanoid")
+                if hum then s.health = hum.Health end
                 for _, p in ipairs(model:GetDescendants()) do
-                        if p:IsA("BasePart") and (p.Position - myPos).Magnitude <= State.HitRange + 15 then
-                                table.insert(parts, p)
+                        if p:IsA("BasePart") then
+                                s.parts = s.parts + 1
                         end
                 end
-                if #parts > 0 then
-                        local hitList = {}
-                        for _, p in ipairs(parts) do
-                                local rig = nil
-                                pcall(function()
-                                        rig = CombatUtil:GetRigOfHitPart(p)
-                                end)
-                                if rig then
-                                        table.insert(hitList, { rig, p })
-                                end
-                        end
-                        if #hitList > 0 then
-                                local first = table.remove(hitList, 1)
-                                local ok = pcall(function()
-                                        if RegisterAttack then
-                                                RegisterAttack:FireServer(0)
-                                        end
-                                        RegisterHit:FireServer(first[2], hitList)
-                                end)
-                                if ok then return true end
+        end)
+        return s
+end
+
+local function snapshotChanged(a, b)
+        if not a or not b then return true end
+        if a.health and b.health and math.abs(a.health - b.health) > 0.01 then return true end
+        if a.parts ~= b.parts then return true end
+        return false
+end
+
+-- Cách đánh hiện tại: "remote" (nhanh) → tự chuyển "m1" nếu server không ăn damage
+local AtkMethod = State.FastAttack and "remote" or "m1"
+
+-- Đánh bằng remote — GIỐNG HỆT gói người chơi thật:
+--   1) Mouse:FireServer(0.35) → đăng ký cú vung, mở "cửa sổ đánh" phía server
+--   2) RegisterHit:FireServer(partĐầu, list cặp {rig, part})
+-- Part không resolve được rig sẽ KHÔNG được gửi (game thật cũng không bao giờ
+-- gửi part không rig → tránh lỗi "unknown index from name=PartType").
+local function hitPumpkinRemote(model, myPos)
+        if not (RegisterHit and CombatUtil) then return false end
+        local hitList = {}
+        for _, p in ipairs(model:GetDescendants()) do
+                if p:IsA("BasePart") and (p.Position - myPos).Magnitude <= State.HitRange + 15 then
+                        local rig = nil
+                        pcall(function()
+                                rig = CombatUtil:GetRigOfHitPart(p)
+                        end)
+                        if rig then
+                                table.insert(hitList, { rig, p })
                         end
                 end
         end
+        if #hitList == 0 then return false end
+        local first = table.remove(hitList, 1)
+        return pcall(function()
+                if MouseSwing then
+                        MouseSwing:FireServer(0.35) -- đăng ký cú vung TRƯỚC như người chơi thật
+                end
+                if RegisterAttack then
+                        RegisterAttack:FireServer(0)
+                end
+                RegisterHit:FireServer(first[2], hitList)
+        end)
+end
 
-        -- Fallback: bấm M1 ảo vào giữa màn hình (đang đứng sát + quay mặt đúng)
+-- Đánh bằng M1 ảo: quay camera vào bí ngô + Activate + click chuột ảo
+local function hitPumpkinM1(aimPos)
+        aimCamera(aimPos)
         local char = getChar()
         local tool = char and char:FindFirstChildOfClass("Tool")
         if tool then
@@ -438,7 +480,15 @@ local function hitPumpkin(model)
                 VIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
                 VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
         end)
-        return true
+end
+
+-- Điểm vào duy nhất: chọn cách đánh theo AtkMethod
+local function doHit(model, aimPos, myPos)
+        if AtkMethod == "remote" and hitPumpkinRemote(model, myPos or aimPos) then
+                return "remote"
+        end
+        hitPumpkinM1(aimPos)
+        return "m1"
 end
 
 -- ════════════════════════════ 11. AUTO FARM BÍ NGÔ ════════════════════════
@@ -458,86 +508,177 @@ local function pickNearest(rootPos)
         return best, bestD
 end
 
+local FarmLock = false -- chống chạy 2 vòng farm cùng lúc (bật/tắt liên tục)
+
+-- Đập 1 bí ngô tới khi chết. true = xong (chết/biến mất), false = bỏ quả này.
+-- CÓ đo tiến triển: 12 hit không thấy máu giảm/part mất → tự đổi cách đánh → bỏ.
 local function smashUntilDead(target)
         local startClock = os.clock()
+        local hits = 0
+        local noProgress = 0
+        local lastSnap = pumpkinSnapshot(target)
+        -- bí ngô CÓ Humanoid → đo được máu (ngưỡng ngắn).
+        -- KHÔNG có → chỉ đợi part mất dần (nhiều loại nổ 1 phát sau N hit,
+        -- không có tín hiệu gì cho tới lúc nổ) → phải cho ngân sách hit rộng hơn.
+        local hasHum = (target:FindFirstChildOfClass("Humanoid") ~= nil)
+
         while State.FarmPumpkin do
                 local char = getChar()
                 local root = getRoot()
-                if not (char and root) then return end
-                if not target or target.Parent == nil then return end
-                local humP = target:FindFirstChildOfClass("Humanoid")
-                if humP and humP.Health <= 0 then return end
+                if not (char and root) then return false end
+                if not target or target.Parent == nil then return true end
+                local hum = target:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health <= 0 then return true end
                 local rp = modelRoot(target)
-                if not rp then return end
+                if not rp then return true end
                 if (rp.Position - root.Position).Magnitude > State.HitRange + 10 then
-                        return -- bị kéo đi / bí ngô di chuyển → chọn lại
+                        return false -- bị kéo đi / bí ngô di chuyển → chọn lại
                 end
-                if os.clock() - startClock > 45 then
-                        blacklist[target] = os.clock() -- treo quá lâu, tạm bỏ
-                        return
+                if os.clock() - startClock > 15 then
+                        blacklist[target] = os.clock() -- quá lâu không chết → tạm bỏ
+                        return false
                 end
 
+                equipFightingStyle()
                 faceTarget(rp.Position)
-                hitPumpkin(target)
-                task.wait(math.max(State.HitDelay, 0.05))
+                doHit(target, rp.Position, root.Position)
+                hits = hits + 1
+
+                task.wait(AtkMethod == "m1"
+                        and math.max(State.HitDelay, 0.28) -- M1 cần nhịp như người thật
+                        or math.max(State.HitDelay, 0.05))
+
+                -- mỗi 4 hit kiểm tra 1 lần xem có ăn máu không
+                if hits % 4 == 0 then
+                        if not target.Parent then return true end
+                        State.StatusText = string.format("Đang đập bí ngô (hit %d, %s)...",
+                                hits, AtkMethod == "m1" and "M1 ảo" or "remote")
+                        local snap = pumpkinSnapshot(target)
+                        if snapshotChanged(snap, lastSnap) then
+                                noProgress = 0
+                        else
+                                noProgress = noProgress + 4
+                        end
+                        lastSnap = snap
+
+                        local budget = hasHum and 12
+                                or (AtkMethod == "remote" and 48 or 24)
+                        if noProgress >= budget then
+                                if AtkMethod == "remote" then
+                                        AtkMethod = "m1" -- remote không ăn → đổi sang M1 ảo
+                                        noProgress = 0
+                                        State.StatusText = "Remote không ăn damage → chuyển sang M1 ảo..."
+                                        notify("Fast Attack", "Remote không gây damage → tự chuyển sang M1 ảo.", "warning")
+                                else
+                                        blacklist[target] = os.clock()
+                                        return false -- M1 cũng không ăn → bỏ quả này
+                                end
+                        end
+                end
         end
+        return false
 end
 
+-- Vòng farm chính — MỌI lỗi nhỏ đều pcall nên KHÔNG BAO GIỜ chết âm thầm
 local function farmLoop()
+        if FarmLock then return end
+        FarmLock = true
+        local noneCount = 0
         while State.FarmPumpkin do
-                local char, root, hum = getChar(), getRoot(), getHum()
-                if not (char and root and hum) or hum.Health <= 0 then
-                        State.StatusText = "Chờ hồi sinh..."
-                        MZ_Tween.cancel()
-                        task.wait(1)
-                elseif State.FarmMode == "Tới gần từng bí ngô" then
-                        local target, dist = pickNearest(root.Position)
-                        if not target then
-                                State.StatusText = "Không thấy bí ngô — chờ respawn..."
-                                task.wait(1.5)
-                        else
+                local ok, err = pcall(function()
+                        local char, root, hum = getChar(), getRoot(), getHum()
+                        if not (char and root and hum) or hum.Health <= 0 then
+                                State.StatusText = "Chờ hồi sinh..."
+                                MZ_Tween.cancel()
+                                task.wait(1)
+                                return
+                        end
+
+                        if State.FarmMode == "Tới gần từng bí ngô" then
+                                local target, dist = pickNearest(root.Position)
+                                if not target then
+                                        noneCount = noneCount + 1
+                                        State.StatusText = "Không thấy bí ngô — chờ respawn..."
+                                        -- chờ lâu quá thì xóa blacklist cũ để thử lại
+                                        if noneCount % 4 == 0 then
+                                                local now = os.clock()
+                                                for m, t in pairs(blacklist) do
+                                                        if (now - t) > 12 then blacklist[m] = nil end
+                                                end
+                                        end
+                                        task.wait(1.5)
+                                        return
+                                end
+                                noneCount = 0
                                 local rp = modelRoot(target)
+                                if not rp then return end
                                 -- đứng cách bí ngô ~60% tầm đập để chắc chắn trong range
-                                local offsetDir = (root.Position - rp.Position).Unit
+                                local offsetDir = (root.Position - rp.Position)
                                 local standDist = math.max(State.HitRange * 0.55, 6)
-                                local goal = CFrame.new(rp.Position + offsetDir * standDist)
-                                State.StatusText = string.format("Đang bay tới bí ngô (%.0fm)", dist)
-                                equipFightingStyle()
-                                MZ_Tween.to(goal, State.TweenSpeed, 3)
-                                if State.FarmPumpkin then
+                                local reached = true
+                                if offsetDir.Magnitude < 0.1 then
+                                        -- đang đứng đè lên bí ngô → lùi nhẹ ra rồi đập luôn
+                                        pcall(function()
+                                                getRoot().CFrame = CFrame.new(
+                                                        rp.Position + Vector3.new(standDist, 0, 0))
+                                        end)
+                                else
+                                        local goal = CFrame.new(rp.Position + offsetDir.Unit * standDist)
+                                        State.StatusText = string.format("Đang bay tới bí ngô (%.0fm)", dist)
+                                        equipFightingStyle()
+                                        reached = MZ_Tween.to(goal, State.TweenSpeed, 3)
+                                end
+                                if not State.FarmPumpkin then return end
+                                if reached then
                                         State.StatusText = "Đang đập bí ngô..."
                                         smashUntilDead(target)
-                                end
-                                task.wait(0.1)
-                        end
-                else -- "Đập trong tầm (đứng yên)"
-                        refreshPumpkins(true)
-                        local rootPos = root.Position
-                        local found = 0
-                        for _, m in ipairs(pumpkinCache) do
-                                if pumpkinValid(m, rootPos) then
-                                        local rp = modelRoot(m)
-                                        if rp and (rp.Position - rootPos).Magnitude <= State.HitRange then
-                                                found = found + 1
-                                                if found == 1 then
-                                                        equipFightingStyle()
-                                                end
-                                                faceTarget(rp.Position)
-                                                hitPumpkin(m)
-                                                task.wait(math.max(State.HitDelay, 0.05))
-                                                if not State.FarmPumpkin then break end
+                                else
+                                        -- không tới được (kẹt / game kéo về) → tạm bỏ quả này
+                                        local rp2 = modelRoot(target)
+                                        local r2 = getRoot()
+                                        if rp2 and r2
+                                                and (rp2.Position - r2.Position).Magnitude > State.HitRange + 10 then
+                                                blacklist[target] = os.clock()
+                                                State.StatusText = "Bỏ qua bí ngô khó tới..."
                                         end
                                 end
+                                task.wait(0.1)
+                        else -- "Đập trong tầm (đứng yên)"
+                                refreshPumpkins(true)
+                                local rootPos = root.Position
+                                local found = 0
+                                for _, m in ipairs(pumpkinCache) do
+                                        if not State.FarmPumpkin then break end
+                                        if pumpkinValid(m, rootPos) then
+                                                local rp = modelRoot(m)
+                                                if rp and (rp.Position - rootPos).Magnitude <= State.HitRange then
+                                                        found = found + 1
+                                                        equipFightingStyle()
+                                                        faceTarget(rp.Position)
+                                                        doHit(m, rp.Position, rootPos)
+                                                        task.wait(AtkMethod == "m1"
+                                                                and math.max(State.HitDelay, 0.28)
+                                                                or math.max(State.HitDelay, 0.05))
+                                                end
+                                        end
+                                end
+                                State.StatusText = found > 0
+                                        and string.format("Đang đập trong tầm (%d bí ngô, %s)",
+                                                found, AtkMethod == "m1" and "M1 ảo" or "remote")
+                                        or "Đứng yên — không có bí ngô trong tầm"
+                                if found == 0 then
+                                        task.wait(0.8)
+                                end
                         end
-                        State.StatusText = found > 0
-                                and string.format("Đang đập trong tầm (%d bí ngô)", found)
-                                or "Đứng yên — không có bí ngô trong tầm"
-                        if found == 0 then
-                                task.wait(0.8)
-                        end
+                end)
+                if not ok then
+                        warn("[MZ Halloween] farmLoop lỗi (tự tiếp tục): " .. tostring(err))
+                        State.StatusText = "Lỗi nhỏ — tự tiếp tục..."
+                        task.wait(0.5)
                 end
         end
         State.StatusText = "Tắt"
+        FarmLock = false
 end
 
 -- ════════════════════════════ 12. NHẶT ĐỒ RƠI ═════════════════════════════
@@ -552,33 +693,48 @@ local function matchKeyword(text, csv)
         return false
 end
 
+-- KHÔNG nhặt part của chính quả bí ngô (tránh dịch chuyển nhân vật loạn xạ)
+local function isPumpkinModelPart(p)
+        local anc = p:FindFirstAncestorOfClass("Model")
+        while anc do
+                if anc.Name:lower():find("pumpkin") then return true end
+                anc = anc:FindFirstAncestorOfClass("Model")
+        end
+        return false
+end
+
 local function pickupLoop()
         if LoopLock.pickup then return end
         LoopLock.pickup = true
         while State.PickupDrops do
-                local root = getRoot()
-                local myChar = LocalPlayer.Character
-                if root and myChar then
-                        for _, p in ipairs(workspace:GetDescendants()) do
-                                if not State.PickupDrops then break end
-                                if p:IsA("BasePart") and not p:IsDescendantOf(myChar)
-                                        and matchKeyword(p.Name, State.PickupKeywords) then
-                                        local d = (p.Position - root.Position).Magnitude
-                                        if d <= State.PickupRadius then
-                                                local ok = pcall(function()
-                                                        firetouchinterest(root, p, 0)
-                                                        firetouchinterest(root, p, 1)
-                                                end)
-                                                if not ok and d <= 200 then
-                                                        pcall(function()
-                                                                root.CFrame = CFrame.new(p.Position + Vector3.new(0, 2, 0))
+                local ok = pcall(function()
+                        local root = getRoot()
+                        local myChar = LocalPlayer.Character
+                        if root and myChar then
+                                for _, p in ipairs(workspace:GetDescendants()) do
+                                        if not State.PickupDrops then break end
+                                        if p:IsA("BasePart") and not p:IsDescendantOf(myChar)
+                                                and not isPumpkinModelPart(p)
+                                                and matchKeyword(p.Name, State.PickupKeywords) then
+                                                local d = (p.Position - root.Position).Magnitude
+                                                if d <= State.PickupRadius then
+                                                        local fired = pcall(function()
+                                                                firetouchinterest(root, p, 0)
+                                                                firetouchinterest(root, p, 1)
                                                         end)
+                                                        -- chỉ dịch chuyển khi KHÔNG đang bay farm (tránh giật nhân vật)
+                                                        if not fired and d <= 200 and not MZ_Tween.running then
+                                                                pcall(function()
+                                                                        root.CFrame = CFrame.new(p.Position + Vector3.new(0, 2, 0))
+                                                                end)
+                                                        end
+                                                        task.wait(0.15)
                                                 end
-                                                task.wait(0.15)
                                         end
                                 end
                         end
-                end
+                end)
+                if not ok then task.wait(1) end
                 task.wait(0.6)
         end
         LoopLock.pickup = false
@@ -632,12 +788,17 @@ local function promptLoop(keywordsGetter, radiusGetter, statusKey)
                         end
                         if best then
                                 if bestD > 10 then
-                                        local goal = bestPart.CFrame + (root.Position - bestPart.Position).Unit * 6
-                                        MZ_Tween.to(CFrame.new(goal.Position), State.TweenSpeed, 5)
+                                        local away = (root.Position - bestPart.Position)
+                                        if away.Magnitude > 0.1 then
+                                                local goal = bestPart.CFrame + away.Unit * 6
+                                                pcall(function()
+                                                        MZ_Tween.to(CFrame.new(goal.Position), State.TweenSpeed, 5)
+                                                end)
+                                        end
                                 end
                                 if State[statusKey] and bestPart then
                                         faceTarget(bestPart.Position)
-                                        firePrompt(best)
+                                        pcall(firePrompt, best)
                                 end
                                 task.wait(1)
                         else
@@ -777,14 +938,16 @@ local function espLabelLoop()
                 if camPos then
                         for m, o in pairs(ESPObjects) do
                                 local r = modelRoot(m)
-                                if r and o.label then
-                                        if State.ESPDistance then
-                                                o.label.Text = (o.kind == "patch" and "🎃 Patch • " or "🎃 Pumpkin • ")
-                                                        .. tostring(math.floor((r.Position - camPos).Magnitude + 0.5)) .. "m"
-                                        else
-                                                o.label.Text = o.kind == "patch" and "🎃 PumpkinPatch" or "🎃 Pumpkin"
+                                pcall(function()
+                                        if r and o.label then
+                                                if State.ESPDistance then
+                                                        o.label.Text = (o.kind == "patch" and "🎃 Patch • " or "🎃 Pumpkin • ")
+                                                                .. tostring(math.floor((r.Position - camPos).Magnitude + 0.5)) .. "m"
+                                                else
+                                                        o.label.Text = o.kind == "patch" and "🎃 PumpkinPatch" or "🎃 Pumpkin"
+                                                end
                                         end
-                                end
+                                end)
                         end
                 end
                 task.wait(0.4)
@@ -986,10 +1149,11 @@ SecFarm:CreateSlider({
 
 SecFarm:CreateToggle({
         Title = "Fast Attack (remote)",
-        Description = "Đập nhanh bằng RegisterHit — tắt nếu server chặn",
+        Description = "Đập nhanh bằng RegisterHit — không ăn sẽ tự chuyển sang M1 ảo",
         Default = true,
         Callback = function(v)
                 State.FastAttack = v
+                AtkMethod = v and "remote" or "m1"
         end,
 })
 
@@ -1280,19 +1444,21 @@ SecMisc:CreateParagraph({
 -- ════════════════════════════ 21. VÒNG LẶP TRẠNG THÁI ════════════════════
 task.spawn(function()
         while true do
-                if statusPara and statusPara.SetContent then
-                        local pumpkins = refreshPumpkins()
-                        local patches = 0
-                        for _, d in ipairs(workspace:GetDescendants()) do
-                                if d:IsA("Model") and d.Name:lower():find("patch") then
-                                        patches = patches + 1
+                pcall(function()
+                        if statusPara and statusPara.SetContent then
+                                local pumpkins = refreshPumpkins()
+                                local patches = 0
+                                for _, d in ipairs(workspace:GetDescendants()) do
+                                        if d:IsA("Model") and d.Name:lower():find("patch") then
+                                                patches = patches + 1
+                                        end
                                 end
+                                statusPara:SetContent(string.format(
+                                        "🎃 Bí ngô trong map: %d   |   📍 PumpkinPatch: %d\n🎯 Trạng thái: %s",
+                                        #pumpkins, patches, State.StatusText or "Tắt"
+                                ))
                         end
-                        statusPara:SetContent(string.format(
-                                "🎃 Bí ngô trong map: %d   |   📍 PumpkinPatch: %d\n🎯 Trạng thái: %s",
-                                #pumpkins, patches, State.StatusText or "Tắt"
-                        ))
-                end
+                end)
                 task.wait(2)
         end
 end)
