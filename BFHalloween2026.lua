@@ -88,10 +88,18 @@
     • FIX "đứng cao hơn không đánh tới bí ngô": safeStandPos bỏ +3.5, đứng
       NGANG TẦM bí ngô (chỉ nâng nếu dưới mặt đất/nước). M1 + camera nhìn
       thẳng → đánh DÍNH 100%.
-    • LỌC CONSOLE: hook `warn` ẩn "PartType", "Jack o' Lantern parent locked",
-      "VehicleSeat", "active dialogue", "NPCStreaming"… → console sạch.
-      (Lưu ý: runtime error đỏ của game như ShipController KHÔNG hook được —
-      là bug của game, không liên quan script.)
+
+    ═══ UPDATE v2.7 — FIX VĂNG GAME (CRITICAL) ═══
+    • FIX "chạy script xong bị văng game": v2.6 hook `warn` bằng hookfunction
+      → hookfunction thay hàm IN-PLACE → `oldWarn = warn` lưu tham chiếu bị
+      thay → oldWarn(...) gọi lại hook → ĐỆ QUY VÔ HẠN → STACK OVERFLOW →
+      CRASH. Đã XÓA hoàn toàn hook warn (console hiện lỗi game là bình thường,
+      không ảnh hưởng farm).
+    • StreamingMinRadius/TargetRadius: giảm từ 1e8 → 5000 (1e8 quá lớn →
+      client cố load cả map → tràn RAM → crash).
+    • Anti-Kick: MẶC ĐỊNH TẮT (hook __namecall có thể bị anticheat phát
+      hiện → chỉ bật khi owner test thấy bị kick).
+    • Tốc độ bay 250 + đứng ngang bí ngô (giữ từ v2.6).
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -157,7 +165,8 @@ local State = {
 
         -- Anti-Ban / Anti-Cheat (mượn + cải thiện từ Banana Cat Hub)
         AntiBan     = true,  -- nâng thread identity + mở rộng StreamingRadius (load cả map)
-        AntiKick    = true,  -- chặn LocalPlayer:Kick() + remote kick của anticheat
+        AntiKick    = false, -- MẶC ĐỊNH TẮT — hook __namecall có thể bị anticheat phát hiện,
+                             -- chỉ bật khi owner test và thấy bị kick (nếu game có kick client)
         AntiTeleport= true,  -- chặn nhân vật bị game "kéo về" khi farm xa (anti-teleport server)
 }
 
@@ -214,10 +223,13 @@ end
 ElevateIdentity()
 
 local function applyStreamingFix()
+        -- StreamingEnabled là property server-set, client không đổi được (pcall bắt lỗi).
+        -- StreamingMinRadius/TargetRadius: client set được, nhưng KHÔNG đặt 1e8 (quá lớn
+        -- → client cố load cả map → tràn RAM → crash). Dùng 5000 studs là đủ.
         pcall(function() workspace.StreamingEnabled = false end)
         pcall(function()
-                workspace.StreamingMinRadius = 1e8
-                workspace.StreamingTargetRadius = 1e8
+                workspace.StreamingMinRadius = 5000
+                workspace.StreamingTargetRadius = 5000
         end)
 end
 if State.AntiBan then applyStreamingFix() end
@@ -263,43 +275,13 @@ local function installAntiKick()
 end
 if State.AntiKick then installAntiKick() end
 
--- ════════════════════════════ 4c. LỌC CONSOLE (ẩn lỗi game nhiễu) ═══════════
--- Mục đích: "unknown index from name=PartType", "Jack o' Lantern parent locked",
--- "VehicleSeat is not a valid member", "there's already an active dialogue"...
--- đều là LỖI CỦA GAME (combat module / NPCStreaming) khi script M1 vào bí ngô.
--- KHÔNG phải lỗi của script, nhưng hiện hoài trong console → owner muốn sạch.
--- Hook `warn` (global) để ẩn các message này. `error`/runtime exception KHÔNG
--- hook (nguy hiểm, có thể phá game).
-local consoleFilterInstalled = false
-local function installConsoleFilter()
-        if consoleFilterInstalled then return end
-        consoleFilterInstalled = true
-        pcall(function()
-                if not (hookfunction and newcclosure) then return end
-                local suppressKw = {
-                        "PartType", "out of radius", "CChain",
-                        "Jack o' Lantern", "parent is locked", "Parent property",
-                        "VehicleSeat is not a valid member",
-                        "there's already an active dialogue",
-                        "StartBeam", "NPCStreaming",
-                }
-                local function shouldSuppress(...)
-                        local n = select("#", ...)
-                        if n == 0 then return false end
-                        local msg = tostring((...))
-                        for _, kw in ipairs(suppressKw) do
-                                if msg:find(kw, 1, true) then return true end
-                        end
-                        return false
-                end
-                local oldWarn = warn
-                hookfunction(warn, newcclosure(function(...)
-                        if shouldSuppress(...) then return end
-                        return oldWarn(...)
-                end))
-        end)
-end
-installConsoleFilter()
+-- ════════════════════════════ 4c. GHI CHÚ VỀ LỖI CONSOLE ═══════════════════
+-- ⚠ KHÔNG HOOK `warn` (v2.6 từng hook → bị "văng game" vì hookfunction thay
+--   hàm in-place → oldWarn trỏ vào hook → đệ quy vô hạn → stack overflow).
+--   Các lỗi "PartType", "Jack o' Lantern parent locked", "VehicleSeat"...
+--   đều là LỖI CỦA GAME (combat module / NPCStreaming), không phải script.
+--   Chúng KHÔNG ảnh hưởng farm → cứ để console hiện, an toàn hơn hook.
+-- (Nếu muốn ẩn: executor của bạn có tính năng filter console sẵn — dùng cái đó.)
 
 -- ════════════════════════════ 5. TWEEN (mượn ý tưởng Banana Cat Hub) ══════
 -- Tween theo Heartbeat: set CFrame từng bước theo tốc độ, có noclip,
@@ -2318,9 +2300,9 @@ SecAntiBan:CreateToggle({
 })
 
 SecAntiBan:CreateToggle({
-        Title = "Anti-Kick (chặn :Kick)",
-        Description = "Hook __namecall chặn LocalPlayer:Kick() từ anticheat client.",
-        Default = true,
+        Title = "Anti-Kick (chặn :Kick) — chỉ bật khi cần",
+        Description = "Hook __namecall chặn LocalPlayer:Kick(). MẶC ĐỊNH TẮT — chỉ bật nếu bị kick, vì hook có thể bị anticheat phát hiện.",
+        Default = false,
         Callback = function(v)
                 State.AntiKick = v
                 if v then
@@ -2357,14 +2339,13 @@ SecMisc:CreateToggle({
 
 SecMisc:CreateParagraph({
         Title = "🛠️ Về lỗi console trong game",
-        Content = "✅ ĐÃ LỌC: 'PartType', 'Jack o' Lantern parent locked', 'CChain out of radius',\n"
-                .. "'there's already an active dialogue', 'StartBeam', 'NPCStreaming'… →\n"
-                .. "hook `warn` ẩn hết (console sạch từ v2.6).\n\n"
-                .. "⚠ KHÔNG lọc được (runtime error đỏ của game):\n"
-                .. "• 'Disabled is not a valid member of NumberValue ... Rage' → script Race/Buff của game.\n"
-                .. "• 'VehicleSeat is not a valid member of Model PirateSloop' → ShipController của game.\n"
-                .. "→ Là bug của CHÍNH GAME, KHÔNG liên quan script, không ảnh hưởng farm.\n"
-                .. "  (Hook `error` sẽ phá game nên không làm.)",
+        Content = "Các lỗi 'PartType', 'Jack o' Lantern parent locked', 'VehicleSeat',\n"
+                .. "'active dialogue', 'CChain out of radius'... đều là LỖI CỦA GAME\n"
+                .. "(combat module / NPCStreaming / ShipController), KHÔNG phải script.\n"
+                .. "Chúng KHÔNG ảnh hưởng farm.\n\n"
+                .. "⚠ Script KHÔNG hook `warn` để ẩn (v2.6 từng hook → bị văng game\n"
+                .. "do hookfunction đệ quy vô hạn). Dùng filter console của executor\n"
+                .. "nếu muốn ẩn. Hook `error` sẽ phá game nên không làm.",
 })
 
 SecMisc:CreateToggle({
@@ -2468,5 +2449,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v2.6!\nFix tốc 250 + Đứng ngang bí ngô + Lọc console.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v2.6 (speed clamp + stand level + console filter) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v2.7!\nFix văng game + Tốc 250 + Đứng ngang bí ngô.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v2.7 (fix crash + speed 250 + stand level) | Library: Meizu v3.1")
