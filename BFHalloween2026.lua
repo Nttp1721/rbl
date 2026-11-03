@@ -48,9 +48,10 @@
     • AUTO BẬT BUSO HAKI (Aura): CommF_:InvokeServer("Buso") — kỹ thuật
       lấy từ Banana Cat Hub → đập bí ngô đau hơn hẳn.
 
-    ═══ UPDATE v2.3 — ỔN ĐỊNH: HẾT "TỰ TELE CHỖ TRỐNG" ═══
-    • Ưu tiên bí ngô nằm TRONG vùng PumpkinPatch (quả THẬT) — lược bỏ
-      pumpkin TRANG TRÍ ở spawn/safe zone (bay tới chỉ để đứng trống).
+    ═══ UPDATE v2.4 — KHÓA MỤC TIÊU + GIỚI HẠN VÙNG FARM ═══
+    • Chỉ farm bí ngô có marker sự kiện hoặc nằm trong PumpkinPatch;
+      không fallback sang bí ngô trang trí khi không tìm được patch.
+    • Giới hạn vùng tìm quanh vị trí bật farm, tránh bay dây chuyền qua map.
     • Quả đập hoài không mất máu → cấm 120s (trước 15s) → không bay
       đi bếp lại quả giả nữa.
     • Nhặt đồ KHÔNG dịch chuyển nhân vật khi farm đang bật (hết bị kéo
@@ -73,6 +74,7 @@ end
 -- ════════════════════════════ 2. SERVICES ═════════════════════════════════
 local Players         = game:GetService("Players")
 local RunService      = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 local VirtualUser     = game:GetService("VirtualUser")
 local VIM             = game:GetService("VirtualInputManager")
 local TeleportService = game:GetService("TeleportService")
@@ -89,6 +91,7 @@ local State = {
         FilterMode    = "Tất cả bí ngô",
         TweenSpeed    = 350,
         HitRange      = 30,
+        MaxFarmDistance = 350, -- bán kính tính từ vị trí bật farm; không cho đuổi mục tiêu xuyên map
         StandDist     = 4,    -- đứng SÁT CẠNH bí ngô khi đập (bản cũ đứng 10+ studs → M1 trượt)
         AutoBuso      = true, -- tự bật Buso Haki (Aura) khi đánh
         HitDelay      = 0.12,
@@ -415,6 +418,21 @@ end
 
 local pickupKw = splitCsv(State.PickupKeywords)
 
+-- Có thể đánh dấu mục tiêu trong experience của bạn bằng tag/attribute này.
+-- Pumpkin không được đánh dấu chỉ hợp lệ nếu nằm trong vùng PumpkinPatch.
+local EVENT_PUMPKIN_TAG = "MZ_HalloweenPumpkin"
+local EVENT_PATCH_TAG = "MZ_HalloweenPumpkinPatch"
+
+local function hasEventMarker(instance, tagName)
+        if not instance then return false end
+        local marked = false
+        pcall(function()
+                marked = instance:GetAttribute(tagName) == true
+                        or CollectionService:HasTag(instance, tagName)
+        end)
+        return marked
+end
+
 local function refreshPumpkins(force)
         local now = os.clock()
         local sig = worldSignature()
@@ -431,14 +449,13 @@ local function refreshPumpkins(force)
                 local cls = d.ClassName
                 if cls == "Model" then
                         local ln = d.Name:lower()
-                        if ln:find("pumpkin") then
-                                if ln:find("patch") then
-                                        table.insert(patches, d)
-                                elseif not (ln:find("great") or ln:find("boss") or ln:find("king")) then
-                                        table.insert(pumpkins, d)
-                                end
-                        elseif ln:find("patch") then
+                        local compactName = ln:gsub("[^%w]", "")
+                        if compactName == "pumpkinpatch"
+                                or hasEventMarker(d, EVENT_PATCH_TAG) then
                                 table.insert(patches, d)
+                        elseif compactName == "pumpkin"
+                                or hasEventMarker(d, EVENT_PUMPKIN_TAG) then
+                                table.insert(pumpkins, d)
                         end
                 elseif cls == "ProximityPrompt" then
                         table.insert(prompts, d)
@@ -475,8 +492,42 @@ end
 local function modelRoot(model)
         if not model then return nil end
         return model.PrimaryPart
-                or model:FindFirstChild("RootPart")
+                or model:FindFirstChild("HumanoidRootPart", true)
+                or model:FindFirstChild("RootPart", true)
                 or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local PATCH_PADDING = 35
+local PATCH_FALLBACK_RADIUS = 140
+
+local function pumpkinInsidePatch(pumpkinRoot, patch)
+        if not (pumpkinRoot and patch and patch.Parent) then return false end
+        local ok, boxCFrame, boxSize = pcall(function()
+                return patch:GetBoundingBox()
+        end)
+        if ok and boxCFrame and boxSize and boxSize.Magnitude > 0 then
+                local localPos = boxCFrame:PointToObjectSpace(pumpkinRoot.Position)
+                local verticalPadding = math.max(boxSize.Y * 0.5 + PATCH_PADDING, 80)
+                return math.abs(localPos.X) <= boxSize.X * 0.5 + PATCH_PADDING
+                        and math.abs(localPos.Z) <= boxSize.Z * 0.5 + PATCH_PADDING
+                        and math.abs(localPos.Y) <= verticalPadding
+        end
+        local patchRoot = modelRoot(patch)
+        return patchRoot ~= nil
+                and (pumpkinRoot.Position - patchRoot.Position).Magnitude <= PATCH_FALLBACK_RADIUS
+end
+
+local function isEventPumpkinTarget(model, rootPart, patches)
+        if hasEventMarker(model, EVENT_PUMPKIN_TAG) then return true end
+        for _, patch in ipairs(patches or {}) do
+                if pumpkinInsidePatch(rootPart, patch) then return true end
+        end
+        return false
+end
+
+local function withinFarmRadius(position, origin)
+        if not origin then return true end
+        return (position - origin).Magnitude <= (tonumber(State.MaxFarmDistance) or 350)
 end
 
 local function pumpkinValid(model, fromPos)
@@ -803,36 +854,24 @@ local function safeStandPos(pos)
         return Vector3.new(pos.X, baseY + 3.5, pos.Z)
 end
 
--- CHỐN "TELE LẠC": ưu tiên bí ngô nằm TRONG vùng PumpkinPatch (quả THẬT),
--- lược bỏ pumpkin TRANG TRÍ ở spawn/safe zone (đập không ăn damage).
--- Hết quả gần patch mới chịu dùng quả ngoài vùng (fallback như bản cũ).
-local PATCH_RANGE = 400 -- studs tính từ mốc PumpkinPatch
-
-local function pickNearest(rootPos)
-        local best, bestD = nil, math.huge           -- dự phòng: mọi quả hợp lệ
-        local bestReal, bestRealD = nil, math.huge   -- ưu tiên: quả trong vùng patch
-        local patches = MZ_World.patches
-        for _, m in ipairs(refreshPumpkins()) do -- đọc cache (không quét đè)
+-- Chọn mục tiêu sau khi cache được cập nhật. Không dùng fallback toàn map:
+-- mục tiêu phải có marker rõ ràng hoặc nằm trong bounds của PumpkinPatch.
+local function pickNearest(rootPos, farmOrigin)
+        local pumpkins = refreshPumpkins()
+        local patches = MZ_World.patches -- lấy sau refresh để tránh dùng danh sách patch cũ
+        local best, bestD = nil, math.huge
+        for _, m in ipairs(pumpkins) do
                 if pumpkinValid(m, rootPos) then
                         local r = modelRoot(m)
-                        if r then
+                        if r and withinFarmRadius(r.Position, farmOrigin)
+                                and isEventPumpkinTarget(m, r, patches) then
                                 local d = (r.Position - rootPos).Magnitude
-                                if d < bestD then
+                                if d <= State.MaxFarmDistance and d < bestD then
                                         best, bestD = m, d
-                                end
-                                if #patches > 0 and d < bestRealD then
-                                        for _, p in ipairs(patches) do
-                                                local pr = modelRoot(p)
-                                                if pr and (r.Position - pr.Position).Magnitude <= PATCH_RANGE then
-                                                        bestReal, bestRealD = m, d
-                                                        break
-                                                end
-                                        end
                                 end
                         end
                 end
         end
-        if bestReal then return bestReal, bestRealD end
         return best, bestD
 end
 
@@ -840,7 +879,7 @@ local FarmGen = 0 -- mỗi lần bật tăng gen → vòng cũ tự thoát, KHÔ
 
 -- Đập 1 bí ngô tới khi chết. true = xong (chết/biến mất), false = bỏ quả này.
 -- CÓ đo tiến triển: 12 hit không thấy máu giảm/part mất → tự đổi cách đánh → bỏ.
-local function smashUntilDead(target, myGen)
+local function smashUntilDead(target, myGen, farmOrigin)
         local startClock = os.clock()
         local hits = 0
         local noProgress = 0
@@ -859,6 +898,11 @@ local function smashUntilDead(target, myGen)
                 if hum and hum.Health <= 0 then return true end
                 local rp = modelRoot(target)
                 if not rp then return true end
+                if not withinFarmRadius(rp.Position, farmOrigin)
+                        or not isEventPumpkinTarget(target, rp, MZ_World.patches) then
+                        blacklist[target] = os.clock() + 30
+                        return false
+                end
                 local distNow = (rp.Position - root.Position).Magnitude
                 if distNow > math.max(State.StandDist or 4, 3) + 9 then
                         -- bị đẩy văng / bí ngô lăn xa → BAY LẠI đứng kế bên (không bỏ quả)
@@ -928,6 +972,7 @@ local function farmLoop()
         FarmGen = FarmGen + 1
         local myGen = FarmGen
         local noneCount = 0
+        local originChar, farmOrigin = nil, nil
         while State.FarmPumpkin and myGen == FarmGen do
                 local ok, err = pcall(function()
                         local char, root, hum = getChar(), getRoot(), getHum()
@@ -938,13 +983,18 @@ local function farmLoop()
                                 return
                         end
 
+                        if char ~= originChar then
+                                originChar = char
+                                farmOrigin = root.Position
+                        end
+
                         if State.FarmMode == "Tới gần từng bí ngô" then
                                 -- Đánh GẦN trước (pickNearest luôn chọn quả gần nhất);
                                 -- hết quả gần → tự bay ra vùng XA, KHÔNG đứng im đợi
-                                local target, dist = pickNearest(root.Position)
+                                local target, dist = pickNearest(root.Position, farmOrigin)
                                 if not target then
                                         noneCount = noneCount + 1
-                                        State.StatusText = "Hết bí ngô gần — dò lại map..."
+                                        State.StatusText = "Không thấy mục tiêu event trong bán kính farm..."
                                         -- dò lại map NGAY; chỉ thả ban SẮP HẾT HẠN (<8s),
                                         -- GIỮ ban dài (quả giả/trang trí) để không bay lại
                                         refreshPumpkins(true)
@@ -955,7 +1005,7 @@ local function farmLoop()
                                                 end
                                         end
                                         if noneCount >= 5 then
-                                                State.StatusText = "Không thấy bí ngô khả dụng — chờ respawn..."
+                                                State.StatusText = "Không thấy bí ngô event — đứng gần PumpkinPatch hoặc gắn marker..."
                                         end
                                         task.wait(0.6)
                                         return
@@ -988,7 +1038,7 @@ local function farmLoop()
                                 if not State.FarmPumpkin then return end
                                 if reached then
                                         State.StatusText = "Đang đập bí ngô..."
-                                        smashUntilDead(target, myGen)
+                                        smashUntilDead(target, myGen, farmOrigin)
                                 else
                                         -- không tới được (kẹt / game kéo về) → tạm bỏ quả này
                                         local rp2 = modelRoot(target)
@@ -1003,12 +1053,15 @@ local function farmLoop()
                         else -- "Đập trong tầm (tự đuổi khi trống)"
                                 refreshPumpkins()
                                 local rootPos = root.Position
+                                local patches = MZ_World.patches
                                 local found = 0
                                 for _, m in ipairs(MZ_World.pumpkins) do
                                         if not State.FarmPumpkin then break end
                                         if pumpkinValid(m, rootPos) then
                                                 local rp = modelRoot(m)
-                                                if rp and (rp.Position - rootPos).Magnitude <= State.HitRange then
+                                                if rp and withinFarmRadius(rp.Position, farmOrigin)
+                                                        and isEventPumpkinTarget(m, rp, patches)
+                                                        and (rp.Position - rootPos).Magnitude <= State.HitRange then
                                                         found = found + 1
                                                         equipFightingStyle()
                                                         faceTarget(rp.Position)
@@ -1024,9 +1077,9 @@ local function farmLoop()
                                                 found, AtkMethod == "m1" and "M1 ảo" or "remote")
                                         or "Không có bí ngô trong tầm..."
                                 -- KHÔNG đứng im đợi: hết bí ngô trong tầm → tự bay tới
-                                -- quả GẦN NHẤT (kể cả ở xa) rồi đập tiếp, farm liên tục
+                                -- quả GẦN NHẤT trong vùng giới hạn rồi đập tiếp
                                 if found == 0 and State.FarmPumpkin then
-                                        local target, dist = pickNearest(rootPos)
+                                        local target, dist = pickNearest(rootPos, farmOrigin)
                                         local rp = target and modelRoot(target)
                                         if rp then
                                                 local away = (rootPos - rp.Position)
@@ -1261,11 +1314,12 @@ local function espScan()
         local camPos = cam and cam.CFrame.Position
         local maxR = State.ESPMaxRange
         refreshPumpkins() -- cache chung — không quét đè (giảm lag)
+        local patches = MZ_World.patches
 
         if State.ESP then
                 for _, m in ipairs(MZ_World.pumpkins) do
                         local r = modelRoot(m)
-                        if r and camPos then
+                        if r and camPos and isEventPumpkinTarget(m, r, patches) then
                                 if maxR <= 0 or (r.Position - camPos).Magnitude <= maxR then
                                         espApply(m, "pumpkin")
                                 end
@@ -1471,7 +1525,7 @@ local SecFarm = TabFarm:CreateSection("Auto Farm Bí Ngô")
 
 SecFarm:CreateToggle({
         Title = "Bật Auto Farm Bí Ngô",
-        Description = "Đập GẦN trước → hết gần tự bay ra XA (farm liên tục). Bay sát cạnh bí ngô khi đập.",
+        Description = "Chỉ chọn bí ngô trong PumpkinPatch/được đánh dấu; giới hạn quanh vị trí bật farm.",
         Default = false,
         Callback = function(v)
                 State.FarmPumpkin = v
@@ -1543,6 +1597,15 @@ SecFarm:CreateSlider({
         Min = 100, Max = 1000, Default = State.TweenSpeed, Rounding = 0, Suffix = " studs/s",
         Callback = function(v)
                 State.TweenSpeed = v
+        end,
+})
+
+SecFarm:CreateSlider({
+        Title = "Bán kính farm quanh vị trí bật",
+        Description = "Giới hạn vùng tìm mục tiêu để tránh đuổi bí ngô xa xuyên map",
+        Min = 100, Max = 2000, Default = State.MaxFarmDistance, Rounding = 0, Suffix = " studs",
+        Callback = function(v)
+                State.MaxFarmDistance = v
         end,
 })
 
@@ -1915,4 +1978,4 @@ if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
 notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026!\nBật tab [Farm Bí Ngô] để bắt đầu.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v2.3 (ổn định, hết tele lạc) | Library: Meizu v3.1")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v2.4 (target lock + farm radius) | Library: Meizu v3.1")
