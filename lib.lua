@@ -1,122 +1,11 @@
 --[[
-    ═══════════════════════════════════════════════════════════════════
-    MEIZU LIBRARY v3.0 "Luxe"  +  MEIZU EXTRAS v1.1  —  BẢN GHÉP SẴN
-    ═══════════════════════════════════════════════════════════════════
-    ⚠ FILE NÀY ĐÃ GHÉP SẴN library + extras → DÙNG LUÔN, ĐỪNG GHÉP THÊM!
-    (Bản ghép thủ công theo hướng dẫn cũ bị lỗi cú pháp vì lệnh return
-     nằm giữa file → loadstring trả nil → "attempt to call a nil value")
-
-    CÁCH DÙNG — chọn 1 trong 2:
-    ─────────────────────────────────────────────────────────────────
-    CÁCH 1 • TẢI TỪ LINK (thay link cũ bằng link file này):
-        local MeizuLibrary = loadstring(game:HttpGet("LINK_FILE_NÀY"))()
-        local Window = MeizuLibrary:CreateWindow{ Title = "Hub của tôi" }
-        -- tiện ích extras dùng biến global MeizuExtras (đã tự nạp):
-        MeizuExtras:EnableWatermark{ ShowFPS = true, ShowPing = true }
-
-    CÁCH 2 • DÁN TRỰC TIẾP vào executor:
-        Dán toàn bộ file, viết hub của bạn vào chỗ đánh dấu
-        "VIẾT HUB CỦA BẠN TẠI ĐÂY" gần cuối file (ngay TRÊN dòng
-        return MeizuLibrary), ví dụ:
-            local Window = MeizuLibrary:CreateWindow{ Title = "Hub của tôi" }
-            Extras:EnableWatermark{ ShowFPS = true }
-
-    SỬA TRONG BẢN NÀY (v3.0.1):
-      • Fix "attempt to call a nil value" ở dòng 1 (nguyên nhân như trên).
-      • Thêm MEIZU SAFE-ENV: môi trường thiếu getgenv/gethui/writefile...
-        tự được thay bằng bản giả an toàn → chạy được cả trong Roblox Studio.
-      • Extras tự Init + tự bám theme/màu nhấn của library, không cần gọi tay.
-]]
-
---// ════════════════ MEIZU SAFE-ENV (giữ nguyên, đừng xoá) ════════════════
--- Tự thay hàm executor bị thiếu bằng bản giả an toàn → hết lỗi
--- "attempt to call a nil value" trên môi trường yếu / Roblox Studio.
-do
-	local function _mzMissing(name)
-		warn("[MEIZU SAFE-ENV] Moi truong thieu '" .. name .. "' -> da thay bang ban gia an toan")
-	end
-
-	if type(getgenv) ~= "function" then
-		getgenv = function() return _G end
-		_mzMissing("getgenv")
-	end
-
-	if type(gethui) ~= "function" then
-		gethui = function()
-			local plr = game:GetService("Players").LocalPlayer
-			if plr then
-				local pg = plr:FindFirstChildOfClass("PlayerGui")
-				if pg then return pg end
-			end
-			return game:GetService("CoreGui")
-		end
-		_mzMissing("gethui")
-	end
-
-	if type(syn) ~= "table" then syn = {} end
-	if type(syn.protect_gui) ~= "function" then
-		syn.protect_gui = function(gui) return gui end
-		_mzMissing("syn.protect_gui")
-	end
-
-	do
-		local MEM = {}
-		if type(writefile) ~= "function" then
-			writefile = function(n, d) MEM[tostring(n)] = tostring(d) end
-			_mzMissing("writefile (ghi RAM)")
-		end
-		if type(readfile) ~= "function" then
-			readfile = function(n) return MEM[tostring(n)] or "" end
-			_mzMissing("readfile (doc RAM)")
-		end
-		if type(appendfile) ~= "function" then
-			appendfile = function(n, d) MEM[tostring(n)] = (MEM[tostring(n)] or "") .. tostring(d) end
-		end
-		if type(isfile) ~= "function" then
-			isfile = function(n) return MEM[tostring(n)] ~= nil end
-		end
-		if type(isfolder) ~= "function" then isfolder = function() return false end end
-		if type(makefolder) ~= "function" then makefolder = function() end end
-		if type(listfiles) ~= "function" then listfiles = function() return {} end end
-	end
-
-	if type(setclipboard) ~= "function" then
-		setclipboard = function(txt)
-			warn("[MEIZU SAFE-ENV] setclipboard khong kha dung. Noi dung: " .. tostring(txt))
-		end
-	end
-	if type(identifyexecutor) ~= "function" then
-		identifyexecutor = function() return "Unknown/Studio" end
-	end
-	if type(request) ~= "function" and type(http_request) ~= "function" then
-		http_request = function() return { Success = false, StatusCode = 0, Body = "", Headers = {} } end
-		request = http_request
-		_mzMissing("request")
-	elseif type(http_request) ~= "function" and type(request) == "function" then
-		http_request = request
-	end
-	if type(cloneref) ~= "function" then cloneref = function(obj) return obj end end
-	if type(hookfunction) ~= "function" then hookfunction = function(old) return old end end
-	if type(loadstring) ~= "function" then
-		loadstring = function()
-			warn("[MEIZU SAFE-ENV] loadstring khong kha dung -> dan code truc tiep, dung tai link!")
-			return nil
-		end
-	end
-end
-
---[[ ════════════════════════════════════════════════════════════
-     PHẦN 1 • MEIZU LIBRARY v3.0 "Luxe" (nguyên vẹn, không sửa chữ nào)
-     ════════════════════════════════════════════════════════════ ]]
-
---[[
     ███╗   ███╗███████╗██╗███████╗██╗   ██╗
     ████╗ ████║██╔════╝██║██╔════╝╚██╗ ██╔╝
     ██╔████╔██║█████╗  ██║███████╗ ╚████╔╝
     ██║╚██╔╝██║██╔══╝  ██║╚════██║  ╚██╔╝
     ██║ ╚═╝ ██║███████╗██║███████║   ██║
     ╚═╝     ╚═╝╚══════╝╚═╝╚══════╝   ╚═╝
-    MEIZU LIBRARY v3.0 "Luxe" — Modern UI Library cho Roblox (Fluent-inspired)
+    MEIZU LIBRARY v3.1 "Luxe" — Modern UI Library cho Roblox (Fluent-inspired)
     ===========================================================================
     API (tương thích hoàn toàn với bản v2.x):
       Library:CreateWindow{Title, SubTitle, Theme, Accent, ToggleKeybind, ToggleUIButton,
@@ -134,7 +23,27 @@ end
       Library:SetFont("Source Sans" | "Builder Sans" | "Gotham")
       Library:SaveSettings(name) / LoadSettings(name, silent) / ListConfigs()
       Library:Destroy()   |   Library.Flags --> giá trị theo Flag
-      Library.Utils = {UpperVN, StripAccents, NormalizeSearch, EscapeRich}
+      Library.Utils = {UpperVN, StripAccents, NormalizeSearch, EscapeRich, FormatNumber, Comma, FormatTime}
+      -- Mới ở v3.1:
+      Tab/Section:CreateSegmented{Title, Options, Default, Flag, Callback}   -- nút chọn kính trượt (kiểu iOS)
+      Tab/Section:CreateProgress{Title, Min, Max, Default, Format}  -> .SetValue(v, text) .SetRange(min, max)
+      Tab/Section:CreateStepper{Title, Min, Max, Step, Default, Flag, Callback}   -- nút − / + (giữ để lặp)
+      Tab/Section:CreateLabel(text | {Text, Color, Size})  /  CreateDivider()
+      Section:CreateSection(name, collapsedByDefault) -> :Collapse(bool) :Toggle() :IsCollapsed()
+      Element (mọi loại): .SetVisible(b) .SetEnabled(b) .SetTitle(t) .SetDescription(t) .Destroy()
+      Tab:SetBadge(true | số | chữ | nil)        Window:SetSize(w, h) / ResetLayout() / SetWatermark(b)
+      Library:SetPerformanceMode(b) / SetGlassWindow(b) / SetBlur(b, size) / SetWatermark(b)
+      Library:LoadAutoConfig() / SaveAutoConfig()   -- cấu hình tự lưu "_auto" (bật trong Cài đặt)
+      Library:OnDestroy(fn)
+
+    CHANGELOG v3.1 (bản "toàn quyền sáng tạo")
+      [Element mới]  Segmented (nút chọn kính trượt kiểu iOS), Progress, Stepper (giữ để lặp), Label, Divider.
+                     Mọi element có thêm SetVisible / SetEnabled / SetTitle / SetDescription / Destroy.
+      [Tiện ích]     Section thu gọn được (nhớ trạng thái), Tab:SetBadge, tự lưu / tự tải cấu hình, nhớ vị trí + kích
+                     thước cửa sổ + tab đang xem, kéo góc phải-dưới để đổi kích thước cửa sổ.
+      [Liquid Glass] Nút nổi hít vào mép màn hình (+ tuỳ chọn thu nửa), huy hiệu số thông báo chưa đọc, Watermark
+                     FPS / Ping / giờ dạng kính, "Cửa sổ kính mờ" và làm mờ nền game (BlurEffect).
+      [Hiệu năng]    Chế độ tiết kiệm: tắt vòng lặp hiệu ứng, giảm tần số rainbow, tắt blur.
 
     CHANGELOG v3.0
       [Tiếng Việt]
@@ -187,10 +96,18 @@ local DEFAULT_WINDOW_SIZE    = UDim2.fromOffset(600, 430)  -- Kích thước c�
 local SIDEBAR_WIDTH          = 190                         -- Độ rộng thanh bên trái
 local HEADER_HEIGHT          = 50                          -- Chiều cao header (vùng kéo cửa sổ)
 local DEFAULT_FONT           = "Source Sans"               -- Phông mặc định (hỗ trợ dấu tiếng Việt)
+
+-- Nút nổi: thả gần mép thì tự hít vào mép trái/phải (kiểu AssistiveTouch của iPhone)
+local TOGGLE_BUTTON_SNAP        = true
+-- Nút nổi tự thu một nửa vào mép khi không dùng ~3 giây (chạm vào là bung ra)
+local TOGGLE_BUTTON_DOCK        = false
+local GLASS_SURFACE_ALPHA       = 0.16                         -- độ trong thêm của cửa sổ khi bật "Cửa sổ kính mờ"
+local DEFAULT_BLUR_SIZE         = 14                           -- độ mờ nền game mặc định
+local AUTO_CONFIG_NAME          = "_auto"                      -- file cấu hình tự lưu / tự tải
 --// ====================================================
 
 local MeizuLibrary = {
-    Version       = "3.0",
+    Version       = "3.1",
     Flags         = {},
     Theme         = "Dark",
     Accent        = Color3.fromRGB(88, 101, 242),
@@ -201,6 +118,14 @@ local MeizuLibrary = {
     FontName      = DEFAULT_FONT,
     UIScale       = 1,
     PersistUI     = true,
+    PerfMode      = false,          -- chế độ tiết kiệm (giảm hiệu ứng)
+    GlassWindow   = false,          -- cửa sổ kính mờ (trong suốt nhẹ)
+    BlurEnabled   = false,          -- làm mờ nền game khi UI mở
+    BlurSize      = DEFAULT_BLUR_SIZE,
+    AutoSave      = false,          -- tự lưu cấu hình khi có thay đổi
+    AutoLoad      = false,          -- tự tải cấu hình đã lưu khi mở UI
+    WatermarkOn   = false,          -- hiện FPS / Ping / giờ
+    CollapsedSections = {},         -- ["Tab/Section"] = true | false
     Icons         = {settings = SETTINGS_TAB_ICON},   -- Library.Icons["tên"] = "rbxassetid://..."
     _FlagElems    = {},
     _ThemeObjs    = {},
@@ -211,6 +136,10 @@ local MeizuLibrary = {
     _FontHooks    = {},
     _LocBindings  = {},
     _LocEntries   = {},          -- giữ lại cho tương thích bản cũ (không còn dùng)
+    _SurfaceObjs  = {},
+    _PerfHooks    = {},
+    _WindowOpen   = false,
+    _LastBind     = 0,
     _FontObjs     = {},
     _Connections  = {},
     _ActiveDrags  = {},
@@ -395,12 +324,47 @@ local function HashString(s)
     return string.format("%08x", h)
 end
 
+-- 116149193 -> "116,149,193"
+local function Comma(n)
+    n = tonumber(n) or 0
+    local neg = n < 0
+    local s = string.format("%d", math.floor(math.abs(n) + 0.5))
+    local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+    out = out:gsub("^,", "")
+    return (neg and "-" or "") .. out
+end
+
+-- 116149193 -> "116.1M", 2500 -> "2.5K"  (tiền / điểm kinh nghiệm trong game)
+local function FormatNumber(n)
+    n = tonumber(n) or 0
+    local a = math.abs(n)
+    local units = {{1e15, "Qa"}, {1e12, "T"}, {1e9, "B"}, {1e6, "M"}, {1e3, "K"}}
+    for _, u in ipairs(units) do
+        if a >= u[1] then
+            local v = n / u[1]
+            local txt = string.format("%.1f", v):gsub("%.0$", "")
+            return txt .. u[2]
+        end
+    end
+    if n % 1 == 0 then return string.format("%d", n) end
+    return string.format("%.1f", n)
+end
+
+-- 3725 -> "01:02:05"
+local function FormatTime(sec)
+    sec = math.max(math.floor(tonumber(sec) or 0), 0)
+    return string.format("%02d:%02d:%02d", math.floor(sec / 3600), math.floor(sec / 60) % 60, sec % 60)
+end
+
 MeizuLibrary.Utils = {
     UpperVN         = UpperVN,
     StripAccents    = StripAccents,
     NormalizeSearch = NormalizeSearch,
     EscapeRich      = EscapeRich,
     SanitizeFileName = SanitizeFileName,
+    Comma           = Comma,
+    FormatNumber    = FormatNumber,
+    FormatTime      = FormatTime,
 }
 
 --// ============================ CORE PRIMITIVES ============================
@@ -666,6 +630,24 @@ MeizuLibrary.LanguageMap = {
     ["Config loaded: %s"]   = {vi = "Đã tải cấu hình '%s'!",    en = "Config loaded: '%s'!"},
     ["Config not found!"]   = {vi = "Không tìm thấy cấu hình!", en = "Config not found!"},
     ["Could not save the config."] = {vi = "Không thể lưu cấu hình!", en = "Could not save the config."},
+    -- v3.1
+    ["Glass Window"]        = {vi = "Cửa sổ kính mờ",           en = "Glass Window"},
+    ["Slightly transparent window surfaces"] = {vi = "Nền cửa sổ trong suốt nhẹ, nhìn xuyên được game", en = "Slightly transparent window surfaces"},
+    ["Background Blur"]     = {vi = "Làm mờ nền game",          en = "Background Blur"},
+    ["Blur the game behind the UI while it is open"] = {vi = "Làm mờ cảnh game phía sau khi UI đang mở", en = "Blur the game behind the UI while it is open"},
+    ["Blur Strength"]       = {vi = "Độ mờ nền",                en = "Blur Strength"},
+    ["Performance Mode"]    = {vi = "Chế độ tiết kiệm",         en = "Performance Mode"},
+    ["Reduce effects to boost FPS"] = {vi = "Giảm hiệu ứng để tăng FPS", en = "Reduce effects to boost FPS"},
+    ["Watermark (FPS / Ping)"] = {vi = "Hiện FPS / Ping",       en = "Watermark (FPS / Ping)"},
+    ["Floating glass bar with FPS, ping and clock"] = {vi = "Thanh kính nổi hiện FPS, ping và giờ", en = "Floating glass bar with FPS, ping and clock"},
+    ["Auto Save"]           = {vi = "Tự động lưu",              en = "Auto Save"},
+    ["Save every change automatically"] = {vi = "Tự động lưu mọi thay đổi của tính năng", en = "Save every change automatically"},
+    ["Auto Load"]           = {vi = "Tự động tải",              en = "Auto Load"},
+    ["Restore the last saved settings when the UI opens"] = {vi = "Khôi phục cài đặt đã lưu mỗi khi mở UI", en = "Restore the last saved settings when the UI opens"},
+    ["Reset Window"]        = {vi = "Đặt lại cửa sổ",           en = "Reset Window"},
+    ["Restore the default size and position"] = {vi = "Trả kích thước và vị trí về mặc định", en = "Restore the default size and position"},
+    ["Window"]              = {vi = "Cửa sổ",                   en = "Window"},
+    ["Auto-loaded the last saved settings."] = {vi = "Đã tự động tải cài đặt lần trước.", en = "Auto-loaded the last saved settings."},
     ["Your executor does not support file saving (writefile)."] = {
         vi = "Executor không hỗ trợ lưu file (writefile)!",
         en = "Your executor does not support file saving (writefile)."},
@@ -741,6 +723,7 @@ function MeizuLibrary:SetLanguage(lang)
     self.Flags["__language"] = lang
     self:_ApplyLocalization()
     self:_SaveUiPrefs()
+    if self._SyncSettings then self._SyncSettings() end
 end
 
 -- Library:AddTranslation("Auto Farm", {vi = "Tự động farm", en = "Auto Farm"})
@@ -795,6 +778,7 @@ local function Register(obj, map)
     if registerCount % 150 == 0 then
         PruneList(MeizuLibrary._ThemeObjs)
         PruneList(MeizuLibrary._AccentObjs)
+        PruneList(MeizuLibrary._SurfaceObjs)
     end
     return entry
 end
@@ -811,6 +795,21 @@ local function OnThemeChange(fn)  table.insert(MeizuLibrary._ThemeHooks, fn)  en
 local function OnAccentChange(fn) table.insert(MeizuLibrary._AccentHooks, fn) end
 local function OnLangChange(fn)   table.insert(MeizuLibrary._LangHooks, fn)   end
 local function OnFontChange(fn)   table.insert(MeizuLibrary._FontHooks, fn)   end
+local function OnPerfChange(fn)   table.insert(MeizuLibrary._PerfHooks, fn)   end
+
+-- "Bề mặt" (nền Main / Sidebar / Header / thẻ...) có thể trong suốt thêm khi bật "Cửa sổ kính mờ".
+-- Chỉ đăng ký những object KHÔNG tự chạy hoạt ảnh BackgroundTransparency.
+local function ApplySurface(e)
+    local base = e.Base
+    e.Object.BackgroundTransparency = MeizuLibrary.GlassWindow and math.min(1, base + GLASS_SURFACE_ALPHA) or base
+end
+
+local function RegisterSurface(obj)
+    local e = {Object = obj, Base = obj.BackgroundTransparency}
+    table.insert(MeizuLibrary._SurfaceObjs, e)
+    if MeizuLibrary.GlassWindow then ApplySurface(e) end
+    return e
+end
 
 --// ============================ MISC HELPERS ============================
 local function SafeCall(fn, ...)
@@ -1233,6 +1232,7 @@ MeizuLibrary.Notify = function(a, b, c)
     Tween(Card, 0.25, {GroupTransparency = 0})
     Tween(scale, 0.35, {Scale = 1}, Enum.EasingStyle.Back)
     PlaySound("rbxasset://sounds/electronicpingshort.wav", 0.25, 1.15)
+    if MeizuLibrary._OnNotify then pcall(MeizuLibrary._OnNotify) end      -- huy hiệu "chưa đọc" trên nút nổi
 
     local duration = tonumber(cfg.Duration) or 5
     if duration > 0 then
@@ -1257,6 +1257,103 @@ local function Deserialize(v)
     return v
 end
 
+--// ============================ FLAGS + CẤU HÌNH TỰ ĐỘNG ============================
+-- Mọi element ghi giá trị vào Flags qua SetFlag để "Auto Save" biết khi nào có thay đổi.
+--
+-- Thiết kế chống mất dữ liệu:
+--   * Dữ liệu đã lưu (_AutoData) được đọc 1 lần lúc tạo cửa sổ và áp NGAY khi từng element được tạo
+--     (giao diện hiện đúng giá trị cũ, không nhấp nháy về mặc định).
+--   * Callback chỉ được kích hoạt sau khi hub dựng xong UI (không có element mới trong ~1.2s) -> tính năng
+--     mới chạy; Auto Save chỉ "lên đạn" (_AutoArmed) sau bước này, nên giá trị mặc định lúc dựng UI không
+--     bao giờ ghi đè dữ liệu đã lưu.
+--   * Khi lưu, dữ liệu mới được GỘP vào dữ liệu cũ nên cờ của element chưa kịp tạo không bị rơi mất.
+local function SetFlag(flag, value)
+    MeizuLibrary.Flags[flag] = value
+    if MeizuLibrary.AutoSave and not MeizuLibrary._Loading then
+        if MeizuLibrary._AutoArmed then
+            MeizuLibrary:_QueueAutoSave()
+        else
+            MeizuLibrary._AutoDirty = true
+        end
+    end
+end
+
+function MeizuLibrary:_QueueAutoSave()
+    if self._AutoSavePending or self.Destroyed then return end
+    self._AutoSavePending = true
+    task.delay(1.5, function()
+        self._AutoSavePending = false
+        if not self.Destroyed and self.AutoSave then self:SaveAutoConfig() end
+    end)
+end
+
+function MeizuLibrary:SaveAutoConfig()
+    if not HasFileSystem() then return false end
+    local data = {}
+    if self._AutoData then
+        for k, v in pairs(self._AutoData) do data[k] = v end
+    end
+    for flag, el in pairs(self._FlagElems) do
+        local ok, v = pcall(el.Get)
+        if ok and type(v) ~= "function" then data[flag] = Serialize(v) end
+    end
+    self._AutoData = data
+    local okW = pcall(function()
+        EnsureFolder()
+        writefile(self.Folder .. "/" .. AUTO_CONFIG_NAME .. ".json", HttpService:JSONEncode(data))
+    end)
+    return okW
+end
+
+function MeizuLibrary:LoadAutoConfig(silent) return self:LoadSettings(AUTO_CONFIG_NAME, silent) end
+
+-- Đọc dữ liệu đã lưu vào bộ nhớ (gọi lúc tạo cửa sổ khi Auto Load / Auto Save đang bật)
+function MeizuLibrary:_LoadAutoData()
+    self._AutoData, self._AutoPending, self._AutoArmed, self._AutoDirty = nil, {}, false, false
+    if not (self.AutoLoad or self.AutoSave) or not HasFileSystem() then return end
+    local okR, content = pcall(readfile, self.Folder .. "/" .. AUTO_CONFIG_NAME .. ".json")
+    if not okR or type(content) ~= "string" then return end
+    local okD, data = pcall(function() return HttpService:JSONDecode(content) end)
+    if okD and type(data) == "table" then self._AutoData = data end
+end
+
+-- Gọi từ BindFlag mỗi khi 1 element có Flag được tạo
+function MeizuLibrary:_ApplyAutoValue(flag, el)
+    if not self.AutoLoad or not self._AutoData then return end
+    local v = self._AutoData[flag]
+    if v == nil then return end
+    self._Loading = true
+    pcall(el.Set, Deserialize(v), false)            -- hiện đúng giá trị đã lưu ngay lập tức, chưa kích hoạt tính năng
+    self._Loading = false
+    if self._AutoArmed then
+        -- element tạo muộn (sau khi hub dựng xong): kích hoạt callback ngay sau khi đoạn code tạo nó chạy xong
+        task.defer(function()
+            if self.Destroyed then return end
+            self._Loading = true
+            pcall(el.Set, Deserialize(v), true)
+            self._Loading = false
+        end)
+    else
+        self._AutoPending[flag] = {El = el, Value = v}
+    end
+end
+
+function MeizuLibrary:SetAutoSave(on)
+    self.AutoSave = (on == true)
+    if self.AutoSave then
+        self._AutoArmed = true                       -- người dùng chủ động bật -> lưu luôn
+        self:_QueueAutoSave()
+    end
+    self:_SaveUiPrefs()
+    if self._SyncSettings then self._SyncSettings() end
+end
+
+function MeizuLibrary:SetAutoLoad(on)
+    self.AutoLoad = (on == true)
+    self:_SaveUiPrefs()
+    if self._SyncSettings then self._SyncSettings() end
+end
+
 --// ============================ LIBRARY API ============================
 local function ApplyThemeEntry(e, theme)
     for prop, key in pairs(e.Map) do
@@ -1275,6 +1372,7 @@ function MeizuLibrary:ApplyTheme(name)
     end
     for _, fn in ipairs(self._ThemeHooks) do pcall(fn) end
     self:_SaveUiPrefs()
+    if self._SyncSettings then self._SyncSettings() end
 end
 
 function MeizuLibrary:ApplyAccent(color)
@@ -1309,7 +1407,7 @@ function MeizuLibrary:SetRainbow(enabled)
         local hue, acc = 0, 0
         self._RainbowConn = RunService.Heartbeat:Connect(function(dt)
             acc = acc + dt
-            if acc < 0.033 then return end          -- ~30 lần/giây là đủ mượt
+            if acc < (self.PerfMode and 0.12 or 0.033) then return end   -- ~30 lần/giây (tiết kiệm: ~8)
             hue = (hue + acc * 0.35) % 1
             acc = 0
             self:ApplyAccent(Color3.fromHSV(hue, 0.65, 1))
@@ -1320,6 +1418,7 @@ function MeizuLibrary:SetRainbow(enabled)
         self._RainbowConn = nil
         self:ApplyAccent(self._UserAccent or Color3.fromRGB(88, 101, 242))
     end
+    if self._SyncSettings then self._SyncSettings() end
 end
 
 function MeizuLibrary:SetFont(name)
@@ -1330,12 +1429,14 @@ function MeizuLibrary:SetFont(name)
     for i = 1, #list do pcall(SetFontEntry, list[i]) end
     for _, fn in ipairs(self._FontHooks) do pcall(fn) end
     self:_SaveUiPrefs()
+    if self._SyncSettings then self._SyncSettings() end
     return true
 end
 
 function MeizuLibrary:SetSound(enabled)
     self.SoundEnabled = (enabled == true)
     self:_SaveUiPrefs()
+    if self._SyncSettings then self._SyncSettings() end
 end
 
 function MeizuLibrary:SetToggleKeybind(key)
@@ -1345,7 +1446,66 @@ function MeizuLibrary:SetToggleKeybind(key)
     end
 end
 
--- Đặt lại chủ đề / màu nhấn / phông / âm thanh về mặc định (UI Cài đặt tự đồng bộ ở nơi gọi)
+function MeizuLibrary:SetPerformanceMode(on)
+    self.PerfMode = (on == true)
+    for _, fn in ipairs(self._PerfHooks) do pcall(fn, self.PerfMode) end
+    self:_ApplyBlur()
+    self:_SaveUiPrefs()
+    if self._SyncSettings then self._SyncSettings() end
+end
+
+-- Cửa sổ kính mờ: nền các bề mặt trong suốt thêm một chút (nên bật cùng làm mờ nền game cho dễ đọc)
+function MeizuLibrary:SetGlassWindow(on)
+    self.GlassWindow = (on == true)
+    local list = self._SurfaceObjs
+    PruneList(list)
+    for i = 1, #list do pcall(ApplySurface, list[i]) end
+    self:_SaveUiPrefs()
+    if self._SyncSettings then self._SyncSettings() end
+end
+
+-- Làm mờ cảnh game phía sau UI bằng BlurEffect (đặt dưới Camera, không đụng Lighting)
+function MeizuLibrary:_ApplyBlur(instant)
+    if self._Blur and not self._Blur.Parent then self._Blur = nil end      -- camera bị thay thế
+    local want = self.BlurEnabled and self._WindowOpen and not self.PerfMode and not self.Destroyed
+    local target = want and self.BlurSize or 0
+    if not self._Blur then
+        if target <= 0 then return end
+        local ok, eff = pcall(function()
+            local e = Instance.new("BlurEffect")
+            e.Name = "MeizuBlur"
+            e.Size = 0
+            e.Parent = workspace.CurrentCamera or game:GetService("Lighting")
+            return e
+        end)
+        if not ok then return end
+        self._Blur = eff
+    end
+    Tween(self._Blur, instant and 0 or 0.35, {Size = target})
+end
+
+function MeizuLibrary:SetBlur(enabled, size)
+    if enabled ~= nil then self.BlurEnabled = (enabled == true) end
+    if size ~= nil then self.BlurSize = math.clamp(tonumber(size) or DEFAULT_BLUR_SIZE, 0, 40) end
+    self:_ApplyBlur()
+    self:_SaveUiPrefs()
+    if self._SyncSettings then self._SyncSettings() end
+end
+
+function MeizuLibrary:SetWatermark(on)
+    self.WatermarkOn = (on == true)
+    if self._SetWatermarkImpl then self._SetWatermarkImpl(self.WatermarkOn) end
+    self:_SaveUiPrefs()
+    if self._SyncSettings then self._SyncSettings() end
+end
+
+function MeizuLibrary:_SetCollapsed(key, state)
+    self.CollapsedSections[key] = (state == true)
+    self:_SaveUiPrefs()
+end
+
+-- Đặt lại chủ đề / màu nhấn / phông / âm thanh / kính / blur / tiết kiệm về mặc định
+-- (UI Cài đặt tự đồng bộ ở nơi gọi)
 function MeizuLibrary:ResetAppearance()
     self:SetRainbow(false)
     self.UIScale = 1
@@ -1355,6 +1515,9 @@ function MeizuLibrary:ResetAppearance()
     self._UserAccent = base
     self:ApplyAccent(base)
     self:SetFont(DEFAULT_FONT)
+    self:SetGlassWindow(false)
+    self:SetBlur(false, DEFAULT_BLUR_SIZE)
+    self:SetPerformanceMode(false)
     self:_SaveUiPrefs()
 end
 
@@ -1378,6 +1541,16 @@ function MeizuLibrary:_WriteUiPrefs()
         Scale    = self.UIScale,
         Accent   = {R = accent.R, G = accent.G, B = accent.B},
         Keybind  = self.ToggleKeybind and self.ToggleKeybind.Name or nil,
+        Perf      = self.PerfMode,
+        Glass     = self.GlassWindow,
+        Blur      = self.BlurEnabled,
+        BlurSize  = self.BlurSize,
+        AutoSave  = self.AutoSave,
+        AutoLoad  = self.AutoLoad,
+        Watermark = self.WatermarkOn,
+        Collapsed = self.CollapsedSections,
+        Win       = self._SavedWin,
+        Tab       = self._LastTabName,
     }
     pcall(function()
         EnsureFolder()
@@ -1419,6 +1592,24 @@ function MeizuLibrary:_LoadUiPrefs()
         local ok, key = pcall(function() return Enum.KeyCode[data.Keybind] end)
         if ok and key then self.ToggleKeybind = key end
     end
+    if type(data.Perf) == "boolean" then self.PerfMode = data.Perf end
+    if type(data.Glass) == "boolean" then self.GlassWindow = data.Glass end
+    if type(data.Blur) == "boolean" then self.BlurEnabled = data.Blur end
+    if type(data.BlurSize) == "number" then self.BlurSize = math.clamp(data.BlurSize, 0, 40) end
+    if type(data.AutoSave) == "boolean" then self.AutoSave = data.AutoSave end
+    if type(data.AutoLoad) == "boolean" then self.AutoLoad = data.AutoLoad end
+    if type(data.Watermark) == "boolean" then self.WatermarkOn = data.Watermark end
+    if type(data.Collapsed) == "table" then
+        for k, v in pairs(data.Collapsed) do
+            if type(k) == "string" and type(v) == "boolean" then self.CollapsedSections[k] = v end
+        end
+    end
+    if type(data.Win) == "table" then
+        local function num(x) return (type(x) == "number" and x == x and math.abs(x) < 1e6) and x or nil end
+        local w = data.Win
+        self._SavedWin = {W = num(w.W), H = num(w.H), XS = num(w.XS), XO = num(w.XO), YS = num(w.YS), YO = num(w.YO)}
+    end
+    if type(data.Tab) == "string" then self._LastTabName = data.Tab end
 end
 
 --// ---------------------- Lưu / tải cấu hình tính năng (Flags) ----------------------
@@ -1457,10 +1648,13 @@ function MeizuLibrary:LoadSettings(name, silent)
     local okD, data = pcall(function() return HttpService:JSONDecode(content) end)
     if not okD or type(data) ~= "table" then return false end
     local fire = (not silent) and (self.LoadFiresCallbacks ~= false)
+    self._Loading = true
     for flag, v in pairs(data) do
         local el = self._FlagElems[flag]       -- khoá cũ (__language, __toggleimage) tự bị bỏ qua
         if el then pcall(el.Set, Deserialize(v), fire) end
     end
+    self._Loading = false
+    if self.AutoSave and self._AutoArmed then self:_QueueAutoSave() end
     return true
 end
 
@@ -1501,6 +1695,13 @@ function MeizuLibrary:Destroy()
         pcall(function() self._ScreenGui:Destroy() end)
         self._ScreenGui = nil
     end
+    if self._Blur then pcall(function() self._Blur:Destroy() end) self._Blur = nil end
+    self._WindowOpen = false
+    self._Loading, self._AutoSavePending = false, false
+    self._AutoData, self._AutoPending, self._AutoArmed, self._AutoDirty = nil, {}, false, false
+    self._SyncSettings = nil
+    self._OnNotify, self._ClearUnread, self._SetWatermarkImpl = nil, nil, nil
+    self._SurfaceObjs, self._PerfHooks = {}, {}
     self._ThemeObjs, self._AccentObjs = {}, {}
     self._ThemeHooks, self._AccentHooks, self._LangHooks, self._FontHooks = {}, {}, {}, {}
     self._LocBindings, self._FontObjs = {}, {}
@@ -1558,6 +1759,8 @@ MeizuLibrary.CreateWindow = function(a, b)
 
     -- Giao diện người dùng đã chọn lần trước (ngôn ngữ, chủ đề, màu nhấn, phông, cỡ...) ưu tiên hơn mặc định
     MeizuLibrary:_LoadUiPrefs()
+    MeizuLibrary:_LoadAutoData()
+    MeizuLibrary._LastBind = os.clock()
     MeizuLibrary._UserAccent = MeizuLibrary.Accent
 
     local Window = {_Tabs = {}, _CurrentTab = nil, _BootSelected = false, _UserScale = MeizuLibrary.UIScale}
@@ -1573,6 +1776,15 @@ MeizuLibrary.CreateWindow = function(a, b)
         if WinSize.Y.Offset > 0 then H = WinSize.Y.Offset end
     end
     W, H = math.max(W, 440), math.max(H, 330)
+    local DEFAULT_W, DEFAULT_H = W, H                 -- để "Đặt lại cửa sổ"
+    local saved = MeizuLibrary._SavedWin              -- kích thước / vị trí người dùng đã chỉnh lần trước
+    if saved and saved.W and saved.H then
+        W, H = math.clamp(saved.W, 460, 1400), math.clamp(saved.H, 340, 1000)
+    end
+    local startPos = UDim2.new(0.5, 0, 0.5, 0)
+    if saved and saved.XS and saved.XO and saved.YS and saved.YO then
+        startPos = UDim2.new(saved.XS, saved.XO, saved.YS, saved.YO)
+    end
     local SIDEBAR_W = SIDEBAR_WIDTH
     local HEADER_H = HEADER_HEIGHT
 
@@ -1583,7 +1795,7 @@ MeizuLibrary.CreateWindow = function(a, b)
     local Root = New("Frame", {
         Name = "Root",
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Position = startPos,
         Size = UDim2.fromOffset(W, H),
         BackgroundTransparency = 1, BorderSizePixel = 0,
         Visible = false,
@@ -1626,6 +1838,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         Parent = Pop,
     })
     Register(Main, {BackgroundColor3 = "Window"})
+    RegisterSurface(Main)
     New("UICorner", {CornerRadius = UDim.new(0, 14), Parent = Main})
     local MainStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.3, Parent = Main})
     Register(MainStroke, {Color = "Stroke"})
@@ -1663,6 +1876,41 @@ MeizuLibrary.CreateWindow = function(a, b)
         MeizuLibrary:_SaveUiPrefs()
     end
 
+    -- Nhớ vị trí + kích thước cửa sổ cho lần chạy sau
+    local function SaveWinState()
+        local p = Root.Position
+        MeizuLibrary._SavedWin = {W = W, H = H, XS = p.X.Scale, XO = p.X.Offset, YS = p.Y.Scale, YO = p.Y.Offset}
+        MeizuLibrary:_SaveUiPrefs()
+    end
+
+    local function ApplySize(nw, nh)
+        W, H = nw, nh
+        Root.Size = UDim2.fromOffset(nw, nh)
+        UpdateFit()
+    end
+
+    -- Kích thước tối đa: vừa màn hình ở tỉ lệ người dùng chọn (cửa sổ không bị tự co nhỏ chữ)
+    local function MaxSize()
+        local vp = ScreenGui.AbsoluteSize
+        if vp.X <= 0 or vp.Y <= 0 then return 1400, 1000 end
+        local want = math.max(Window._UserScale or 1, 0.01)
+        return math.max(460, math.floor((vp.X - 24) / want)), math.max(340, math.floor((vp.Y - 24) / want))
+    end
+
+    function Window:SetSize(w, h)
+        local maxW, maxH = MaxSize()
+        ApplySize(math.clamp(math.floor((tonumber(w) or W) + 0.5), 460, maxW),
+                  math.clamp(math.floor((tonumber(h) or H) + 0.5), 340, maxH))
+        SaveWinState()
+    end
+    function Window:GetSize() return W, H end
+    function Window:ResetLayout()
+        ApplySize(DEFAULT_W, DEFAULT_H)
+        Root.Position = UDim2.new(0.5, 0, 0.5, 0)
+        UpdateFit()
+        SaveWinState()
+    end
+
     --// ======================== SIDEBAR ========================
     local Sidebar = New("Frame", {
         Name = "Sidebar", BackgroundColor3 = T("Sidebar"),
@@ -1670,6 +1918,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         ZIndex = 2, Parent = Main,
     })
     Register(Sidebar, {BackgroundColor3 = "Sidebar"})
+    RegisterSurface(Sidebar)
     New("UIGradient", {
         Rotation = 90,
         Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(212, 212, 224)),
@@ -1722,7 +1971,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         Name = "BrandDrag", BackgroundTransparency = 1, BorderSizePixel = 0,
         Size = UDim2.new(1, 0, 0, 58), ZIndex = 6, Parent = Sidebar,
     })
-    MakeDraggable(BrandDrag, Root, ClampWindow)
+    MakeDraggable(BrandDrag, Root, ClampWindow, SaveWinState)
 
     -- Ô tìm kiếm
     local SearchWrap = New("Frame", {
@@ -1798,6 +2047,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         BorderSizePixel = 0, ZIndex = 3, Parent = Sidebar,
     })
     Register(PlayerCard, {BackgroundColor3 = "Element"})
+    RegisterSurface(PlayerCard)
     New("UICorner", {CornerRadius = UDim.new(0, 10), Parent = PlayerCard})
     local PlayerStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.5, Parent = PlayerCard})
     Register(PlayerStroke, {Color = "Stroke"})
@@ -1854,6 +2104,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         BorderSizePixel = 0, ZIndex = 9, Parent = ContentArea,
     })
     Register(FadeTop, {BackgroundColor3 = "Window"})
+    RegisterSurface(FadeTop)
     New("UIGradient", {
         Rotation = 90,
         Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1)}),
@@ -1865,6 +2116,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         BorderSizePixel = 0, ZIndex = 9, Parent = ContentArea,
     })
     Register(FadeBottom, {BackgroundColor3 = "Window"})
+    RegisterSurface(FadeBottom)
     New("UIGradient", {
         Rotation = 90,
         Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0)}),
@@ -1878,6 +2130,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         ZIndex = 10, Parent = ContentArea,
     })
     Register(Header, {BackgroundColor3 = "Window"})
+    RegisterSurface(Header)
 
     local HeaderTitle = TextObj("TextLabel", {
         BackgroundTransparency = 1,
@@ -1945,7 +2198,52 @@ MeizuLibrary.CreateWindow = function(a, b)
     end)
 
     -- Kéo cửa sổ bằng toàn bộ header (trừ 2 nút) + có kẹp trong màn hình
-    MakeDraggable(Header, Root, ClampWindow)
+    MakeDraggable(Header, Root, ClampWindow, SaveWinState)
+
+    --// RESIZE GRIP: kéo góc phải-dưới để đổi kích thước cửa sổ (nhớ cho lần sau)
+    local Grip = New("TextButton", {
+        Name = "ResizeGrip", Text = "", AutoButtonColor = false, BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -3, 1, -3), Size = UDim2.fromOffset(22, 22),
+        BorderSizePixel = 0, ZIndex = 30, Parent = Main,
+    })
+    local gripBars = {}
+    for i, g in ipairs({{16, 16, 4}, {12, 12, 9}, {8, 8, 14}}) do
+        local bar = New("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(g[1], g[2]),
+            Size = UDim2.fromOffset(g[3], 1.5), Rotation = -45,
+            BackgroundColor3 = T("SubText"), BackgroundTransparency = 0.45,
+            BorderSizePixel = 0, ZIndex = 31, Parent = Grip,
+        })
+        Register(bar, {BackgroundColor3 = "SubText"})
+        gripBars[i] = bar
+    end
+    Grip.MouseEnter:Connect(function()
+        for _, bar in ipairs(gripBars) do Tween(bar, 0.15, {BackgroundTransparency = 0.05}) end
+    end)
+    Grip.MouseLeave:Connect(function()
+        for _, bar in ipairs(gripBars) do Tween(bar, 0.2, {BackgroundTransparency = 0.45}) end
+    end)
+    Grip.InputBegan:Connect(function(input)
+        if not IsPointer(input) then return end
+        local startPointer = PointerPos(input)
+        local startW, startH, startPos0 = W, H, Root.Position
+        local sc = math.max(RootScale.Scale, 0.01)
+        AddDrag(input, {
+            OnChanged = function(inp)
+                local d = PointerPos(inp) - startPointer
+                local maxW, maxH = MaxSize()
+                local nw = math.clamp(math.floor(startW + d.X / sc + 0.5), 460, maxW)
+                local nh = math.clamp(math.floor(startH + d.Y / sc + 0.5), 340, maxH)
+                ApplySize(nw, nh)
+                -- Root neo ở TÂM: dịch tâm nửa phần chênh lệch để góc trên-trái đứng yên, góc dưới-phải bám theo tay
+                local s2 = RootScale.Scale
+                Root.Position = ClampWindow(UDim2.new(
+                    startPos0.X.Scale, startPos0.X.Offset + (nw - startW) * s2 / 2,
+                    startPos0.Y.Scale, startPos0.Y.Offset + (nh - startH) * s2 / 2))
+            end,
+            OnEnd = function() SaveWinState() end,
+        })
+    end)
 
     -- Khung chứa nội dung hiển thị khi tìm kiếm không có kết quả
     local EmptyLabel = TextObj("TextLabel", {
@@ -1959,6 +2257,19 @@ MeizuLibrary.CreateWindow = function(a, b)
     BindLoc(EmptyLabel, "Text", "No results")
 
     --// ======================== ELEMENT FACTORY ========================
+    -- Hiển thị của 1 element = không bị ẩn bằng SetVisible + khớp tìm kiếm + section chứa nó không đang thu gọn
+    -- (đang tìm kiếm thì bỏ qua trạng thái thu gọn để vẫn thấy kết quả).
+    local function RecVisible(rec)
+        if rec.Hidden then return false end
+        if rec.SearchShow == false then return false end
+        local sec = rec.Section
+        if sec and sec.Collapsed and (Window._Query or "") == "" then return false end
+        return true
+    end
+    local function RefreshRec(rec)
+        if rec.Frame and rec.Frame.Parent then rec.Frame.Visible = RecVisible(rec) end
+    end
+
     local function BindElements(target, container, tab, secRec)
         if target.CreateSection then return end
 
@@ -1967,6 +2278,8 @@ MeizuLibrary.CreateWindow = function(a, b)
             if x == el then return y end
             return x
         end
+
+        local lastTitleBind, lastDescBind = nil, nil      -- do AddText ghi lại cho AddSearch / Decorate
 
         local function MakeCard(height, interactive)
             local Card
@@ -1991,6 +2304,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             })
             local Stroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.45, Parent = Card})
             Register(Card, {BackgroundColor3 = "Element"})
+            RegisterSurface(Card)
             Register(Stroke, {Color = "Stroke"})
             if interactive then
                 local Hover = New("Frame", {
@@ -2049,20 +2363,104 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Register(Desc, {TextColor3 = "SubText"})
                 descBind = BindLoc(Desc, "Text", tostring(desc))
             end
+            lastTitleBind, lastDescBind = titleBind, descBind
             return Title, Desc, titleBind, descBind
         end
 
         -- Đăng ký element vào bộ lọc tìm kiếm (chữ gốc + bản dịch, không phân biệt dấu)
         local function AddSearch(Card, ...)
-            local rec = {Frame = Card, Text = SearchText(...), Section = secRec}
+            local rec = {
+                Frame = Card, Text = SearchText(...), Section = secRec, SearchShow = true,
+                TitleBind = lastTitleBind, DescBind = lastDescBind,
+            }
+            rec.Title, rec.Desc = (select(1, ...)), (select(2, ...))
+            lastTitleBind, lastDescBind = nil, nil
             table.insert(tab._Elements, rec)
             if secRec then table.insert(secRec.Items, rec) end
+            MeizuLibrary._LastBind = os.clock()
+            RefreshRec(rec)          -- section đang thu gọn thì element mới tạo cũng ẩn ngay
+            return rec
+        end
+
+        -- Các hàm dùng chung cho MỌI element: SetVisible / SetEnabled / SetTitle / SetDescription / Destroy
+        local function Decorate(el, Card, rec, cfg)
+            cfg = cfg or {}
+            local lock
+            if el.SetVisible == nil then
+                el.SetVisible = function(x, y)
+                    rec.Hidden = (ArgAfterSelf(el, x, y) == false)
+                    RefreshRec(rec)
+                end
+            end
+            if el.IsVisible == nil then el.IsVisible = function() return not rec.Hidden end end
+            if el.SetEnabled == nil then
+                el.SetEnabled = function(x, y)
+                    rec.Enabled = (ArgAfterSelf(el, x, y) ~= false)
+                    if not Card.Parent then return end
+                    if not rec.Enabled then
+                        if not lock then
+                            -- lớp phủ Active chặn mọi thao tác chạm xuống element bên dưới
+                            lock = New("Frame", {
+                                Name = "Lock", BackgroundColor3 = T("Window"), BackgroundTransparency = 0.35,
+                                Size = UDim2.fromScale(1, 1), Active = true,
+                                BorderSizePixel = 0, ZIndex = 80, Parent = Card,
+                            })
+                            New("UICorner", {CornerRadius = UDim.new(0, 10), Parent = lock})
+                            Register(lock, {BackgroundColor3 = "Window"})
+                        end
+                        lock.Visible = true
+                    elseif lock then
+                        lock.Visible = false
+                    end
+                end
+            end
+            if el.IsEnabled == nil then el.IsEnabled = function() return rec.Enabled ~= false end end
+            -- SetTitle / SetDescription luôn tồn tại (không có dòng chữ tương ứng thì không làm gì, tránh lỗi nil)
+            if el.SetTitle == nil then
+                el.SetTitle = function(x, y)
+                    if not rec.TitleBind then return end
+                    local t = tostring(ArgAfterSelf(el, x, y) or "")
+                    rec.TitleBind.Key = t
+                    RefreshBinding(rec.TitleBind)
+                    rec.Title = t
+                    rec.Text = SearchText(rec.Title, rec.Desc)
+                end
+            end
+            if el.SetDescription == nil then
+                el.SetDescription = function(x, y)
+                    if not rec.DescBind then return end
+                    local t = tostring(ArgAfterSelf(el, x, y) or "")
+                    rec.DescBind.Key = t
+                    RefreshBinding(rec.DescBind)
+                    rec.Desc = t
+                    rec.Text = SearchText(rec.Title, rec.Desc)
+                end
+            end
+            if el.Destroy == nil then
+                el.Destroy = function()
+                    for i, e in ipairs(tab._Elements) do
+                        if e == rec then table.remove(tab._Elements, i) break end
+                    end
+                    if rec.Section then
+                        for i, e in ipairs(rec.Section.Items) do
+                            if e == rec then table.remove(rec.Section.Items, i) break end
+                        end
+                    end
+                    if cfg.Flag and MeizuLibrary._FlagElems[cfg.Flag] == el then
+                        MeizuLibrary._FlagElems[cfg.Flag] = nil
+                        MeizuLibrary.Flags[cfg.Flag] = nil
+                    end
+                    if Card.Parent then Card:Destroy() end
+                end
+            end
+            return el
         end
 
         local function BindFlag(el, flag, initial)
             if flag then
                 MeizuLibrary._FlagElems[flag] = el
                 MeizuLibrary.Flags[flag] = initial
+                MeizuLibrary:_ApplyAutoValue(flag, el)       -- Auto Load: hiện giá trị đã lưu ngay khi tạo
             end
         end
 
@@ -2086,9 +2484,10 @@ MeizuLibrary.CreateWindow = function(a, b)
             return holder
         end
 
-        --// SECTION
-        function target:CreateSection(name)
+        --// SECTION (bấm vào tiêu đề để thu gọn / mở rộng — nhớ trạng thái cho lần sau)
+        function target:CreateSection(name, collapsedDefault)
             name = tostring(name or "Section")
+            local collapsible = (config.CollapsibleSections ~= false)
             local Sec = New("Frame", {
                 BackgroundTransparency = 1,
                 Size = UDim2.new(1, 0, 0, 0),
@@ -2096,7 +2495,8 @@ MeizuLibrary.CreateWindow = function(a, b)
                 BorderSizePixel = 0, Parent = container,
             })
             New("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = Sec})
-            local Head = New("Frame", {
+            local Head = New("TextButton", {
+                Text = "", AutoButtonColor = false,
                 BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 24),
                 BorderSizePixel = 0, Parent = Sec,
             })
@@ -2118,10 +2518,26 @@ MeizuLibrary.CreateWindow = function(a, b)
             -- FIX tiếng Việt: UpperVN thay cho string.upper (string.upper làm hỏng chữ có dấu)
             BindLoc(SecLabel, "Text", name, UpperVN)
 
+            -- Mũi tên thu gọn (tâm cố định để xoay không bị lệch)
+            local Chev = New("Frame", {
+                BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(12, 12),
+                BorderSizePixel = 0, Visible = collapsible, Parent = Head,
+            })
+            for i, rot in ipairs({-45, 45}) do
+                local bar = New("Frame", {
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Position = UDim2.new(0.5 + (i == 1 and -0.18 or 0.18), 0, 0.5, 0),
+                    Size = UDim2.fromOffset(2, 7), Rotation = rot,
+                    BackgroundColor3 = T("SubText"), BorderSizePixel = 0, Parent = Chev,
+                })
+                Register(bar, {BackgroundColor3 = "SubText"})
+            end
+
             local Line = New("Frame", {
                 BackgroundColor3 = T("Stroke"), BackgroundTransparency = 0.5,
                 AnchorPoint = Vector2.new(0, 0.5),
-                Position = UDim2.new(0, 120, 0.5, 0), Size = UDim2.new(1, -120, 0, 1),
+                Position = UDim2.new(0, 120, 0.5, 0), Size = UDim2.new(1, -150, 0, 1),
                 BorderSizePixel = 0, Parent = Head,
             })
             Register(Line, {BackgroundColor3 = "Stroke"})
@@ -2131,7 +2547,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 SecLabel.Size = UDim2.new(0, tw + 4, 1, 0)
                 local x = 13 + tw + 14
                 Line.Position = UDim2.new(0, x, 0.5, 0)
-                Line.Size = UDim2.new(1, -x, 0, 1)
+                Line.Size = UDim2.new(1, -(x + (collapsible and 30 or 0)), 0, 1)
             end
             LayoutHead()
             OnLangChange(LayoutHead)
@@ -2139,8 +2555,34 @@ MeizuLibrary.CreateWindow = function(a, b)
 
             local rec = {Frame = Sec, Head = Head, Text = SearchText(name), Items = {}}
             table.insert(tab._Sections, rec)
+            MeizuLibrary._LastBind = os.clock()
+
+            -- Trạng thái thu gọn: ưu tiên giá trị người dùng đã chọn (đã lưu), nếu chưa có thì dùng mặc định
+            local key = tab._Name .. "/" .. name
+            local persisted = MeizuLibrary.CollapsedSections[key]
+            if persisted ~= nil then rec.Collapsed = persisted else rec.Collapsed = (collapsedDefault == true) end
+            if not collapsible then rec.Collapsed = false end
+            Chev.Rotation = rec.Collapsed and -90 or 0
+
+            local function SetCollapsed(state, persist)
+                state = (state == true) and collapsible
+                if rec.Collapsed == state then return end
+                rec.Collapsed = state
+                Tween(Chev, 0.25, {Rotation = state and -90 or 0})
+                for _, it in ipairs(rec.Items) do RefreshRec(it) end
+                if persist then MeizuLibrary:_SetCollapsed(key, state) end
+            end
+            if collapsible then
+                Head.Activated:Connect(function() SetCollapsed(not rec.Collapsed, true) end)
+                Head.MouseEnter:Connect(function() Tween(SecLabel, 0.15, {TextColor3 = T("Text")}) end)
+                Head.MouseLeave:Connect(function() Tween(SecLabel, 0.2, {TextColor3 = T("SubText")}) end)
+            end
 
             local SectionObj = {Frame = Sec}
+            SectionObj.Collapse = function(x, y) SetCollapsed(ArgAfterSelf(SectionObj, x, y) ~= false, true) end
+            SectionObj.Expand = function() SetCollapsed(false, true) end
+            SectionObj.Toggle = function() SetCollapsed(not rec.Collapsed, true) end
+            SectionObj.IsCollapsed = function() return rec.Collapsed == true end
             BindElements(SectionObj, Sec, tab, rec)
             return SectionObj
         end
@@ -2150,7 +2592,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             cfg = cfg or {}
             local hasDesc = cfg.Description ~= nil
             local Card = MakeCard(hasDesc and 58 or 42, true)
-            local _, _, titleBind = AddText(Card, cfg.Title or "Button", cfg.Description, 40)
+            AddText(Card, cfg.Title or "Button", cfg.Description, 40)
             DrawChevronRight(Card, -16)
 
             Card.InputBegan:Connect(function(input)
@@ -2160,15 +2602,11 @@ MeizuLibrary.CreateWindow = function(a, b)
                 end
             end)
             Card.Activated:Connect(function() SafeCall(cfg.Callback) end)
-            AddSearch(Card, cfg.Title, cfg.Description)
+            local rec = AddSearch(Card, cfg.Title, cfg.Description)
 
             local el = {Frame = Card}
             el.Fire = function() SafeCall(cfg.Callback) end
-            el.SetTitle = function(x, y)
-                titleBind.Key = tostring(ArgAfterSelf(el, x, y) or "")
-                RefreshBinding(titleBind)
-            end
-            return el
+            return Decorate(el, Card, rec, cfg)
         end
 
         --// TOGGLE
@@ -2214,7 +2652,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 v = (v == true)
                 state = v
                 Render(v)
-                if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = v end
+                if cfg.Flag then SetFlag(cfg.Flag, v) end
                 if fire then SafeCall(cfg.Callback, v) end
             end
             Card.Activated:Connect(function() Set(not state, true) end)
@@ -2224,8 +2662,8 @@ MeizuLibrary.CreateWindow = function(a, b)
 
             local el = {Frame = Card, Get = function() return state end, Set = function(v, fire) Set(v, fire) end}
             BindFlag(el, cfg.Flag, state)
-            AddSearch(Card, cfg.Title, cfg.Description)
-            return el
+            local rec = AddSearch(Card, cfg.Title, cfg.Description)
+            return Decorate(el, Card, rec, cfg)
         end
 
         --// SLIDER (kéo mượt trên mobile, có Increment / Suffix)
@@ -2311,7 +2749,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Fill.Size = UDim2.new(pct, 0, 1, 0)
                 Knob.Position = UDim2.new(pct, 0, 0.5, 0)
                 ValueLabel.Text = Format(v) .. suffix
-                if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = v end
+                if cfg.Flag then SetFlag(cfg.Flag, v) end
                 if fire then SafeCall(cfg.Callback, v) end
             end
 
@@ -2343,8 +2781,8 @@ MeizuLibrary.CreateWindow = function(a, b)
             local el = {Frame = Card, Get = function() return value end, Set = function(v, fire) Set(v, fire) end}
             Set(value, false)
             BindFlag(el, cfg.Flag, value)
-            AddSearch(Card, cfg.Title, cfg.Description)
-            return el
+            local rec = AddSearch(Card, cfg.Title, cfg.Description)
+            return Decorate(el, Card, rec, cfg)
         end
 
         --// DROPDOWN / MULTI DROPDOWN
@@ -2488,7 +2926,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                     end
                     Tween(Opt, 0.2, {TextColor3 = isSel and MeizuLibrary.Accent or T("Text")})
                 end
-                if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = GetSelected() end
+                if cfg.Flag then SetFlag(cfg.Flag, GetSelected()) end
                 if fire then SafeCall(cfg.Callback, GetSelected()) end
             end
 
@@ -2626,8 +3064,8 @@ MeizuLibrary.CreateWindow = function(a, b)
             el.Clear = function() UpdateOptions({}) end
 
             BindFlag(el, cfg.Flag, GetSelected())
-            AddSearch(Card, cfg.Title, cfg.Description)
-            return el
+            local rec = AddSearch(Card, cfg.Title, cfg.Description)
+            return Decorate(el, Card, rec, cfg)
         end
 
         function target:CreateDropdown(cfg) return MakeDropdown(cfg, false) end
@@ -2684,7 +3122,7 @@ MeizuLibrary.CreateWindow = function(a, b)
 
             local function Commit(key, fireChanged)
                 currentKey = key
-                if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = key and key.Name or "None" end
+                if cfg.Flag then SetFlag(cfg.Flag, key and key.Name or "None") end
                 if fireChanged then SafeCall(cfg.ChangedCallback, key) end
             end
 
@@ -2722,8 +3160,8 @@ MeizuLibrary.CreateWindow = function(a, b)
                 end,
             }
             BindFlag(el, cfg.Flag, el.Get())
-            AddSearch(Card, cfg.Title, cfg.Description)
-            return el
+            local rec = AddSearch(Card, cfg.Title, cfg.Description)
+            return Decorate(el, Card, rec, cfg)
         end
 
         --// INPUT
@@ -2765,7 +3203,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             end
             if cfg.Flag then
                 Box:GetPropertyChangedSignal("Text"):Connect(function()
-                    MeizuLibrary.Flags[cfg.Flag] = Box.Text
+                    SetFlag(cfg.Flag, Box.Text)
                 end)
             end
 
@@ -2777,7 +3215,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             Box.FocusLost:Connect(function(enter)
                 Tween(Box, 0.2, {Size = UDim2.fromOffset(170, 28)})
                 Tween(BoxStroke, 0.25, {Color = T("Stroke"), Transparency = 0.5})
-                if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = Box.Text end
+                if cfg.Flag then SetFlag(cfg.Flag, Box.Text) end
                 SafeCall(cfg.Callback, Box.Text, enter)
             end)
 
@@ -2786,13 +3224,13 @@ MeizuLibrary.CreateWindow = function(a, b)
                 Get = function() return Box.Text end,
                 Set = function(v, fire)
                     Box.Text = tostring(v == nil and "" or v)
-                    if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = Box.Text end
+                    if cfg.Flag then SetFlag(cfg.Flag, Box.Text) end
                     if fire then SafeCall(cfg.Callback, Box.Text, false) end
                 end,
             }
             BindFlag(el, cfg.Flag, Box.Text)
-            AddSearch(Card, cfg.Title, cfg.Description)
-            return el
+            local rec = AddSearch(Card, cfg.Title, cfg.Description)
+            return Decorate(el, Card, rec, cfg)
         end
 
         --// COLOR PICKER (kéo được cả ô đậm/nhạt trên mọi thiết bị)
@@ -2919,7 +3357,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                 HueKnob.Position = UDim2.new(h, 0, 0.5, 0)
                 HexLabel.Text = string.format("#%02X%02X%02X",
                     math.floor(color.R * 255 + 0.5), math.floor(color.G * 255 + 0.5), math.floor(color.B * 255 + 0.5))
-                if cfg.Flag then MeizuLibrary.Flags[cfg.Flag] = color end
+                if cfg.Flag then SetFlag(cfg.Flag, color) end
                 if fire then SafeCall(cfg.Callback, color) end
             end
 
@@ -3028,8 +3466,8 @@ MeizuLibrary.CreateWindow = function(a, b)
             }
             Apply(false)
             BindFlag(el, cfg.Flag, color)
-            AddSearch(Card, cfg.Title, cfg.Description)
-            return el
+            local rec = AddSearch(Card, cfg.Title, cfg.Description)
+            return Decorate(el, Card, rec, cfg)
         end
 
         --// PARAGRAPH (bố cục chiều cao tính thủ công, hỗ trợ RichText)
@@ -3051,6 +3489,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             })
 
             local TitleLabel, ContentLabel, titleBind, contentBind, contentTheme
+            local rec                                   -- gán sau khi AddSearch (closure bên dưới dùng tới)
 
             if cfg.Title ~= nil then
                 TitleLabel = TextObj("TextLabel", {
@@ -3104,6 +3543,8 @@ MeizuLibrary.CreateWindow = function(a, b)
                 if titleBind and TitleLabel and TitleLabel.Parent then
                     titleBind.Key = tostring(text == nil and "" or text)
                     RefreshBinding(titleBind)
+                    rec.Title = titleBind.Key
+                    rec.Text = SearchText(rec.Title, rec.Desc)
                     ApplyLayout()
                 end
             end
@@ -3117,6 +3558,8 @@ MeizuLibrary.CreateWindow = function(a, b)
                     if contentBind.Key ~= newText then
                         contentBind.Key = newText
                         RefreshBinding(contentBind)
+                        rec.Desc = newText
+                        rec.Text = SearchText(rec.Title, rec.Desc)
                         ApplyLayout()
                     end
                     if textColor then
@@ -3128,7 +3571,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             element.Get = function() return ContentLabel and contentBind.Key or "" end
             element.Set = function(text) element.SetContent(text) end
 
-            AddSearch(Card, cfg.Title, cfg.Content)
+            rec = AddSearch(Card, cfg.Title, cfg.Content)
 
             -- Đo lại khi chiều rộng thật của thẻ đã có / khi đổi phông / ngôn ngữ
             local lastWidth = 0
@@ -3142,7 +3585,374 @@ MeizuLibrary.CreateWindow = function(a, b)
             OnFontChange(ApplyLayout)
             OnLangChange(ApplyLayout)
             task.defer(ApplyLayout)
-            return element
+            return Decorate(element, Card, rec, cfg)
+        end
+
+        --// SEGMENTED — nút chọn dạng "giọt kính" trượt giữa các lựa chọn (kiểu iOS)
+        function target:CreateSegmented(cfg)
+            cfg = cfg or {}
+            local options = {}
+            if type(cfg.Options) == "table" then
+                for _, v in ipairs(cfg.Options) do table.insert(options, v) end
+            end
+            local n = math.max(#options, 1)
+            local hasDesc = cfg.Description ~= nil
+            local Card = MakeCard(hasDesc and 98 or 82, false)
+            AddText(Card, cfg.Title or "Segmented", cfg.Description, 14, nil, true)
+
+            local Bar = New("Frame", {
+                BackgroundColor3 = T("Input"),
+                AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 14, 1, -12),
+                Size = UDim2.new(1, -28, 0, 34), BorderSizePixel = 0, Parent = Card,
+            })
+            Register(Bar, {BackgroundColor3 = "Input"})
+            New("UICorner", {CornerRadius = UDim.new(0, 10), Parent = Bar})
+            local BarStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.45, Parent = Bar})
+            Register(BarStroke, {Color = "Stroke"})
+            local Inner = New("Frame", {
+                BackgroundTransparency = 1, Position = UDim2.new(0, 3, 0, 3), Size = UDim2.new(1, -6, 1, -6),
+                BorderSizePixel = 0, Parent = Bar,
+            })
+
+            -- "Giọt kính" trượt với hiệu ứng nảy nhẹ
+            local Thumb = New("Frame", {
+                BackgroundColor3 = MeizuLibrary.Accent,
+                Size = UDim2.new(1 / n, 0, 1, 0), Position = UDim2.new(0, 0, 0, 0),
+                BorderSizePixel = 0, ZIndex = 2, Parent = Inner,
+            })
+            RegisterAccent(Thumb, "BackgroundColor3")
+            New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = Thumb})
+            New("UIGradient", {
+                Rotation = 90,
+                Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(196, 196, 210)),
+                Parent = Thumb,
+            })
+            New("UIStroke", {Color = Color3.fromRGB(255, 255, 255), Thickness = 1, Transparency = 0.72, Parent = Thumb})
+            local ThumbSheen = New("Frame", {
+                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+                Size = UDim2.new(1, 0, 0.5, 0), BorderSizePixel = 0, ZIndex = 3, Parent = Thumb,
+            })
+            New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = ThumbSheen})
+            New("UIGradient", {
+                Rotation = 90,
+                Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.72), NumberSequenceKeypoint.new(1, 1)}),
+                Parent = ThumbSheen,
+            })
+
+            local buttons = {}
+            local index = 1
+            local function IndexOf(v)
+                for i, o in ipairs(options) do
+                    if tostring(o) == tostring(v) then return i end
+                end
+                return nil
+            end
+            local function Style(animate)
+                for i, B in ipairs(buttons) do
+                    local color = (i == index) and Color3.fromRGB(255, 255, 255) or T("SubText")
+                    if animate then Tween(B, 0.2, {TextColor3 = color}) else B.TextColor3 = color end
+                end
+            end
+            local function Select(i, fire, animate)
+                if i < 1 or i > #options then return end
+                index = i
+                local pos = UDim2.new((i - 1) / n, 0, 0, 0)
+                if animate == false then Thumb.Position = pos else Tween(Thumb, 0.4, {Position = pos}, Enum.EasingStyle.Back) end
+                Style(animate ~= false)
+                if cfg.Flag then SetFlag(cfg.Flag, options[i]) end
+                if fire then SafeCall(cfg.Callback, options[i]) end
+            end
+
+            for i, opt in ipairs(options) do
+                local B = TextObj("TextButton", {
+                    Text = tostring(opt), AutoButtonColor = false, BackgroundTransparency = 1,
+                    Position = UDim2.new((i - 1) / n, 0, 0, 0), Size = UDim2.new(1 / n, 0, 1, 0),
+                    TextColor3 = T("SubText"), TextTruncate = Enum.TextTruncate.AtEnd,
+                    ZIndex = 4, BorderSizePixel = 0, Parent = Inner,
+                }, "Medium", 12)
+                buttons[i] = B
+                B.Activated:Connect(function()
+                    if index ~= i then Select(i, true) end
+                end)
+            end
+
+            index = IndexOf(cfg.Default) or 1
+            Thumb.Position = UDim2.new((index - 1) / n, 0, 0, 0)
+            Style(false)
+            OnThemeChange(function() Style(false) end)
+
+            local el = {
+                Frame = Card,
+                Get = function() return options[index] end,
+                Set = function(v, fire)
+                    local i = IndexOf(v)
+                    if i then Select(i, fire == true) end
+                end,
+            }
+            BindFlag(el, cfg.Flag, options[index])
+            local rec = AddSearch(Card, cfg.Title, cfg.Description)
+            return Decorate(el, Card, rec, cfg)
+        end
+
+        --// PROGRESS — thanh tiến độ chỉ đọc (vd: tiến độ quest, thời gian còn lại)
+        function target:CreateProgress(cfg)
+            cfg = cfg or {}
+            local min, max = tonumber(cfg.Min) or 0, tonumber(cfg.Max) or 100
+            if max <= min then max = min + 1 end
+            local hasDesc = cfg.Description ~= nil
+            local Card = MakeCard(hasDesc and 72 or 56, false)
+            AddText(Card, cfg.Title or "Progress", cfg.Description, 120, nil, true)
+
+            local ValueLabel = TextObj("TextLabel", {
+                BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, 0),
+                Position = UDim2.new(1, -14, 0, 8), Size = UDim2.fromOffset(110, 20),
+                TextColor3 = T("Text"), TextXAlignment = Enum.TextXAlignment.Right,
+                Text = "", Parent = Card,
+            }, "Bold", 12)
+            Register(ValueLabel, {TextColor3 = "Text"})
+
+            local Track = New("Frame", {
+                BackgroundColor3 = T("Track"), AnchorPoint = Vector2.new(0, 1),
+                Position = UDim2.new(0, 14, 1, -14), Size = UDim2.new(1, -28, 0, 8),
+                BorderSizePixel = 0, Parent = Card,
+            })
+            Register(Track, {BackgroundColor3 = "Track"})
+            New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Track})
+            local Fill = New("Frame", {
+                BackgroundColor3 = MeizuLibrary.Accent, Size = UDim2.new(0, 0, 1, 0),
+                BorderSizePixel = 0, Parent = Track,
+            })
+            RegisterAccent(Fill, "BackgroundColor3")
+            New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Fill})
+            New("UIGradient", {
+                Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 0)}),
+                Parent = Fill,
+            })
+
+            local value = math.clamp(tonumber(cfg.Default) or min, min, max)
+            local customText = nil
+            local function FormatText()
+                if customText then return customText end
+                local fmt = cfg.Format
+                if type(fmt) == "function" then
+                    local okF, txt = pcall(fmt, value, min, max)
+                    if okF and txt ~= nil then return tostring(txt) end
+                elseif fmt == "fraction" then
+                    return Comma(value) .. " / " .. Comma(max)
+                end
+                return string.format("%d%%", math.floor((value - min) / (max - min) * 100 + 0.5))
+            end
+            local function Render(animate)
+                local pct = math.clamp((value - min) / (max - min), 0, 1)
+                local size = UDim2.new(pct, 0, 1, 0)
+                if animate then Tween(Fill, 0.45, {Size = size}) else Fill.Size = size end
+                ValueLabel.Text = FormatText()
+            end
+
+            local el = {Frame = Card}
+            el.Get = function() return value end
+            -- SetValue(v [, text]) — text tuỳ chọn thay cho phần trăm (vd "3 / 10 quái"); text = false để bỏ
+            el.SetValue = function(x, y, z)
+                local v, text
+                if x == el then v, text = y, z else v, text = x, y end
+                value = math.clamp(tonumber(v) or value, min, max)
+                if text == false then customText = nil elseif text ~= nil then customText = tostring(text) end
+                Render(true)
+            end
+            el.Set = function(v) el.SetValue(v) end
+            el.SetText = function(x, y)
+                local t = ArgAfterSelf(el, x, y)
+                customText = (t ~= nil and t ~= false) and tostring(t) or nil
+                ValueLabel.Text = FormatText()
+            end
+            el.SetRange = function(x, y, z)
+                local a, b
+                if x == el then a, b = y, z else a, b = x, y end
+                min, max = tonumber(a) or min, tonumber(b) or max
+                if max <= min then max = min + 1 end
+                value = math.clamp(value, min, max)
+                Render(false)
+            end
+            Render(false)
+            local rec = AddSearch(Card, cfg.Title, cfg.Description)
+            return Decorate(el, Card, rec, cfg)
+        end
+
+        --// STEPPER — nút − / + (giữ để tăng/giảm liên tục, càng giữ càng nhanh)
+        function target:CreateStepper(cfg)
+            cfg = cfg or {}
+            local min, max = tonumber(cfg.Min) or 0, tonumber(cfg.Max) or 100
+            if max <= min then max = min + 1 end
+            local step = tonumber(cfg.Step) or 1
+            if step <= 0 then step = 1 end
+            local rounding = math.max(math.floor(tonumber(cfg.Rounding) or 0), 0)
+            local suffix = cfg.Suffix and tostring(cfg.Suffix) or ""
+            local hasDesc = cfg.Description ~= nil
+            local Card = MakeCard(hasDesc and 58 or 42, false)
+            AddText(Card, cfg.Title or "Stepper", cfg.Description, 144)
+
+            local Group = New("Frame", {
+                BackgroundColor3 = T("Input"), AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(124, 30),
+                BorderSizePixel = 0, Parent = Card,
+            })
+            Register(Group, {BackgroundColor3 = "Input"})
+            New("UICorner", {CornerRadius = UDim.new(0, 9), Parent = Group})
+            local GroupStroke = New("UIStroke", {Color = T("Stroke"), Thickness = 1, Transparency = 0.45, Parent = Group})
+            Register(GroupStroke, {Color = "Stroke"})
+
+            local function StepButton(side, plus)
+                local B = New("TextButton", {
+                    Text = "", AutoButtonColor = false,
+                    BackgroundColor3 = T("Tab"), BackgroundTransparency = 1,
+                    AnchorPoint = Vector2.new(side, 0), Position = UDim2.new(side, 0, 0, 0),
+                    Size = UDim2.fromOffset(32, 30), BorderSizePixel = 0, ZIndex = 3, Parent = Group,
+                })
+                Register(B, {BackgroundColor3 = "Tab"})
+                New("UICorner", {CornerRadius = UDim.new(0, 9), Parent = B})
+                local bars = {{10, 2}}
+                if plus then bars[2] = {2, 10} end
+                for _, sz in ipairs(bars) do
+                    local g = New("Frame", {
+                        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+                        Size = UDim2.fromOffset(sz[1], sz[2]), BackgroundColor3 = T("Text"),
+                        BorderSizePixel = 0, ZIndex = 4, Parent = B,
+                    })
+                    Register(g, {BackgroundColor3 = "Text"})
+                    New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = g})
+                end
+                B.MouseEnter:Connect(function() Tween(B, 0.15, {BackgroundTransparency = 0.2}) end)
+                B.MouseLeave:Connect(function() Tween(B, 0.2, {BackgroundTransparency = 1}) end)
+                return B
+            end
+            local Minus, Plus = StepButton(0, false), StepButton(1, true)
+            local ValueLabel = TextObj("TextLabel", {
+                BackgroundTransparency = 1, Position = UDim2.new(0, 32, 0, 0), Size = UDim2.new(1, -64, 1, 0),
+                TextColor3 = T("Text"), Text = "", ZIndex = 3, Parent = Group,
+            }, "Bold", 12)
+            Register(ValueLabel, {TextColor3 = "Text"})
+
+            local function Snap(v)
+                v = math.clamp(v, min, max)
+                v = math.clamp(min + math.floor((v - min) / step + 0.5) * step, min, max)
+                if rounding > 0 then
+                    local m = 10 ^ rounding
+                    v = math.floor(v * m + 0.5) / m
+                end
+                return v
+            end
+            local function Format(v)
+                if rounding > 0 then return string.format("%." .. rounding .. "f", v) end
+                if v % 1 ~= 0 then return string.format("%.2f", v) end
+                return tostring(math.floor(v + 0.5))
+            end
+            local value = Snap(tonumber(cfg.Default) or min)
+            local function Apply(v, fire)
+                v = Snap(tonumber(v) or value)
+                value = v
+                ValueLabel.Text = Format(v) .. suffix
+                if cfg.Flag then SetFlag(cfg.Flag, v) end
+                if fire then SafeCall(cfg.Callback, v) end
+            end
+
+            local function Hold(btn, dir)
+                btn.InputBegan:Connect(function(input)
+                    if not IsPointer(input) then return end
+                    local alive = true
+                    local function Tick()
+                        local nv = Snap(value + dir * step)
+                        if nv ~= value then Apply(nv, true) end
+                    end
+                    Tick()
+                    AddDrag(input, {OnEnd = function() alive = false end})
+                    task.spawn(function()
+                        task.wait(0.4)
+                        local gap = 0.14
+                        while alive and btn.Parent do
+                            Tick()
+                            task.wait(gap)
+                            gap = math.max(0.035, gap * 0.9)
+                        end
+                    end)
+                end)
+            end
+            Hold(Minus, -1)
+            Hold(Plus, 1)
+
+            local el = {Frame = Card, Get = function() return value end, Set = function(v, fire) Apply(v, fire) end}
+            Apply(value, false)
+            BindFlag(el, cfg.Flag, value)
+            local rec = AddSearch(Card, cfg.Title, cfg.Description)
+            return Decorate(el, Card, rec, cfg)
+        end
+
+        --// LABEL — dòng ghi chú (tự xuống dòng, hỗ trợ RichText), SetText(text [, color])
+        function target:CreateLabel(cfg)
+            if type(cfg) ~= "table" then cfg = {Text = cfg} end
+            local size = tonumber(cfg.Size) or 12
+            local weight = cfg.Bold and "Bold" or "Regular"
+            local Holder = New("Frame", {
+                BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20),
+                BorderSizePixel = 0, Parent = container,
+            })
+            local Lbl = TextObj("TextLabel", {
+                BackgroundTransparency = 1, Position = UDim2.new(0, 6, 0, 0), Size = UDim2.new(1, -12, 1, 0),
+                TextColor3 = cfg.Color or T("SubText"),
+                TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
+                TextWrapped = true, RichText = true, Text = "", Parent = Holder,
+            }, weight, size)
+            local theme = Register(Lbl, {TextColor3 = "SubText"})
+            if cfg.Color then theme.Map = {} end
+            local bind = BindLoc(Lbl, "Text", tostring(cfg.Text or ""))
+
+            local function Layout()
+                if not Holder.Parent then return end
+                local width = math.max(60, Holder.AbsoluteSize.X / GuiScale() - 12)
+                Holder.Size = UDim2.new(1, 0, 0, MeasureText(Lbl.Text, weight, size, width) + 4)
+            end
+            local lastWidth = 0
+            Holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                if math.abs(Holder.AbsoluteSize.X - lastWidth) > 0.5 then
+                    lastWidth = Holder.AbsoluteSize.X
+                    task.defer(Layout)
+                end
+            end)
+            OnFontChange(Layout)
+            OnLangChange(Layout)
+            task.defer(Layout)
+
+            local el = {Frame = Holder, LabelObject = Lbl}
+            el.Get = function() return bind.Key end
+            el.SetText = function(x, y, z)
+                local text, color
+                if x == el then text, color = y, z else text, color = x, y end
+                bind.Key = tostring(text == nil and "" or text)
+                RefreshBinding(bind)
+                if color then
+                    Lbl.TextColor3 = color
+                    theme.Map = {}
+                end
+                Layout()
+            end
+            el.Set = function(text) el.SetText(text) end
+            local rec = AddSearch(Holder, cfg.Text)
+            return Decorate(el, Holder, rec, cfg)
+        end
+
+        --// DIVIDER — đường kẻ ngăn cách (ẩn khi đang tìm kiếm)
+        function target:CreateDivider()
+            local Holder = New("Frame", {
+                BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 12),
+                BorderSizePixel = 0, Parent = container,
+            })
+            local Line = New("Frame", {
+                BackgroundColor3 = T("Stroke"), BackgroundTransparency = 0.45,
+                AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.fromScale(0, 0.5), Size = UDim2.new(1, 0, 0, 1),
+                BorderSizePixel = 0, Parent = Holder,
+            })
+            Register(Line, {BackgroundColor3 = "Stroke"})
+            local rec = AddSearch(Holder)
+            return Decorate({Frame = Holder}, Holder, rec, {})
         end
     end
 
@@ -3164,17 +3974,18 @@ MeizuLibrary.CreateWindow = function(a, b)
                 if e.Frame and e.Frame.Parent then
                     local show = (q == "") or nameHit or (e.Text:find(q, 1, true) ~= nil)
                     if not show and e.Section and e.Section.Text:find(q, 1, true) then show = true end
-                    e.Frame.Visible = show
-                    if show then matches = matches + 1 end
+                    e.SearchShow = show
+                    RefreshRec(e)                    -- kết hợp với SetVisible và trạng thái thu gọn
+                    if show and not e.Hidden then matches = matches + 1 end
                 end
             end
-            -- ẩn tiêu đề section khi không còn mục nào hiển thị
+            -- ẩn tiêu đề section khi không còn mục nào khớp
             for _, sec in ipairs(t._Sections) do
                 if sec.Frame and sec.Frame.Parent then
                     local vis = (q == "")
                     if not vis then
                         for _, it in ipairs(sec.Items) do
-                            if it.Frame.Parent and it.Frame.Visible then vis = true break end
+                            if it.Frame.Parent and it.SearchShow ~= false and not it.Hidden then vis = true break end
                         end
                     end
                     sec.Frame.Visible = vis
@@ -3210,6 +4021,7 @@ MeizuLibrary.CreateWindow = function(a, b)
         local Tab = {_Elements = {}, _Sections = {}, _Name = name, _SearchName = SearchText(name), _Matches = 0}
         local btnOrder = tonumber(order) or (#Window._Tabs + 1)
         Tab._Order = btnOrder
+        MeizuLibrary._LastBind = os.clock()
 
         local Btn = New("TextButton", {
             Name = "Tab_" .. name,
@@ -3275,6 +4087,36 @@ MeizuLibrary.CreateWindow = function(a, b)
             Text = "", ZIndex = 5, Parent = Btn,
         }, "Medium", 13)
         BindLoc(Label, "Text", name)
+
+        -- Huy hiệu ở mép phải của tab: Tab:SetBadge(true) = chấm, SetBadge(3) / SetBadge("NEW") = pill, SetBadge(nil) = ẩn
+        local Badge = New("Frame", {
+            Name = "Badge", BackgroundColor3 = MeizuLibrary.Accent,
+            AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.fromOffset(16, 16),
+            BorderSizePixel = 0, Visible = false, ZIndex = 7, Parent = Btn,
+        })
+        RegisterAccent(Badge, "BackgroundColor3")
+        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = Badge})
+        local BadgeText = TextObj("TextLabel", {
+            BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "",
+            TextColor3 = Color3.fromRGB(255, 255, 255), ZIndex = 8, Parent = Badge,
+        }, "Bold", 10)
+        Tab.SetBadge = function(x, y)
+            local v = x
+            if x == Tab then v = y end
+            if v == nil or v == false then
+                Badge.Visible = false
+                Label.Size = UDim2.new(1, -52, 1, 0)
+                return
+            end
+            local text = (v == true) and "" or tostring(v)
+            if #text > 3 then text = text:sub(1, 2) .. "+" end
+            BadgeText.Text = text
+            local w = (text == "") and 10 or math.max(16, 9 + #text * 6)
+            Badge.Size = UDim2.fromOffset(w, (text == "") and 10 or 16)
+            Badge.Visible = true
+            Label.Size = UDim2.new(1, -(52 + w), 1, 0)
+            Tween(Badge, 0.3, {Size = Badge.Size}, Enum.EasingStyle.Back)
+        end
 
         local selected = false
         local function ApplyStyle(animate)
@@ -3361,6 +4203,10 @@ MeizuLibrary.CreateWindow = function(a, b)
             HeaderBinding.Key = name
             RefreshBinding(HeaderBinding)
             Window:_RefreshEmpty()
+            if auto ~= true and Tab ~= Window.SettingsTab then
+                MeizuLibrary._LastTabName = name
+                MeizuLibrary:_SaveUiPrefs()
+            end
         end
         Tab._Deselect = function()
             Visuals(false)
@@ -3381,7 +4227,14 @@ MeizuLibrary.CreateWindow = function(a, b)
         for _, t in ipairs(Window._Tabs) do
             if t ~= Window.SettingsTab and (not first or t._Order < first._Order) then first = t end
         end
-        local target = first or Window.SettingsTab or Window._Tabs[1]
+        local target
+        local last = MeizuLibrary._LastTabName          -- tab người dùng xem lần trước (nếu tab đó tồn tại)
+        if last then
+            for _, t in ipairs(Window._Tabs) do
+                if t._Name == last and t ~= Window.SettingsTab then target = t break end
+            end
+        end
+        target = target or first or Window.SettingsTab or Window._Tabs[1]
         if target and target ~= Window._CurrentTab then target:Select(true) end
         Window._AutoPicked = true
     end
@@ -3417,6 +4270,9 @@ MeizuLibrary.CreateWindow = function(a, b)
     local function SetOpen(state)
         if state == isOpen then return end
         isOpen = state
+        MeizuLibrary._WindowOpen = state
+        MeizuLibrary:_ApplyBlur()                                  -- làm mờ nền game khi UI mở (nếu bật)
+        if state and MeizuLibrary._ClearUnread then MeizuLibrary._ClearUnread() end
         if IconWrap then
             Tween(IconWrap, 0.5, {Rotation = state and 180 or 0}, Enum.EasingStyle.Back)
         end
@@ -3813,22 +4669,39 @@ MeizuLibrary.CreateWindow = function(a, b)
             end
         end)
 
-        --// ---- Hoạt ảnh lặp: viền lắc nhẹ như ánh sáng đổi góc, quầng sáng logo thở ----
+        --// ---- Hoạt ảnh lặp: viền lắc nhẹ như ánh sáng đổi góc, quầng sáng logo thở (tắt được bằng Chế độ tiết kiệm) ----
+        local loopTweens = {}
         local function Loop(obj, props, time, delayTime)
-            pcall(function()
-                TweenService:Create(obj,
+            local okL, tw = pcall(function()
+                local t = TweenService:Create(obj,
                     TweenInfo.new(time, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, delayTime or 0),
-                    props):Play()
+                    props)
+                t:Play()
+                return t
             end)
+            if okL and tw then table.insert(loopTweens, tw) end
         end
-        if GLASS then
+        local function StartLoops()
+            if not GLASS then return end
             if GradA then Loop(GradA, {Rotation = 80}, 4.2) end
             if GradB then Loop(GradB, {Rotation = 175}, 5.6, 0.4) end
             if LogoGlow then Loop(LogoGlow, {ImageTransparency = 0.58}, 2.6) end
+        end
+        local function StopLoops()
+            for _, tw in ipairs(loopTweens) do pcall(function() tw:Cancel() end) end
+            loopTweens = {}
+            if GradA then GradA.Rotation = 35 end
+            if GradB then GradB.Rotation = 205 end
+            if LogoGlow then LogoGlow.ImageTransparency = 0.66 end
+        end
+        if not MeizuLibrary.PerfMode then StartLoops() end
+        OnPerfChange(function(perf) if perf then StopLoops() else StartLoops() end end)
+
+        if GLASS then
             task.spawn(function()      -- vệt sáng quét ngang mỗi ~5 giây
                 task.wait(1.2)
                 while ToggleBtn.Parent and not MeizuLibrary.Destroyed do
-                    if Glint and Glint.Parent then
+                    if Glint and Glint.Parent and not MeizuLibrary.PerfMode then
                         Glint.Position = UDim2.new(-0.5, 0, 0.5, 0)
                         Tween(Glint, 0.9, {Position = UDim2.new(1.5, 0, 0.5, 0)}, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
                     end
@@ -3839,7 +4712,7 @@ MeizuLibrary.CreateWindow = function(a, b)
 
         task.spawn(function()          -- sóng lan khi UI đang ẩn
             while ToggleBtn.Parent and not MeizuLibrary.Destroyed do
-                if not isOpen and PulseRing.Parent then
+                if not isOpen and PulseRing.Parent and not MeizuLibrary.PerfMode then
                     PulseRing.Size = UDim2.fromOffset(BTN_W, BTN_H)
                     PulseStroke.Transparency = 0.35
                     Tween(PulseRing, 1.2, {Size = UDim2.fromOffset(BTN_W + 34, BTN_H + 34)}, Enum.EasingStyle.Quad)
@@ -3909,8 +4782,81 @@ MeizuLibrary.CreateWindow = function(a, b)
             ToggleBtn.Position = ClampButton(ToggleBtn.Position)
         end))
 
-        ToggleBtn.MouseEnter:Connect(function() hovering = true ApplyPhysics() end)
-        ToggleBtn.MouseLeave:Connect(function() hovering = false ApplyPhysics() end)
+        --// ---- Hít vào mép màn hình (kiểu AssistiveTouch) + tuỳ chọn thu nửa khi không dùng ----
+        local docked, dockToken = false, 0
+        local function SetDocked(on)
+            if on == docked then return end
+            local vp = ScreenGui.AbsoluteSize
+            local pos = ToggleBtn.Position
+            local cx = vp.X * pos.X.Scale + pos.X.Offset
+            local dir = (cx < vp.X / 2) and -1 or 1                      -- thò ra phía mép gần nhất
+            docked = on
+            Tween(ToggleBtn, 0.35, {Position = UDim2.new(pos.X.Scale, pos.X.Offset + BTN_W * 0.42 * dir * (on and 1 or -1),
+                pos.Y.Scale, pos.Y.Offset)}, Enum.EasingStyle.Quint)
+            Tween(Glass, 0.35, {GroupTransparency = on and 0.4 or 0})
+        end
+        local function ScheduleDock()
+            if not TOGGLE_BUTTON_DOCK then return end
+            dockToken = dockToken + 1
+            local token = dockToken
+            task.delay(3, function()
+                if token == dockToken and ToggleBtn.Parent and not pressed and not dragging and not hovering then
+                    SetDocked(true)
+                end
+            end)
+        end
+        local function Undock()
+            dockToken = dockToken + 1
+            SetDocked(false)
+        end
+        local function SnapToEdge()
+            if not TOGGLE_BUTTON_SNAP then ScheduleDock() return end
+            local vp = ScreenGui.AbsoluteSize
+            if vp.X <= 0 or vp.Y <= 0 then return end
+            local pos = ToggleBtn.Position
+            local cx = vp.X * pos.X.Scale + pos.X.Offset
+            local cy = vp.Y * pos.Y.Scale + pos.Y.Offset
+            local hw, hh, margin = BTN_W / 2, BTN_H / 2, 10
+            local tx = (cx < vp.X / 2) and (hw + margin) or (vp.X - hw - margin)
+            local ty = math.clamp(cy, hh + margin, math.max(vp.Y - hh - margin, hh + margin))
+            Tween(ToggleBtn, 0.55, {Position = UDim2.new(pos.X.Scale, pos.X.Offset + (tx - cx),
+                pos.Y.Scale, pos.Y.Offset + (ty - cy))}, Enum.EasingStyle.Back)
+            ScheduleDock()
+        end
+
+        --// ---- Huy hiệu "chưa đọc": số thông báo đến khi UI đang ẩn ----
+        local UnreadBadge = New("Frame", {
+            Name = "UnreadBadge", BackgroundColor3 = Color3.fromRGB(255, 69, 58),
+            AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(1, -3, 0, 5), Size = UDim2.fromOffset(18, 18),
+            BorderSizePixel = 0, Visible = false, ZIndex = 160, Parent = ToggleBtn,
+        })
+        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = UnreadBadge})
+        New("UIStroke", {Color = WHITE, Thickness = 1.5, Transparency = 0.35, Parent = UnreadBadge})
+        local UnreadText = TextObj("TextLabel", {
+            BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "",
+            TextColor3 = WHITE, ZIndex = 161, Parent = UnreadBadge,
+        }, "Bold", 10)
+        local UnreadScale = New("UIScale", {Scale = 1, Parent = UnreadBadge})
+        local unread = 0
+        local function RenderUnread()
+            if unread <= 0 then UnreadBadge.Visible = false return end
+            local text = (unread > 9) and "9+" or tostring(unread)
+            UnreadText.Text = text
+            UnreadBadge.Size = UDim2.fromOffset(#text > 1 and 24 or 18, 18)
+            UnreadBadge.Visible = true
+            UnreadScale.Scale = 0.5
+            Tween(UnreadScale, 0.4, {Scale = 1}, Enum.EasingStyle.Back)
+        end
+        MeizuLibrary._OnNotify = function()
+            if not isOpen then unread = unread + 1 RenderUnread() end
+        end
+        MeizuLibrary._ClearUnread = function()
+            unread = 0
+            RenderUnread()
+        end
+
+        ToggleBtn.MouseEnter:Connect(function() hovering = true Undock() ApplyPhysics() end)
+        ToggleBtn.MouseLeave:Connect(function() hovering = false ApplyPhysics() ScheduleDock() end)
 
         -- Một handler duy nhất cho cả bấm (click) lẫn kéo (drag); kéo > 6px thì không tính là click
         ToggleBtn.InputBegan:Connect(function(input)
@@ -3919,6 +4865,7 @@ MeizuLibrary.CreateWindow = function(a, b)
             local startPos = ToggleBtn.Position
             local moved = false
             pressed = true
+            Undock()
             ApplyPhysics()
             WaterRipple(input)
             AddDrag(input, {
@@ -3942,7 +4889,7 @@ MeizuLibrary.CreateWindow = function(a, b)
                     dragging = false
                     ApplyPhysics()
                     Lift(false)
-                    if not moved then Window:Toggle() end
+                    if not moved then Window:Toggle() else SnapToEdge() end
                 end,
             })
         end)
@@ -3955,7 +4902,163 @@ MeizuLibrary.CreateWindow = function(a, b)
         end
 
         Tween(BtnScale, 0.6, {Scale = 1}, Enum.EasingStyle.Back)
+        ScheduleDock()
     end
+
+
+    --// ==================== WATERMARK (FPS / PING / GIỜ) — thanh kính nổi, kéo được ====================
+    do
+        local WM_H = 30
+        local WHITE = Color3.fromRGB(255, 255, 255)
+        local WM = New("Frame", {
+            Name = "Watermark", BackgroundTransparency = 1, BorderSizePixel = 0, Active = true,
+            AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 14),
+            Size = UDim2.fromOffset(200, WM_H), Visible = false, ZIndex = 140, Parent = ScreenGui,
+        })
+        local WMScale = New("UIScale", {Scale = 0.9, Parent = WM})
+        local WMGlass = New("CanvasGroup", {
+            Name = "Glass", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
+            BorderSizePixel = 0, ZIndex = 1, Parent = WM,
+        })
+        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = WMGlass})
+        local WMBody = New("Frame", {
+            BackgroundColor3 = TOGGLE_BUTTON_GLASS_TINT, Size = UDim2.fromScale(1, 1),
+            BorderSizePixel = 0, ZIndex = 1, Parent = WMGlass,
+        })
+        New("UIGradient", {
+            Rotation = 90,
+            Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0.36)}),
+            Parent = WMBody,
+        })
+        local WMSheen = New("Frame", {
+            BackgroundColor3 = WHITE, Size = UDim2.fromScale(1, 0.55), BorderSizePixel = 0, ZIndex = 2, Parent = WMGlass,
+        })
+        New("UIGradient", {
+            Rotation = 90,
+            Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0.78), NumberSequenceKeypoint.new(1, 1)}),
+            Parent = WMSheen,
+        })
+        local WMDot = New("Frame", {
+            BackgroundColor3 = MeizuLibrary.Accent, AnchorPoint = Vector2.new(0, 0.5),
+            Position = UDim2.new(0, 12, 0.5, 0), Size = UDim2.fromOffset(8, 8), BorderSizePixel = 0, ZIndex = 4, Parent = WMGlass,
+        })
+        RegisterAccent(WMDot, "BackgroundColor3")
+        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = WMDot})
+        local WMLabel = TextObj("TextLabel", {
+            BackgroundTransparency = 1, Position = UDim2.new(0, 28, 0, 0), Size = UDim2.new(1, -38, 1, 0),
+            TextColor3 = WHITE, TextXAlignment = Enum.TextXAlignment.Left, Text = "", ZIndex = 5, Parent = WMGlass,
+        }, "Medium", 12)
+        -- Viền sáng
+        local WMRim = New("Frame", {
+            BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 6, Parent = WM,
+        })
+        New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = WMRim})
+        local WMStroke = New("UIStroke", {Color = WHITE, Thickness = 1.2, Transparency = 0, Parent = WMRim})
+        New("UIGradient", {
+            Rotation = 20,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.15), NumberSequenceKeypoint.new(0.5, 0.88), NumberSequenceKeypoint.new(1, 0.25)}),
+            Parent = WMStroke,
+        })
+
+        local function ClampWM(pos)
+            local vp = ScreenGui.AbsoluteSize
+            if vp.X <= 0 or vp.Y <= 0 then return pos end
+            local hw = math.max(WM.AbsoluteSize.X / 2, 20)
+            local cx = vp.X * pos.X.Scale + pos.X.Offset
+            local cy = vp.Y * pos.Y.Scale + pos.Y.Offset
+            local ncx = math.clamp(cx, hw, math.max(vp.X - hw, hw))
+            local ncy = math.clamp(cy, 0, math.max(vp.Y - WM_H, 0))
+            return UDim2.new(pos.X.Scale, pos.X.Offset + (ncx - cx), pos.Y.Scale, pos.Y.Offset + (ncy - cy))
+        end
+        MakeDraggable(WM, WM, ClampWM)
+
+        local frames, acc, fps = 0, 0, 60
+        local hbConn = nil
+        local function PingMs()
+            local okP, v = pcall(function()
+                return game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+            end)
+            if okP and type(v) == "number" then return math.floor(v + 0.5) end
+            return nil
+        end
+        local function Refresh()
+            if not WM.Parent then return end
+            local ping = PingMs()
+            local text = string.format("%s  |  %d FPS  |  %s  |  %s",
+                TitleLabel.Text, math.floor(fps + 0.5), ping and (ping .. " ms") or "-- ms", os.date("%H:%M"))
+            WMLabel.Text = text
+            local _, tw = MeasureText(text, "Medium", 12, 700)
+            WM.Size = UDim2.fromOffset(tw + 46, WM_H)
+        end
+        local function Stop()
+            if hbConn then hbConn:Disconnect() hbConn = nil end
+        end
+        local function Start()
+            if hbConn then return end
+            frames, acc = 0, 0
+            hbConn = RunService.Heartbeat:Connect(function(dt)
+                frames = frames + 1
+                acc = acc + dt
+                if acc >= (MeizuLibrary.PerfMode and 1 or 0.5) then
+                    fps = frames / acc
+                    frames, acc = 0, 0
+                    Refresh()
+                end
+            end)
+            table.insert(MeizuLibrary._Connections, hbConn)
+        end
+        local function SetWatermark(on)
+            if not WM.Parent then return end
+            if on then
+                WM.Visible = true
+                Refresh()
+                Start()
+                Tween(WMScale, 0.35, {Scale = 1}, Enum.EasingStyle.Back)
+            else
+                Stop()
+                Tween(WMScale, 0.2, {Scale = 0.9})
+                task.delay(0.22, function()
+                    if not MeizuLibrary.WatermarkOn and WM.Parent then WM.Visible = false end
+                end)
+            end
+        end
+        MeizuLibrary._SetWatermarkImpl = SetWatermark
+        function Window:SetWatermark(on) MeizuLibrary:SetWatermark(on) end
+        if MeizuLibrary.WatermarkOn then SetWatermark(true) end
+    end
+
+    --// ==================== HOÀN TẤT DỰNG UI -> KÍCH HOẠT AUTO LOAD / "LÊN ĐẠN" AUTO SAVE ====================
+    -- Đợi hub dựng xong (không có element mới nào trong ~1.2 giây, tối đa 20 giây), sau đó:
+    --   1) kích hoạt callback cho các giá trị đã lưu (tính năng thật sự chạy),
+    --   2) cho phép Auto Save hoạt động (trước đó mọi giá trị mặc định lúc dựng UI đều bị bỏ qua).
+    task.spawn(function()
+        local started = os.clock()
+        while not MeizuLibrary.Destroyed do
+            task.wait(0.4)
+            local now = os.clock()
+            if now - MeizuLibrary._LastBind > 1.2 or now - started > 20 then break end
+        end
+        if MeizuLibrary.Destroyed then return end
+        local applied = 0
+        MeizuLibrary._Loading = true
+        for _, p in pairs(MeizuLibrary._AutoPending) do
+            if p.El then
+                pcall(p.El.Set, Deserialize(p.Value), true)
+                applied = applied + 1
+            end
+        end
+        MeizuLibrary._AutoPending = {}
+        MeizuLibrary._Loading = false
+        MeizuLibrary._AutoArmed = true
+        if MeizuLibrary.AutoSave and MeizuLibrary._AutoDirty then
+            MeizuLibrary._AutoDirty = false
+            MeizuLibrary:_QueueAutoSave()
+        end
+        if applied > 0 then
+            MeizuLibrary:Notify({Title = "Config", Content = "Auto-loaded the last saved settings.", Type = "success", Duration = 3})
+        end
+    end)
 
     --// ==================== SETTINGS TAB (TỰ ĐỘNG) ====================
     if config.SettingsTab ~= false then
@@ -3991,7 +5094,26 @@ MeizuLibrary.CreateWindow = function(a, b)
             Default = math.floor((MeizuLibrary.UIScale or 1) * 100 + 0.5),
             Callback = function(v) Window:SetScale(v / 100) end,
         })
-        local soundToggle
+        local glassToggle = Appearance:CreateToggle({
+            Title = "Glass Window", Description = "Slightly transparent window surfaces",
+            Default = MeizuLibrary.GlassWindow,
+            Callback = function(v) MeizuLibrary:SetGlassWindow(v) end,
+        })
+        local blurToggle = Appearance:CreateToggle({
+            Title = "Background Blur", Description = "Blur the game behind the UI while it is open",
+            Default = MeizuLibrary.BlurEnabled,
+            Callback = function(v) MeizuLibrary:SetBlur(v) end,
+        })
+        local blurSlider = Appearance:CreateSlider({
+            Title = "Blur Strength", Min = 2, Max = 30, Default = MeizuLibrary.BlurSize,
+            Callback = function(v) MeizuLibrary:SetBlur(nil, v) end,
+        })
+        local perfToggle = Appearance:CreateToggle({
+            Title = "Performance Mode", Description = "Reduce effects to boost FPS",
+            Default = MeizuLibrary.PerfMode,
+            Callback = function(v) MeizuLibrary:SetPerformanceMode(v) end,
+        })
+        local soundToggle, langDD, wmToggle, autoSaveToggle, autoLoadToggle
         local function ResetAppearance()
             MeizuLibrary:ResetAppearance()
             Window:SetScale(1)
@@ -4000,6 +5122,10 @@ MeizuLibrary.CreateWindow = function(a, b)
             rainbowToggle.Set(false)
             fontDD.Set(MeizuLibrary.FontName)
             scaleSlider.Set(100)
+            glassToggle.Set(false)
+            blurToggle.Set(false)
+            blurSlider.Set(DEFAULT_BLUR_SIZE)
+            perfToggle.Set(false)
             if soundToggle then soundToggle.Set(true) end
             MeizuLibrary:Notify({Title = "Appearance", Content = "Appearance has been reset.", Type = "success"})
         end
@@ -4008,12 +5134,17 @@ MeizuLibrary.CreateWindow = function(a, b)
             Description = "Restore theme, accent, font and scale to default",
             Callback = ResetAppearance,
         })
+        Appearance:CreateButton({
+            Title = "Reset Window",
+            Description = "Restore the default size and position",
+            Callback = function() Window:ResetLayout() end,
+        })
 
         --// Chung
         local General = SettingsTab:CreateSection("General")
         local langNames = {}
         for _, code in ipairs(MeizuLibrary.LanguageOrder) do table.insert(langNames, MeizuLibrary.Languages[code]) end
-        General:CreateDropdown({
+        langDD = General:CreateDropdown({
             Title = "Language", Options = langNames, Default = MeizuLibrary.Languages[MeizuLibrary.Language],
             Callback = function(v) if v then MeizuLibrary:SetLanguage(v) end end,
         })
@@ -4024,6 +5155,11 @@ MeizuLibrary.CreateWindow = function(a, b)
         soundToggle = General:CreateToggle({
             Title = "Sound Effects", Default = MeizuLibrary.SoundEnabled,
             Callback = function(v) MeizuLibrary:SetSound(v) end,
+        })
+        wmToggle = General:CreateToggle({
+            Title = "Watermark (FPS / Ping)", Description = "Floating glass bar with FPS, ping and clock",
+            Default = MeizuLibrary.WatermarkOn,
+            Callback = function(v) MeizuLibrary:SetWatermark(v) end,
         })
 
         --// Cấu hình
@@ -4072,6 +5208,34 @@ MeizuLibrary.CreateWindow = function(a, b)
                 end
             end,
         })
+        autoSaveToggle = Config:CreateToggle({
+            Title = "Auto Save", Description = "Save every change automatically",
+            Default = MeizuLibrary.AutoSave,
+            Callback = function(v) MeizuLibrary:SetAutoSave(v) end,
+        })
+        autoLoadToggle = Config:CreateToggle({
+            Title = "Auto Load", Description = "Restore the last saved settings when the UI opens",
+            Default = MeizuLibrary.AutoLoad,
+            Callback = function(v) MeizuLibrary:SetAutoLoad(v) end,
+        })
+        -- Giữ các công tắc trong Cài đặt luôn khớp trạng thái thật, kể cả khi script gọi thẳng API
+        -- (Library:SetBlur(true), :SetLanguage("en")...). Chỉ đồng bộ công tắc / danh sách chọn — KHÔNG đụng vào
+        -- thanh trượt và bảng màu để không giật khi người dùng đang kéo.
+        MeizuLibrary._SyncSettings = function()
+            local function Put(el, value) if el then pcall(el.Set, value) end end
+            Put(themeDD, MeizuLibrary.Theme)
+            Put(fontDD, MeizuLibrary.FontName)
+            Put(langDD, MeizuLibrary.Languages[MeizuLibrary.Language])
+            Put(rainbowToggle, MeizuLibrary._RainbowConn ~= nil)
+            Put(glassToggle, MeizuLibrary.GlassWindow)
+            Put(blurToggle, MeizuLibrary.BlurEnabled)
+            Put(perfToggle, MeizuLibrary.PerfMode)
+            Put(soundToggle, MeizuLibrary.SoundEnabled)
+            Put(wmToggle, MeizuLibrary.WatermarkOn)
+            Put(autoSaveToggle, MeizuLibrary.AutoSave)
+            Put(autoLoadToggle, MeizuLibrary.AutoLoad)
+        end
+
         Config:CreateButton({
             Title = "Unload Library",
             Description = "Remove the whole UI from the game",
@@ -4101,980 +5265,5 @@ MeizuLibrary.CreateWindow = function(a, b)
 
     return Window
 end
-
-
---[[ ════════════════════════════════════════════════════════════
-     PHẦN 2 • MEIZU EXTRAS v1.1 (nguyên vẹn, đã kiểm tra cú pháp)
-     ════════════════════════════════════════════════════════════ ]]
-
---[[
-    ███╗   ███╗███████╗██╗███████╗██╗   ██╗
-    ██╔████╔██║██╔════╝██║██╔════╝╚██╗ ██╔╝
-    ██║██╔╝██╗█████╗  ██║███████╗ ╚████╔╝
-    ██║███╗██║██╔══╝  ██║╚════██║  ╚██╔╝
-    ███╔███╔██║██║███╗██║███████║   ██║
-    ╚═╝ ╚══╝ ╚═╝╚════╝╚═╝╚══════╝   ╚═╝
-    MEIZU EXTRAS v1.0 — Bộ tiện ích nhỏ mở rộng cho Meizu Library v3.0 "Luxe"
-    ===========================================================================
-    CÁCH DÙNG: Dán toàn bộ file này xuống CUỐI file library (hoặc loadstring riêng),
-    KHÔNG cần sửa gì file library cả.
-
-      Extras:Init(MeizuLibrary)     -- (tùy chọn) tự bám theme/màu nhấn của library
-      Extras:EnableWatermark{...}   -- Thanh kính: FPS / Ping / Giờ / Uptime / Chữ riêng (kéo được)
-      Extras:EnableKeyVisualizer()  -- Hiện phím vừa bấm kiểu streamer (hỗ trợ LMB/RMB/TAP)
-      Extras:EnableLogger{...}      -- Console nổi ghi log: Extras:Log / :Warn / :Error / :ClearLog
-      Extras:AttachTooltip(obj, s)  -- Tooltip kính theo chuột, tự lật khi sát mép màn hình
-      Extras:NewContextMenu(obj, m) -- Menu chuột phải cho BẤT KỲ element / GuiObject nào
-      Extras:SetPanicKey(KeyCode.F8)-- 1 phím ẩn/hiện TOÀN BỘ UI (library + extras)
-      Extras:ToggleFPSBoost(true)   -- Giảm đồ hoạ tăng FPS (hoàn tác được nguyên trạng)
-      Extras:EnableAntiAFK(true)    -- Chống bị kick vì đứng yên
-      Extras:SyncTheme()            -- Cập nhật lại màu cho widget theo theme hiện tại
-      Extras:Destroy()              -- Dọn sạch toàn bộ tiện ích
-]]
-
-local Extras = { Version = "1.0", Library = nil, _Gui = nil, SoundEnabled = true }
-
-local UserInputService = game:GetService("UserInputService")
-local RunService       = game:GetService("RunService")
-local TweenService     = game:GetService("TweenService")
-local TextService      = game:GetService("TextService")
-local Players          = game:GetService("Players")
-local Lighting         = game:GetService("Lighting")
-
-local LocalPlayer = Players.LocalPlayer
-
--- ===== BẢNG MÀU (SyncTheme sẽ tự cập nhật theo library) =====
-local C = {
-    Bg     = Color3.fromRGB(18, 20, 28),
-    Panel  = Color3.fromRGB(22, 25, 34),
-    Text   = Color3.fromRGB(240, 242, 248),
-    Sub    = Color3.fromRGB(148, 153, 168),
-    Stroke = Color3.fromRGB(45, 50, 66),
-    Accent = Color3.fromRGB(88, 101, 242),
-    Ok     = Color3.fromRGB(80, 200, 120),
-    Warn   = Color3.fromRGB(255, 184, 77),
-    Err    = Color3.fromRGB(255, 95, 95),
-}
-
--- ===== HELPERS =====
-local function New(class, props, children)
-    local obj = Instance.new(class)
-    local parent = nil
-    if props then
-        for k, v in pairs(props) do
-            if k == "Parent" then parent = v else obj[k] = v end
-        end
-    end
-    if children then
-        for _, ch in ipairs(children) do ch.Parent = obj end
-    end
-    if parent then obj.Parent = parent end
-    return obj
-end
-
-local function Tween(obj, time, props, style, dir)
-    if not obj then return end
-    pcall(function()
-        TweenService:Create(obj,
-            TweenInfo.new(time or 0.25, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out),
-            props):Play()
-    end)
-end
-
-local function Round(obj, px)
-    New("UICorner", {CornerRadius = UDim.new(0, px or 8), Parent = obj})
-end
-
-local function Measure(text, size, font, width)
-    local ok, v = pcall(function()
-        return TextService:GetTextSize(tostring(text), size, font or Enum.Font.SourceSans,
-            Vector2.new(width or 2000, 10000))
-    end)
-    if ok and v then return math.max(math.ceil(v.X), 4), math.max(math.ceil(v.Y), size) end
-    return #tostring(text) * math.floor(size * 0.55), size
-end
-
-local function MousePos()
-    local ok, p = pcall(function() return UserInputService:GetMouseLocation() end)
-    if ok and p then return p end
-    return Vector2.new(0, 0)
-end
-
-local function ScreenSize()
-    local ok, v = pcall(function() return workspace.CurrentCamera.ViewportSize end)
-    if ok and v then return v end
-    return Vector2.new(1920, 1080)
-end
-
-local function PlayClick(vol, speed)
-    if not Extras.SoundEnabled then return end
-    pcall(function()
-        local s = Instance.new("Sound")
-        s.SoundId = "rbxasset://sounds/electronicpingshort.wav"
-        s.Volume = vol or 0.15
-        s.PlaybackSpeed = speed or 1.3
-        s.Parent = game:GetService("SoundService")
-        s:Play()
-        task.delay(2, function() if s then s:Destroy() end end)
-    end)
-end
-
-local function GetGui()
-    if Extras._Gui and Extras._Gui.Parent then return Extras._Gui end
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "MeizuExtras"
-    gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.DisplayOrder = 9998
-    local ok = pcall(function()
-        if type(syn) == "table" and type(syn.protect_gui) == "function" then syn.protect_gui(gui) end
-        local parent = (type(gethui) == "function" and gethui()) or game:GetService("CoreGui")
-        gui.Parent = parent
-    end)
-    if not ok or not gui.Parent then
-        local lp = Players.LocalPlayer
-        if lp then gui.Parent = lp:WaitForChild("PlayerGui") end
-    end
-    Extras._Gui = gui
-    return gui
-end
-
--- Kéo widget (chuột + cảm ứng), gọn nhẹ dùng riêng cho extras
-local function Draggable(handle, target)
-    handle.Active = true
-    handle.InputBegan:Connect(function(input)
-        if input.UserInputType ~= Enum.UserInputType.MouseButton1
-        and input.UserInputType ~= Enum.UserInputType.Touch then return end
-        local startPos = target.Position
-        local sx, sy = input.Position.X, input.Position.Y
-        local moveConn, upConn
-        moveConn = UserInputService.InputChanged:Connect(function(inp)
-            if inp.UserInputType ~= Enum.UserInputType.MouseMovement
-            and inp.UserInputType ~= Enum.UserInputType.Touch then return end
-            local dx, dy = inp.Position.X - sx, inp.Position.Y - sy
-            target.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + dx,
-                startPos.Y.Scale, startPos.Y.Offset + dy)
-        end)
-        upConn = UserInputService.InputEnded:Connect(function(inp)
-            if inp.UserInputType == Enum.UserInputType.MouseButton1
-            or inp.UserInputType == Enum.UserInputType.Touch then
-                if moveConn then moveConn:Disconnect() end
-                if upConn then upConn:Disconnect() end
-            end
-        end)
-    end)
-end
-
--- Chấp nhận cả GuiObject lẫn element của library (tự dò field GUI phổ biến)
-local function ResolveTarget(target)
-    if type(target) == "table" then
-        for _, k in ipairs({"Frame", "Main", "Container", "Button", "Hitbox", "Object", "Instance", "Element"}) do
-            local v = target[k]
-            if typeof(v) == "Instance" and v:IsA("GuiObject") then return v end
-        end
-        return nil
-    end
-    if typeof(target) == "Instance" and target:IsA("GuiObject") then return target end
-    return nil
-end
-
---// ==================== 1) WATERMARK (FPS / PING / GIỜ / UPTIME) ====================
-local WM = nil
-
-function Extras:DisableWatermark()
-    if not WM then return end
-    if WM._c1 then WM._c1:Disconnect() end
-    if WM._c2 then WM._c2:Disconnect() end
-    if WM.Card then WM.Card:Destroy() end
-    WM = nil
-end
-
-function Extras:EnableWatermark(cfg)
-    cfg = cfg or {}
-    self:DisableWatermark()
-    local gui = GetGui()
-
-    local showText  = cfg.Text ~= nil and cfg.Text ~= false
-    local showFPS   = cfg.ShowFPS ~= false
-    local showPing  = cfg.ShowPing ~= false
-    local showClock = cfg.ShowClock ~= false
-    local showUp    = cfg.ShowUptime ~= false
-
-    local Card = New("CanvasGroup", {
-        Name = "Watermark",
-        BackgroundColor3 = C.Bg,
-        BackgroundTransparency = 0.15,
-        Position = cfg.Position or UDim2.new(0, 16, 0, 16),
-        Size = UDim2.fromOffset(160, 34),
-        GroupTransparency = 1,
-        BorderSizePixel = 0,
-        ZIndex = 50, Parent = gui,
-    })
-    Round(Card, 10)
-    New("UIStroke", {Color = C.Stroke, Thickness = 1, Transparency = 0.25, Parent = Card})
-
-    local Dot = New("Frame", {
-        BackgroundColor3 = C.Accent,
-        AnchorPoint = Vector2.new(0, 0.5),
-        Position = UDim2.new(0, 10, 0.5, 0),
-        Size = UDim2.fromOffset(8, 8),
-        BorderSizePixel = 0, ZIndex = 51, Parent = Card,
-    })
-    Round(Dot, 4)
-
-    local Label = New("TextLabel", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 26, 0, 0),
-        Size = UDim2.new(1, -32, 1, 0),
-        Font = Enum.Font.SourceSansSemibold,
-        TextSize = 14,
-        TextColor3 = C.Text,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Text = "", ZIndex = 51, Parent = Card,
-    })
-
-    local frames, acc, fps, ping = 0, 0, 60, 0
-    local t0 = os.clock()
-
-    local c1 = RunService.RenderStepped:Connect(function(dt)
-        frames = frames + 1
-        acc = acc + dt
-        if acc >= 0.5 then
-            fps = math.floor(frames / acc + 0.5)
-            frames = 0
-            acc = 0
-        end
-    end)
-
-    local function Refresh()
-        local parts = {}
-        if showText and cfg.Text then table.insert(parts, tostring(cfg.Text)) end
-        if showFPS then table.insert(parts, fps .. " FPS") end
-        if showPing then table.insert(parts, string.format("%.0f ms", ping * 1000)) end
-        if showUp then
-            local up = os.clock() - t0
-            table.insert(parts, string.format("%d:%02d:%02d",
-                math.floor(up / 3600), math.floor(up / 60) % 60, math.floor(up) % 60))
-        end
-        if showClock then table.insert(parts, os.date("%H:%M:%S")) end
-        local txt = table.concat(parts, "  •  ")
-        Label.Text = txt
-        local w = Measure(txt, 14, Enum.Font.SourceSansSemibold)
-        Card.Size = UDim2.fromOffset(w + 40, 34)
-    end
-
-    local tAcc = 1
-    local c2 = RunService.Heartbeat:Connect(function(dt)
-        pcall(function()
-            local p = LocalPlayer:GetNetworkPing()
-            if p >= 0 and p < 5 then ping = p end
-        end)
-        tAcc = tAcc + dt
-        if tAcc >= 0.5 then
-            tAcc = 0
-            Refresh()
-        end
-    end)
-
-    Draggable(Card, Card)
-    WM = {Card = Card, Dot = Dot, Label = Label, _c1 = c1, _c2 = c2}
-
-    -- chấm accent "thở" nhẹ
-    task.spawn(function()
-        while WM and WM.Card == Card and Card.Parent do
-            Tween(Dot, 0.8, {BackgroundTransparency = 0.45})
-            task.wait(0.8)
-            if not (WM and WM.Card == Card) then break end
-            Tween(Dot, 0.8, {BackgroundTransparency = 0})
-            task.wait(0.8)
-        end
-    end)
-
-    Tween(Card, 0.3, {GroupTransparency = 0})
-    Refresh()
-    PlayClick(0.12, 1.4)
-
-    return {
-        SetText = function(s) cfg.Text = s Refresh() end,
-        Destroy = function() Extras:DisableWatermark() end,
-    }
-end
-
---// ==================== 2) KEY VISUALIZER (KIỂU STREAMER) ====================
-local KV = nil
-
-function Extras:DisableKeyVisualizer()
-    if not KV then return end
-    if KV._c then KV._c:Disconnect() end
-    if KV.Holder then KV.Holder:Destroy() end
-    KV = nil
-end
-
-function Extras:EnableKeyVisualizer(cfg)
-    cfg = cfg or {}
-    self:DisableKeyVisualizer()
-    local gui = GetGui()
-
-    local Holder = New("Frame", {
-        Name = "KeyVisualizer",
-        BackgroundTransparency = 1,
-        AnchorPoint = Vector2.new(0.5, 1),
-        Position = cfg.Position or UDim2.new(0.5, 0, 1, -70),
-        Size = UDim2.fromOffset(500, 60),
-        ZIndex = 60, Parent = gui,
-    })
-    New("UIListLayout", {
-        Padding = UDim.new(0, 6),
-        FillDirection = Enum.FillDirection.Horizontal,
-        HorizontalAlignment = Enum.HorizontalAlignment.Center,
-        VerticalAlignment = Enum.VerticalAlignment.Bottom,
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        Parent = Holder,
-    })
-
-    local count, order = 0, 0
-    local function AddPill(name)
-        if count >= 12 then return end
-        count = count + 1
-        order = order + 1
-        local Pill = New("CanvasGroup", {
-            BackgroundColor3 = C.Bg,
-            BackgroundTransparency = 0.1,
-            Size = UDim2.fromOffset(0, 30),
-            ClipsDescendants = true,
-            LayoutOrder = order,
-            GroupTransparency = 0,
-            BorderSizePixel = 0, ZIndex = 61, Parent = Holder,
-        })
-        Round(Pill, 8)
-        New("UIStroke", {Color = C.Stroke, Thickness = 1, Transparency = 0.3, Parent = Pill})
-        New("TextLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.new(0, 4, 0, 0),
-            Size = UDim2.new(1, -8, 1, 0),
-            Font = Enum.Font.SourceSansSemibold, TextSize = 14,
-            TextColor3 = C.Text, Text = name,
-            ZIndex = 62, Parent = Pill,
-        })
-        local w = Measure(name, 14, Enum.Font.SourceSansSemibold)
-        local sc = New("UIScale", {Scale = 0.7, Parent = Pill})
-        Tween(sc, 0.25, {Scale = 1}, Enum.EasingStyle.Back)
-        Tween(Pill, 0.18, {Size = UDim2.fromOffset(w + 16, 30)})
-        task.delay(1.1, function()
-            count = count - 1
-            Tween(Pill, 0.3, {GroupTransparency = 1})
-            task.delay(0.32, function() if Pill then Pill:Destroy() end end)
-        end)
-    end
-
-    local function KeyName(input)
-        local t = input.UserInputType
-        if t == Enum.UserInputType.Keyboard then
-            local n = input.KeyCode.Name
-            if n ~= "Unknown" then return n end
-            return nil
-        end
-        if t == Enum.UserInputType.MouseButton1 then return "LMB" end
-        if t == Enum.UserInputType.MouseButton2 then return "RMB" end
-        if t == Enum.UserInputType.MouseButton3 then return "MMB" end
-        if t == Enum.UserInputType.Touch then return "TAP" end
-        return nil
-    end
-
-    local c = UserInputService.InputBegan:Connect(function(input, gp)
-        if gp then return end
-        local name = KeyName(input)
-        if name then AddPill(name) end
-    end)
-
-    KV = {Holder = Holder, _c = c}
-    return {Destroy = function() Extras:DisableKeyVisualizer() end}
-end
-
---// ==================== 3) LOGGER / CONSOLE NỔI ====================
-local LOG = nil
-
-function Extras:DisableLogger()
-    if not LOG then return end
-    if LOG._c then LOG._c:Disconnect() end
-    if LOG.Panel then LOG.Panel:Destroy() end
-    LOG = nil
-end
-
-function Extras:Log(msg, tag)
-    if LOG and LOG.AddLine then LOG.AddLine(msg, tag) end
-end
-
-function Extras:ClearLog()
-    if LOG and LOG.Clear then LOG.Clear() end
-end
-
-function Extras:EnableLogger(cfg)
-    cfg = cfg or {}
-    self:DisableLogger()
-    local gui = GetGui()
-    local maxEntries = math.max(cfg.Max or 60, 10)
-    local W = cfg.Width or 340
-
-    local Panel = New("CanvasGroup", {
-        Name = "Logger",
-        BackgroundColor3 = C.Bg,
-        BackgroundTransparency = 0.05,
-        AnchorPoint = Vector2.new(0, 1),
-        Position = cfg.Position or UDim2.new(0, 16, 1, -16),
-        Size = UDim2.fromOffset(W, cfg.Height or 180),
-        ClipsDescendants = true,
-        BorderSizePixel = 0, ZIndex = 70, Parent = gui,
-    })
-    Round(Panel, 10)
-    New("UIStroke", {Color = C.Stroke, Thickness = 1, Transparency = 0.25, Parent = Panel})
-
-    local Header = New("Frame", {
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 28),
-        ZIndex = 71, Parent = Panel,
-    })
-    New("TextLabel", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 10, 0, 0),
-        Size = UDim2.new(1, -90, 1, 0),
-        Font = Enum.Font.SourceSansBold, TextSize = 13,
-        TextColor3 = C.Text, TextXAlignment = Enum.TextXAlignment.Left,
-        Text = "MEIZU LOGGER", ZIndex = 72, Parent = Header,
-    })
-    local ClearBtn = New("TextButton", {
-        BackgroundTransparency = 1, AutoButtonColor = false,
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -50, 0, 0),
-        Size = UDim2.fromOffset(42, 28),
-        Font = Enum.Font.SourceSansSemibold, TextSize = 11,
-        TextColor3 = C.Sub, Text = "CLEAR",
-        ZIndex = 72, Parent = Header,
-    })
-    local HideBtn = New("TextButton", {
-        BackgroundTransparency = 1, AutoButtonColor = false,
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -8, 0, 0),
-        Size = UDim2.fromOffset(22, 28),
-        Font = Enum.Font.SourceSansBold, TextSize = 13,
-        TextColor3 = C.Sub, Text = "X",
-        ZIndex = 72, Parent = Header,
-    })
-
-    local List = New("ScrollingFrame", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 0, 0, 30),
-        Size = UDim2.new(1, 0, 1, -32),
-        CanvasSize = UDim2.new(0, 0, 0, 0),
-        ScrollBarThickness = 3,
-        ScrollBarImageColor3 = C.Stroke,
-        BorderSizePixel = 0, ZIndex = 71, Parent = Panel,
-    })
-    local Layout = New("UIListLayout", {
-        Padding = UDim.new(0, 2),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        Parent = List,
-    })
-    Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        List.CanvasSize = UDim2.fromOffset(0, Layout.AbsoluteContentSize + 8)
-        List.CanvasPosition = Vector2.new(0, math.max(Layout.AbsoluteContentSize - List.AbsoluteSize.Y + 8, 0))
-    end)
-
-    local entries, order = 0, 0
-    local function AddLine(msg, tag)
-        tag = tostring(tag or "info")
-        local color = (tag == "ok" and C.Ok) or (tag == "warn" and C.Warn)
-                     or (tag == "err" and C.Err) or C.Accent
-        order = order + 1
-        local full = os.date("%H:%M:%S") .. "  " .. tostring(msg)
-        local _, h = Measure(full, 12, Enum.Font.SourceSans, W - 26)
-        local Row = New("Frame", {
-            BackgroundColor3 = C.Panel,
-            BackgroundTransparency = 0.35,
-            Size = UDim2.new(1, -8, 0, h + 8),
-            LayoutOrder = -order,
-            BorderSizePixel = 0, ZIndex = 71, Parent = List,
-        })
-        Round(Row, 5)
-        New("Frame", {
-            BackgroundColor3 = color,
-            Position = UDim2.new(0, 4, 0, 4),
-            Size = UDim2.new(0, 2, 1, -8),
-            BorderSizePixel = 0, ZIndex = 72, Parent = Row,
-        })
-        New("TextLabel", {
-            BackgroundTransparency = 1,
-            Position = UDim2.new(0, 12, 0, 4),
-            Size = UDim2.new(1, -16, 1, -8),
-            Font = Enum.Font.SourceSans, TextSize = 12,
-            TextColor3 = C.Sub, TextXAlignment = Enum.TextXAlignment.Left,
-            TextYAlignment = Enum.TextYAlignment.Top,
-            TextWrapped = true, Text = full,
-            ZIndex = 72, Parent = Row,
-        })
-        entries = entries + 1
-        if entries > maxEntries then
-            for _, ch in ipairs(List:GetChildren()) do
-                if ch:IsA("Frame") then
-                    ch:Destroy()
-                    entries = entries - 1
-                    break
-                end
-            end
-        end
-    end
-
-    local function ClearAll()
-        for _, ch in ipairs(List:GetChildren()) do
-            if ch:IsA("Frame") then ch:Destroy() end
-        end
-        entries = 0
-    end
-    ClearBtn.Activated:Connect(function() ClearAll() PlayClick(0.1, 1.5) end)
-
-    local hidden = false
-    local function Toggle()
-        hidden = not hidden
-        if hidden then
-            Tween(Panel, 0.22, {GroupTransparency = 1})
-            task.delay(0.24, function() if hidden then Panel.Visible = false end end)
-        else
-            Panel.Visible = true
-            Tween(Panel, 0.22, {GroupTransparency = 0})
-        end
-    end
-    HideBtn.Activated:Connect(Toggle)
-
-    local key = cfg.Keybind or Enum.KeyCode.F4
-    local c = UserInputService.InputBegan:Connect(function(input, gp)
-        if gp then return end
-        if input.KeyCode == key then Toggle() end
-    end)
-
-    Draggable(Header, Panel)
-    LOG = {Panel = Panel, List = List, AddLine = AddLine, Clear = ClearAll, _c = c}
-    self:Log("Logger san sang — nhan " .. key.Name .. " de an/hien", "ok")
-    return {
-        Toggle = Toggle,
-        Destroy = function() Extras:DisableLogger() end,
-    }
-end
-
---// ==================== 4) TOOLTIP (THEO CHUỘT, TỰ LẬT SÁT MÉP) ====================
-local TT = nil
-local function EnsureTooltip()
-    if TT and TT.Card.Parent then return TT end
-    local Card = New("CanvasGroup", {
-        Name = "Tooltip",
-        BackgroundColor3 = C.Bg,
-        BackgroundTransparency = 0.05,
-        Size = UDim2.fromOffset(20, 20),
-        Visible = false,
-        GroupTransparency = 1,
-        BorderSizePixel = 0,
-        ZIndex = 300, Parent = GetGui(),
-    })
-    Round(Card, 6)
-    New("UIStroke", {Color = C.Stroke, Thickness = 1, Transparency = 0.2, Parent = Card})
-    local Label = New("TextLabel", {
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 8, 0, 5),
-        Size = UDim2.new(1, -16, 1, -10),
-        Font = Enum.Font.SourceSans, TextSize = 13,
-        TextColor3 = C.Text,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top,
-        TextWrapped = true, Text = "",
-        ZIndex = 301, Parent = Card,
-    })
-    TT = {Card = Card, Label = Label}
-    return TT
-end
-
-function Extras:AttachTooltip(target, text)
-    if text == nil then return nil end
-    target = ResolveTarget(target)
-    if not target then return nil end
-
-    local tip = EnsureTooltip()
-    local shown = false
-    local moveConn = nil
-
-    local function Place(w, h)
-        local m = MousePos()
-        local sw = ScreenSize()
-        local x, y = m.X + 14, m.Y + 18
-        if x + w > sw.X - 8 then x = m.X - w - 14 end
-        if y + h > sw.Y - 8 then y = m.Y - h - 16 end
-        if x < 8 then x = 8 end
-        if y < 8 then y = 8 end
-        tip.Card.Position = UDim2.fromOffset(x, y)
-    end
-
-    target.MouseEnter:Connect(function()
-        tip.Label.Text = tostring(text)
-        local w, h = Measure(text, 13, Enum.Font.SourceSans, 260)
-        w = math.min(w + 16, 276)
-        h = h + 10
-        tip.Card.Size = UDim2.fromOffset(w, h)
-        Place(w, h)
-        shown = true
-        tip.Card.Visible = true
-        Tween(tip.Card, 0.15, {GroupTransparency = 0})
-        if moveConn then moveConn:Disconnect() end
-        moveConn = UserInputService.InputChanged:Connect(function(inp)
-            if inp.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-            Place(tip.Card.Size.X.Offset, tip.Card.Size.Y.Offset)
-        end)
-    end)
-
-    target.MouseLeave:Connect(function()
-        shown = false
-        if moveConn then moveConn:Disconnect() moveConn = nil end
-        Tween(tip.Card, 0.12, {GroupTransparency = 1})
-        task.delay(0.14, function()
-            if not shown and TT == tip then tip.Card.Visible = false end
-        end)
-    end)
-    return target
-end
-
---// ==================== 5) CONTEXT MENU (CHUỘT PHẢI) ====================
-local OpenMenu = nil
-
-function Extras:NewContextMenu(target, items)
-    if type(items) ~= "table" then return nil end
-    target = ResolveTarget(target)
-    if not target then return nil end
-    local handle = {Close = function()
-        if OpenMenu and OpenMenu.Owner == handle then OpenMenu.Close() end
-    end}
-
-    target.InputBegan:Connect(function(input)
-        if input.UserInputType ~= Enum.UserInputType.MouseButton2 then return end
-        if OpenMenu then OpenMenu.Close() end
-
-        local rowH, width, totalH = 30, 0, 0
-        for _, it in ipairs(items) do
-            if type(it) == "table" then
-                if it.Separator then
-                    totalH = totalH + 9
-                else
-                    local w = Measure(tostring(it.Text or "..."), 13, Enum.Font.SourceSansSemibold)
-                    if w + 44 > width then width = w + 44 end
-                    totalH = totalH + rowH
-                end
-            end
-        end
-        if totalH == 0 then return end
-        width = math.max(width, 130)
-
-        local m, sw = MousePos(), ScreenSize()
-        local x, y = m.X, m.Y
-        if x + width > sw.X - 8 then x = sw.X - width - 8 end
-        if y + totalH > sw.Y - 8 then y = sw.Y - totalH - 8 end
-        if x < 8 then x = 8 end
-        if y < 8 then y = 8 end
-
-        local Menu = New("CanvasGroup", {
-            Name = "ContextMenu",
-            BackgroundColor3 = C.Bg,
-            BackgroundTransparency = 0.05,
-            Position = UDim2.fromOffset(x, y),
-            Size = UDim2.fromOffset(width, totalH),
-            GroupTransparency = 1,
-            ClipsDescendants = true,
-            BorderSizePixel = 0, ZIndex = 400, Parent = GetGui(),
-        })
-        Round(Menu, 8)
-        New("UIStroke", {Color = C.Stroke, Thickness = 1, Transparency = 0.2, Parent = Menu})
-
-        local closed = false
-        local globalConn
-        local function Close()
-            if closed then return end
-            closed = true
-            if globalConn then globalConn:Disconnect() globalConn = nil end
-            Tween(Menu, 0.15, {GroupTransparency = 1})
-            task.delay(0.17, function() if Menu then Menu:Destroy() end end)
-            if OpenMenu and OpenMenu.Owner == handle then OpenMenu = nil end
-        end
-        handle.Close = Close
-
-        globalConn = UserInputService.InputBegan:Connect(function(inp)
-            local t = inp.UserInputType
-            if t ~= Enum.UserInputType.MouseButton1 and t ~= Enum.UserInputType.Touch then return end
-            local px, py = inp.Position.X, inp.Position.Y
-            if px >= x and px <= x + width and py >= y and py <= y + totalH then return end
-            Close()
-        end)
-
-        local oy = 0
-        for _, it in ipairs(items) do
-            if type(it) == "table" and it.Separator then
-                New("Frame", {
-                    BackgroundColor3 = C.Stroke,
-                    Position = UDim2.new(0, 8, 0, oy + 4),
-                    Size = UDim2.new(1, -16, 0, 1),
-                    BorderSizePixel = 0, ZIndex = 401, Parent = Menu,
-                })
-                oy = oy + 9
-            elseif type(it) == "table" then
-                local disabled = it.Disabled == true
-                local Item = New("TextButton", {
-                    BackgroundColor3 = C.Accent,
-                    BackgroundTransparency = 1,
-                    AutoButtonColor = false,
-                    Position = UDim2.new(0, 4, 0, oy),
-                    Size = UDim2.new(1, -8, 0, rowH),
-                    Text = "", ZIndex = 401, Parent = Menu,
-                })
-                Round(Item, 6)
-                New("TextLabel", {
-                    BackgroundTransparency = 1,
-                    Position = UDim2.new(0, 10, 0, 0),
-                    Size = UDim2.new(1, -20, 1, 0),
-                    Font = Enum.Font.SourceSansSemibold, TextSize = 13,
-                    TextColor3 = disabled and C.Sub or C.Text,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    Text = tostring(it.Text or "..."),
-                    ZIndex = 402, Parent = Item,
-                })
-                Item.MouseEnter:Connect(function()
-                    if not disabled then Tween(Item, 0.12, {BackgroundTransparency = 0.82}) end
-                end)
-                Item.MouseLeave:Connect(function()
-                    Tween(Item, 0.12, {BackgroundTransparency = 1})
-                end)
-                Item.Activated:Connect(function()
-                    if disabled then return end
-                    Close()
-                    PlayClick(0.12, 1.5)
-                    if type(it.Callback) == "function" then
-                        task.spawn(function()
-                            local ok, err = pcall(it.Callback)
-                            if not ok then warn("[MeizuExtras] Menu error: " .. tostring(err)) end
-                        end)
-                    end
-                end)
-                oy = oy + rowH
-            end
-        end
-
-        OpenMenu = {Owner = handle, Close = Close}
-        Tween(Menu, 0.18, {GroupTransparency = 0})
-        PlayClick(0.1, 1.35)
-    end)
-    return handle
-end
-
---// ==================== 6) PANIC KEY (ẨN/HIỆN TOÀN BỘ UI) ====================
-local Panic = {Conn = nil, Hidden = false, Affected = {}}
-
-function Extras:SetPanicKey(key)
-    if Panic.Conn then Panic.Conn:Disconnect() Panic.Conn = nil end
-    if not key then return end
-    Panic.Conn = UserInputService.InputBegan:Connect(function(input, gp)
-        if gp then return end
-        if input.KeyCode == key then Extras:TogglePanic() end
-    end)
-end
-
-function Extras:TogglePanic()
-    if not Panic.Hidden then
-        Panic.Affected = {}
-        if Extras._Gui and Extras._Gui.Parent then
-            table.insert(Panic.Affected, {Gui = Extras._Gui, Was = Extras._Gui.Enabled})
-            Extras._Gui.Enabled = false
-        end
-        local function Scan(parent)
-            if not parent then return end
-            pcall(function()
-                for _, ch in ipairs(parent:GetChildren()) do
-                    if ch:IsA("ScreenGui")
-                    and (ch.Name == "MeizuLibrary" or ch.Name:sub(1, 13) == "MeizuLibrary_") then
-                        table.insert(Panic.Affected, {Gui = ch, Was = ch.Enabled})
-                        ch.Enabled = false
-                    end
-                end
-            end)
-        end
-        if type(gethui) == "function" then pcall(function() Scan(gethui()) end) end
-        if LocalPlayer then
-            pcall(function() Scan(LocalPlayer:FindFirstChild("PlayerGui")) end)
-        end
-        Panic.Hidden = true
-    else
-        for _, e in ipairs(Panic.Affected) do
-            if e.Gui and e.Gui.Parent then e.Gui.Enabled = e.Was end
-        end
-        Panic.Affected = {}
-        Panic.Hidden = false
-    end
-    return Panic.Hidden
-end
-
---// ==================== 7) FPS BOOST (HOÀN TÁC ĐƯỢC) ====================
-local Boost = {On = false, Saved = {}}
-
-function Extras:ToggleFPSBoost(on)
-    on = (on == nil) and (not Boost.On) or (on == true)
-    if on == Boost.On then return Boost.On end
-    if on then
-        Boost.Saved = {}
-        pcall(function()
-            Boost.Saved.Quality = settings().Rendering.QualityLevel
-            settings().Rendering.QualityLevel = 1
-        end)
-        pcall(function()
-            Boost.Saved.Shadows = Lighting.GlobalShadows
-            Lighting.GlobalShadows = false
-        end)
-        pcall(function()
-            local t = workspace:FindFirstChildOfClass("Terrain")
-            if t then
-                Boost.Saved.Decoration = t.Decoration
-                t.Decoration = false
-            end
-        end)
-        Boost.On = true
-    else
-        pcall(function()
-            if Boost.Saved.Quality then settings().Rendering.QualityLevel = Boost.Saved.Quality end
-        end)
-        pcall(function()
-            if Boost.Saved.Shadows ~= nil then Lighting.GlobalShadows = Boost.Saved.Shadows end
-        end)
-        pcall(function()
-            local t = workspace:FindFirstChildOfClass("Terrain")
-            if t and Boost.Saved.Decoration ~= nil then t.Decoration = Boost.Saved.Decoration end
-        end)
-        Boost.On = false
-        Boost.Saved = {}
-    end
-    return Boost.On
-end
-
-function Extras:IsFPSBoosted()
-    return Boost.On
-end
-
---// ==================== 8) ANTI-AFK ====================
-local AntiAFK = {Conn = nil}
-
-function Extras:EnableAntiAFK(on)
-    on = (on == nil) and true or (on == true)
-    if on then
-        if AntiAFK.Conn then return true end
-        if not LocalPlayer then return false end
-        AntiAFK.Conn = LocalPlayer.Idled:Connect(function()
-            pcall(function()
-                local vu = game:GetService("VirtualUser")
-                vu:CaptureController()
-                vu:ClickButton2(Vector2.new())
-            end)
-        end)
-    else
-        if AntiAFK.Conn then AntiAFK.Conn:Disconnect() AntiAFK.Conn = nil end
-    end
-    return on
-end
-
---// ==================== KẾT NỐI LIBRARY (TÙY CHỌN) ====================
-function Extras:SyncTheme()
-    local lib = self.Library
-    if not lib then return end
-    local th = lib.Themes and lib.Themes[lib.Theme]
-    if th then
-        C.Bg     = th.Window or C.Bg
-        C.Panel  = th.Element or C.Panel
-        C.Text   = th.Text or C.Text
-        C.Sub    = th.SubText or C.Sub
-        C.Stroke = th.Stroke or C.Stroke
-    end
-    if lib.Accent then C.Accent = lib.Accent end
-    -- làm mới màu các widget đang mở
-    if WM and WM.Card then
-        WM.Card.BackgroundColor3 = C.Bg
-        WM.Label.TextColor3 = C.Text
-        WM.Dot.BackgroundColor3 = C.Accent
-    end
-    if LOG and LOG.Panel then
-        LOG.Panel.BackgroundColor3 = C.Bg
-    end
-end
-
-function Extras:Init(library)
-    self.Library = library
-    if not library then return self end
-    if library.SoundEnabled ~= nil then self.SoundEnabled = library.SoundEnabled end
-    -- mỗi khi library đổi theme/màu nhấn -> extras đổi theo
-    local oldTheme = library.ApplyTheme
-    if type(oldTheme) == "function" then
-        library.ApplyTheme = function(lib, name)
-            oldTheme(lib, name)
-            Extras:SyncTheme()
-        end
-    end
-    local oldAccent = library.ApplyAccent
-    if type(oldAccent) == "function" then
-        library.ApplyAccent = function(lib, color)
-            oldAccent(lib, color)
-            Extras:SyncTheme()
-        end
-    end
-    self:SyncTheme()
-    return self
-end
-
-function Extras:Destroy()
-    if Panic.Conn then Panic.Conn:Disconnect() end
-    if AntiAFK.Conn then AntiAFK.Conn:Disconnect() end
-    if Boost.On then self:ToggleFPSBoost(false) end
-    if OpenMenu then OpenMenu.Close() end
-    self:DisableWatermark()
-    self:DisableKeyVisualizer()
-    self:DisableLogger()
-    if self._Gui then
-        self._Gui:Destroy()
-        self._Gui = nil
-    end
-end
-
--- chống chồng bản: chạy lại script -> gỡ bản extras cũ
-pcall(function()
-    if type(getgenv) == "function" then
-        local old = getgenv().MeizuExtras
-        if old and old ~= Extras and type(old.Destroy) == "function" then old:Destroy() end
-        getgenv().MeizuExtras = Extras
-    end
-end)
-
-
---// ════════════════ GHÉP & KÍCH HOẠT TỰ ĐỘNG ════════════════
-local MeizuExtras = Extras -- bí danh: dùng MeizuExtras hay Extras đều được
-
-pcall(function()
-	local env = (type(getgenv) == "function" and getgenv()) or _G
-	rawset(env, "MeizuLibrary", MeizuLibrary)
-	rawset(env, "MeizuExtras", Extras)
-end)
-
-pcall(function() Extras:Init(MeizuLibrary) end)
-
-print("[MEIZU] Nap thanh cong: Library v3.0 'Luxe' + Extras v1.1")
-print("[MEIZU] Tien ich: MeizuExtras:EnableWatermark{...} / EnableKeyVisualizer() / EnableLogger{...} / SetPanicKey(...)")
-
---// ════════ VIẾT HUB CỦA BẠN TẠI ĐÂY (khi dán trực tiếp) ════════
--- local Window = MeizuLibrary:CreateWindow{ Title = "Hub của tôi", SubTitle = "by Meizu" }
--- local Tab = Window:CreateTab("Chính", "rbxassetid://10734950309")
--- local Sec = Tab:CreateSection("Tính năng")
--- Sec:CreateToggle({ Title = "Watermark", Callback = function(v)
---     MeizuExtras:EnableWatermark{ Text = "Meizu", ShowFPS = true, ShowPing = v }
--- end })
--- MeizuExtras:EnableKeyVisualizer()
--- MeizuExtras:SetPanicKey(Enum.KeyCode.F8)
 
 return MeizuLibrary
