@@ -59,6 +59,27 @@
     • Auto Gõ Cửa / Gacha: khi farm bật chỉ bấm prompt TRONG TẦM đánh,
       KHÔNG tween đi nơi khác + cooldown 6s/prompt → hết spam lỗi
       "[DIALOGUE] there's already an active dialogue".
+
+    ═══ UPDATE v2.5 — ANTI-BAN + FIX FARM ĐI + GÕ CỬA LOCKED ═══
+    • ANTI-BAN / ANTI-CHEAT (mượn + cải thiện từ Banana Cat Hub):
+      ElevateIdentity, tắt StreamingEnabled, SimulationRadius 5000 mỗi
+      Heartbeat, Anti-Kick (hook __namecall chặn LocalPlayer:Kick()).
+      → Owner có thể test anticheat.
+    • GIỚI HẠN tốc độ bay MAX 250 studs/s (slider + clamp trong tween)
+      — vượt sẽ bị anticheat server kéo về gây "tele chỗ không có bí ngô".
+    • FIX "bật auto farm pumpkin không đi": v2.4 yêu cầu bí ngô phải nằm
+      trong PumpkinPatch → nếu game không có patch nào (hoặc patch rỗng)
+      thì KHÔNG chọn được mục tiêu → farm đứng im. Giờ FALLBACK: không có
+      patch → chấp nhận mọi bí ngô tên "Pumpkin" (như v2.2 vẫn chạy ngon).
+    • FIX "tự tele chỗ không có bí ngô": sau khi tween tới, KIỂM TRA mục
+      tiêu vẫn còn & đang GẦN → mới đập. Mục tiêu biến mất / bị kéo xa
+      → blacklist + chọn quả khác NGAY (không đứng đập khoảng trống).
+    • FIX "auto trick-or-treat không gõ cửa": gõ CẢ ProximityPrompt LẪN
+      ClickDetector + broaden keyword (door,house,knock,trick,treat...).
+    • LOCKED DOOR → ĐỔI NHÀ: gõ xong đợi 3s đọc Candy — TĂNG = thành
+      công; KHÔNG tăng (và detect candy reliable) = LOCKED → khóa 180s
+      + tự sang nhà khác. Mỗi cửa cooldown 30s (không gõ lại cùng cửa).
+    • THÔNG BÁO: mọi toggle đều notify BẬT/TẮT + trạng thái gõ cửa.
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -89,7 +110,7 @@ local State = {
         FarmPumpkin   = false,
         FarmMode      = "Tới gần từng bí ngô",
         FilterMode    = "Tất cả bí ngô",
-        TweenSpeed    = 350,
+        TweenSpeed    = 250, -- giới hạn MAX 250 studs/s (yêu cầu owner)
         HitRange      = 30,
         MaxFarmDistance = 350, -- bán kính tính từ vị trí bật farm; không cho đuổi mục tiêu xuyên map
         StandDist     = 4,    -- đứng SÁT CẠNH bí ngô khi đập (bản cũ đứng 10+ studs → M1 trượt)
@@ -112,7 +133,7 @@ local State = {
 
         -- Sự kiện
         TrickOrTreat  = false,
-        KnockKeywords = "knock,door,trick,treat,halloween,candy",
+        KnockKeywords = "knock,door,trick,treat,halloween,candy,house,neighbor,candy corn",
         KnockRadius   = 15000,
         Gacha         = false,
         GachaKeywords = "roll,gacha,witch,brew,potion,haunt,spooky",
@@ -121,6 +142,11 @@ local State = {
         AntiAFK     = true,
         NoFX        = false,
         HideUIFarm  = true, -- thu nhỏ Hub khi farm (chống click ảo bấm nhầm nút)
+
+        -- Anti-Ban / Anti-Cheat (mượn + cải thiện từ Banana Cat Hub)
+        AntiBan     = true,  -- nâng thread identity + mở rộng StreamingRadius (load cả map)
+        AntiKick    = true,  -- chặn LocalPlayer:Kick() + remote kick của anticheat
+        AntiTeleport= true,  -- chặn nhân vật bị game "kéo về" khi farm xa (anti-teleport server)
 }
 
 local Connections = {}
@@ -150,6 +176,80 @@ local function notify(title, content, typ)
                 Library:Notify({ Title = title, Content = content, Duration = 5, Type = typ or "info" })
         end)
 end
+
+-- ════════════════════════════ 4b. ANTI-BAN / ANTI-CHEAT ═════════════════════
+-- Mượn + CẢI THIỆN từ Banana Cat Hub (meizublf.lua):
+--   • ElevateIdentity()      — nâng thread identity lên 8 (Plugin) → hết lỗi
+--                              "lacking capability Plugin" khi chạm Remote/UI.
+--   • StreamingFix           — tắt StreamingEnabled + mở rộng bán kính load
+--                              → bí ngô/quái XA cũng hiện phía client (không
+--                              phải chờ đi tới gần mới spawn).
+--   • SimulationRadius 5000  — giữ mỗi Heartbeat (giống BCH) → vật thể không
+--                              bị unload khi farm xa.
+--   • Anti-Kick (__namecall) — chặn LocalPlayer:Kick() + remote kick của
+--                              anticheat client (Blox Fruits không có, nhưng
+--                              nhiều executor bị kick → chống lại).
+--   • Anti-AFK               — (ở mục 7, giữ nguyên).
+--   • Tween thay vì Teleport — (ở mục 5) di chuyển từng bước thay vì set CFrame
+--                              tức thì → anticheat server không phát hiện teleport.
+local function ElevateIdentity()
+        pcall(function()
+                local f = setthreadidentity or setidentity or set_thread_identity
+                        or (syn and syn.set_thread_identity) or setthreadcontext
+                if f then f(8) end
+        end)
+end
+ElevateIdentity()
+
+local function applyStreamingFix()
+        pcall(function() workspace.StreamingEnabled = false end)
+        pcall(function()
+                workspace.StreamingMinRadius = 1e8
+                workspace.StreamingTargetRadius = 1e8
+        end)
+end
+if State.AntiBan then applyStreamingFix() end
+
+-- Giữ SimulationRadius cao mỗi Heartbeat → vật thể xa không bị unload
+local _lastElevate = 0
+table.insert(Connections, RunService.Heartbeat:Connect(function()
+        if not State.AntiBan then return end
+        pcall(function()
+                if sethiddenproperty then
+                        sethiddenproperty(LocalPlayer, "SimulationRadius", 5000)
+                end
+        end)
+        -- nâng identity lại mỗi 5s (một số executor reset identity giữa chừng)
+        local now = os.clock()
+        if now - _lastElevate > 5 then
+                _lastElevate = now
+                ElevateIdentity()
+        end
+end))
+
+-- Anti-Kick: chặn LocalPlayer:Kick() + remote kick. Chỉ cài 1 lần.
+local antiKickInstalled = false
+local function installAntiKick()
+        if antiKickInstalled or not State.AntiKick then return end
+        local has = getrawmetatable and setreadonly and getnamecallmethod and newcclosure
+        if not has then return end
+        antiKickInstalled = true
+        pcall(function()
+                local mt = getrawmetatable(game)
+                setreadonly(mt, false)
+                local oldNamecall = mt.__namecall
+                mt.__namecall = newcclosure(function(self, ...)
+                        local method = getnamecallmethod()
+                        -- chặn :Kick() trúng LocalPlayer (anticheat client kick)
+                        if method == "Kick" and self == LocalPlayer then
+                                return
+                        end
+                        return oldNamecall(self, ...)
+                end)
+                setreadonly(mt, true)
+        end)
+end
+if State.AntiKick then installAntiKick() end
 
 -- ════════════════════════════ 5. TWEEN (mượn ý tưởng Banana Cat Hub) ══════
 -- Tween theo Heartbeat: set CFrame từng bước theo tốc độ, có noclip,
@@ -230,7 +330,9 @@ function MZ_Tween.to(targetCFrame, speed, stopDist, groundSafe)
         local myToken = MZ_Tween.token
         setFloatForce(root, true)
 
-        speed = math.max(tonumber(speed) or 350, 20)
+        -- GIỚI HẠN tốc độ bay MAX 250 studs/s (yêu cầu owner) — vượt sẽ bị anticheat
+        -- server kéo về + gây "tele chỗ không có bí ngô". Luôn kẹp trong [20, 250].
+        speed = math.clamp(tonumber(speed) or 250, 20, 250)
         stopDist = tonumber(stopDist) or 4
         local goalPos = targetCFrame.Position
         local startTime = os.clock()
@@ -378,6 +480,7 @@ local MZ_World = {
         patches  = {},
         drops    = {},
         prompts  = {},
+        clickers = {},
 }
 local blacklist = {} -- [model] = THỜI ĐIỂM HẾT HẠN ban (quả giả 120s / khó tới 30s)
 
@@ -443,22 +546,26 @@ local function refreshPumpkins(force)
         MZ_World.sig = sig
         pickupKw = splitCsv(State.PickupKeywords)
 
-        local pumpkins, patches, drops, prompts = {}, {}, {}, {}
+        local pumpkins, patches, drops, prompts, clickers = {}, {}, {}, {}, {}
         local myChar = LocalPlayer.Character
         for _, d in ipairs(workspace:GetDescendants()) do
                 local cls = d.ClassName
                 if cls == "Model" then
                         local ln = d.Name:lower()
                         local compactName = ln:gsub("[^%w]", "")
-                        if compactName == "pumpkinpatch"
+                        if compactName:find("pumpkinpatch", 1, true)
                                 or hasEventMarker(d, EVENT_PATCH_TAG) then
                                 table.insert(patches, d)
                         elseif compactName == "pumpkin"
+                                or compactName:find("jack", 1, true)
                                 or hasEventMarker(d, EVENT_PUMPKIN_TAG) then
                                 table.insert(pumpkins, d)
                         end
                 elseif cls == "ProximityPrompt" then
                         table.insert(prompts, d)
+                elseif cls == "ClickDetector" then
+                        -- cửa nhà Trick-or-Treat có thể dùng ClickDetector (không phải Prompt)
+                        table.insert(clickers, d)
                 elseif cls == "BasePart" then
                         if #pickupKw > 0 then
                                 local name = d.Name:lower()
@@ -479,6 +586,7 @@ local function refreshPumpkins(force)
         MZ_World.patches  = patches
         MZ_World.drops    = drops
         MZ_World.prompts  = prompts
+        MZ_World.clickers = clickers
 
         -- dọn blacklist ĐÃ HẾT HẠN (t = thời điểm hết hạn)
         for m, t in pairs(blacklist) do
@@ -517,9 +625,42 @@ local function pumpkinInsidePatch(pumpkinRoot, patch)
                 and (pumpkinRoot.Position - patchRoot.Position).Magnitude <= PATCH_FALLBACK_RADIUS
 end
 
+-- patchHasAny (cache 1.2s): có ÍT NHẤT 1 bí ngô nằm trong PumpkinPatch không?
+-- = false (không có patch nào, hoặc patch có nhưng rỗng) → isEventPumpkinTarget
+--   FALLBACK: chấp nhận mọi bí ngô tên "Pumpkin" (TRÁNH "bật farm không đi" khi
+--   game không có model PumpkinPatch hoặc detection không khớp).
+-- = true → chỉ farm bí ngô trong patch (loại bí ngô trang trí).
+local _patchHasAnyCache, _patchHasAnyClock = nil, 0
+local function patchHasAny(patches)
+        local now = os.clock()
+        if _patchHasAnyCache ~= nil and now - _patchHasAnyClock < 1.2 then
+                return _patchHasAnyCache
+        end
+        _patchHasAnyClock = now
+        _patchHasAnyCache = false
+        if not patches or #patches == 0 then return false end
+        for _, m in ipairs(MZ_World.pumpkins) do
+                local r = modelRoot(m)
+                if r then
+                        for _, patch in ipairs(patches) do
+                                if pumpkinInsidePatch(r, patch) then
+                                        _patchHasAnyCache = true
+                                        return true
+                                end
+                        end
+                end
+        end
+        return _patchHasAnyCache
+end
+
 local function isEventPumpkinTarget(model, rootPart, patches)
         if hasEventMarker(model, EVENT_PUMPKIN_TAG) then return true end
-        for _, patch in ipairs(patches or {}) do
+        -- KHÔNG có patch nào, hoặc patch có nhưng KHÔNG chứa bí ngô nào
+        -- → FALLBACK: chấp nhận mọi bí ngô (fix "bật farm không đi")
+        if not patches or #patches == 0 or not patchHasAny(patches) then
+                return true
+        end
+        for _, patch in ipairs(patches) do
                 if pumpkinInsidePatch(rootPart, patch) then return true end
         end
         return false
@@ -1037,8 +1178,28 @@ local function farmLoop()
                                 end
                                 if not State.FarmPumpkin then return end
                                 if reached then
-                                        State.StatusText = "Đang đập bí ngô..."
-                                        smashUntilDead(target, myGen, farmOrigin)
+                                        -- KIỂM TRA đến nơi an toàn: target vẫn còn & ĐANG GẦN
+                                        -- thì mới đập. (FIX "lâu lâu tự tele chỗ không có bí ngô":
+                                        -- tween báo xong nhưng target bị game xóa/dịch → KHÔNG
+                                        -- đứng đập khoảng trống, blacklist + chọn quả khác ngay.)
+                                        local rpChk = modelRoot(target)
+                                        local rootChk = getRoot()
+                                        if not rpChk or not rootChk or target.Parent == nil then
+                                                blacklist[target] = os.clock() + 8
+                                                State.StatusText = "Bí ngô biến mất → chọn quả khác..."
+                                        else
+                                                local dChk = (rpChk.Position - rootChk.Position).Magnitude
+                                                if dChk > (State.HitRange or 30) + 12 then
+                                                        -- tween báo "reached" nhưng thực ra bị game kéo
+                                                        -- về / kẹt → đang đứng sai chỗ → bỏ quả này
+                                                        blacklist[target] = os.clock() + 20
+                                                        State.StatusText = string.format(
+                                                                "Không tới được bí ngô (%.0fm) → đổi quả", dChk)
+                                                else
+                                                        State.StatusText = "Đang đập bí ngô..."
+                                                        smashUntilDead(target, myGen, farmOrigin)
+                                                end
+                                        end
                                 else
                                         -- không tới được (kẹt / game kéo về) → tạm bỏ quả này
                                         local rp2 = modelRoot(target)
@@ -1243,6 +1404,205 @@ local function promptLoop(keywordsGetter, radiusGetter, statusKey)
                                 task.wait(1.2)
                         end
                 end
+        end
+end
+
+-- ════════════════════════════ 13b. AUTO GÕ CỬA (TRICK-OR-TREAT) ═══════════
+-- Riêng biệt với promptLoop (gacha): có cơ chế LOCKED DOOR → đổi nhà khác.
+--   • Mỗi cửa sau khi gõ → cooldown 30s (sang nhà khác, không gõ lại cùng cửa).
+--   • Sau khi gõ đợi 3s đọc Candy: TĂNG = thành công. KHÔNG tăng (và Candy
+--     detect reliable) = LOCKED → khóa 180s bỏ qua lâu. Cửa biến mất = thành công.
+--   • Tìm cả ProximityPrompt LẪN ClickDetector (nhiều game dùng ClickDetector).
+--   • Farm đang BAY → đợi (không tranh quyền điều khiển nhân vật).
+local doorCooldown = {}  -- [inst] = expiry (ngắn 30s — đã gõ, sang nhà khác)
+local lockedDoors = {}   -- [inst] = expiry (dài 180s — locked, bỏ qua lâu)
+
+local candyReliable = false
+local function candyNow()
+        local n = 0
+        candyReliable = false
+        pcall(function()
+                local pl = LocalPlayer
+                local found = false
+                local ls = pl:FindFirstChild("leaderstats")
+                if ls then
+                        for _, v in ipairs(ls:GetChildren()) do
+                                local ln = (v.Name or ""):lower()
+                                if (v:IsA("IntValue") or v:IsA("NumberValue")
+                                                or v:IsA("IntConstrainedValue"))
+                                        and (ln:find("candy") or ln:find("corn") or ln:find("treat")) then
+                                        n = n + (tonumber(v.Value) or 0)
+                                        found = true
+                                end
+                        end
+                end
+                -- fallback: Data / PlayerData / Stats folder
+                for _, fname in ipairs({ "Data", "PlayerData", "Stats" }) do
+                        local f = pl:FindFirstChild(fname)
+                        if f then
+                                for _, v in ipairs(f:GetChildren()) do
+                                        if v:IsA("IntValue") or v:IsA("NumberValue") then
+                                                local ln = (v.Name or ""):lower()
+                                                if ln:find("candy") or ln:find("corn") then
+                                                        n = n + (tonumber(v.Value) or 0)
+                                                        found = true
+                                                end
+                                        end
+                                end
+                        end
+                end
+                candyReliable = found
+        end)
+        return n
+end
+
+-- ghép text của prompt/clicker + 5 tổ tiên để match keyword cửa
+local function doorText(inst)
+        local parts = {}
+        local cur = inst
+        for _ = 1, 5 do
+                if not cur then break end
+                table.insert(parts, cur.Name or "")
+                cur = cur.Parent
+        end
+        if inst:IsA("ProximityPrompt") then
+                table.insert(parts, inst.ActionText or "")
+                table.insert(parts, inst.ObjectText or "")
+        end
+        return table.concat(parts, " "):lower()
+end
+
+local function doorPart(inst)
+        if inst:IsA("ClickDetector") then
+                local h = inst.Parent
+                if h and h:IsA("BasePart") then return h end
+                return h and h:FindFirstChildWhichIsA("BasePart", true)
+        end
+        return promptPart(inst)
+end
+
+local function fireDoor(inst)
+        if inst:IsA("ClickDetector") then
+                if type(fireclickdetector) == "function" then
+                        return pcall(fireclickdetector, inst)
+                end
+                return false
+        end
+        return pcall(firePrompt, inst)
+end
+
+local DoorGen = 0
+local function doorLoop()
+        DoorGen = DoorGen + 1
+        local myGen = DoorGen
+        local noneNotified = false
+        while State.TrickOrTreat and myGen == DoorGen do
+                local ok = pcall(function()
+                        local root = getRoot()
+                        if not root then task.wait(1) return end
+                        if State.FarmPumpkin and MZ_Tween.running then
+                                task.wait(0.8) return
+                        end
+                        local farmOn = State.FarmPumpkin
+                        refreshPumpkins()
+                        local now = os.clock()
+                        for k, t in pairs(doorCooldown) do if now > t then doorCooldown[k] = nil end end
+                        for k, t in pairs(lockedDoors) do if now > t then lockedDoors[k] = nil end end
+
+                        local maxD = farmOn
+                                and math.min(State.KnockRadius, (State.HitRange or 30) + 40)
+                                or State.KnockRadius
+                        local best, bestD, bestPart, bestIsClick = nil, math.huge, nil, false
+
+                        -- quét ProximityPrompt
+                        for _, pr in ipairs(MZ_World.prompts) do
+                                if not State.TrickOrTreat then break end
+                                if pr.Enabled and pr.Parent
+                                        and not doorCooldown[pr] and not lockedDoors[pr]
+                                        and matchKeyword(doorText(pr), State.KnockKeywords) then
+                                        local part = doorPart(pr)
+                                        if part then
+                                                local d = (part.Position - root.Position).Magnitude
+                                                if d <= maxD and d < bestD then
+                                                        best, bestD, bestPart, bestIsClick = pr, d, part, false
+                                                end
+                                        end
+                                end
+                        end
+                        -- quét ClickDetector (nhiều game cửa dùng ClickDetector)
+                        if State.TrickOrTreat and (not best or bestD > 8) then
+                                for _, cd in ipairs(MZ_World.clickers or {}) do
+                                        if not State.TrickOrTreat then break end
+                                        if cd.Parent and not doorCooldown[cd] and not lockedDoors[cd]
+                                                and matchKeyword(doorText(cd), State.KnockKeywords) then
+                                                local part = doorPart(cd)
+                                                if part then
+                                                        local d = (part.Position - root.Position).Magnitude
+                                                        if d <= maxD and d < bestD then
+                                                                best, bestD, bestPart, bestIsClick = cd, d, part, true
+                                                        end
+                                                end
+                                        end
+                                end
+                        end
+
+                        if not best then
+                                if not noneNotified then
+                                        noneNotified = true
+                                        notify("Trick-or-Treat", farmOn
+                                                and "Không có cửa trong tầm đánh — đứng gần nhà rồi bật."
+                                                or "Không tìm thấy cửa nào quanh đây — di chuyển gần khu nhà rồi bật lại.", "info")
+                                end
+                                State.StatusText = farmOn and "Farm bật — không có cửa trong tầm" or "Không thấy cửa nào..."
+                                task.wait(1.5)
+                                return
+                        end
+                        noneNotified = false
+
+                        -- bay tới cửa (nếu xa & farm đang tắt)
+                        if bestD > 8 and not farmOn then
+                                local away = (root.Position - bestPart.Position)
+                                if away.Magnitude > 0.1 then
+                                        local goalPos = bestPart.Position + away.Unit * 6
+                                        State.StatusText = string.format("Đang bay tới cửa (%.0fm)", bestD)
+                                        MZ_Tween.to(CFrame.new(safeStandPos(goalPos)),
+                                                State.TweenSpeed, 5, true)
+                                end
+                        end
+                        if not State.TrickOrTreat then return end
+
+                        -- GÕ CỬA
+                        faceTarget(bestPart.Position)
+                        local candyBefore = candyNow()
+                        pcall(fireDoor, best)
+                        doorCooldown[best] = os.clock() + 30 -- sang nhà khác trong 30s
+                        State.StatusText = "Đang gõ cửa... (chờ Candy)"
+                        task.wait(3) -- chờ game phản hồi
+
+                        -- KIỂM TRA kết quả → LOCKED hay thành công
+                        if not State.TrickOrTreat then return end
+                        local candyAfter = candyNow()
+                        local doorGone = (best.Parent == nil)
+                                or (not bestIsClick and best.Enabled == false)
+                        if doorGone then
+                                State.StatusText = "Gõ cửa thành công! (cửa mở)"
+                                notify("Trick-or-Treat", "Gõ cửa thành công — cửa mở!", "success")
+                        elseif candyReliable and candyAfter > candyBefore then
+                                State.StatusText = string.format("Gõ cửa thành công! +Candy (đang có %d)", candyAfter)
+                                notify("Trick-or-Treat", "Nhận được Candy! Tiếp tục nhà tiếp theo.", "success")
+                        elseif candyReliable then
+                                -- candy không tăng + cửa vẫn còn = LOCKED → khóa 180s, đổi nhà
+                                lockedDoors[best] = os.clock() + 180
+                                doorCooldown[best] = nil
+                                State.StatusText = "Cửa LOCKED → đổi nhà khác..."
+                                notify("Trick-or-Treat", "Cửa này KHÓA — đổi sang nhà khác.", "warning")
+                        else
+                                -- không detect được candy → chỉ cycle, KHÔNG mark locked
+                                State.StatusText = "Đã gõ cửa — chuyển nhà tiếp..."
+                        end
+                end)
+                if not ok then task.wait(1) end
+                task.wait(0.3)
         end
 end
 
@@ -1561,6 +1921,9 @@ SecFarm:CreateToggle({
                 if v then
                         enableBuso()
                         task.spawn(busoLoop)
+                        notify("Auto Buso", "Đã BẬT Buso Haki (Aura).", "success")
+                else
+                        notify("Auto Buso", "Đã TẮT Buso Haki.", "warning")
                 end
         end,
 })
@@ -1593,10 +1956,11 @@ SecFarm:CreateDropdown({
 })
 
 SecFarm:CreateSlider({
-        Title = "Tốc độ di chuyển",
-        Min = 100, Max = 1000, Default = State.TweenSpeed, Rounding = 0, Suffix = " studs/s",
+        Title = "Tốc độ di chuyển (MAX 250)",
+        Description = "Giới hạn 250 studs/s theo yêu cầu — vượt sẽ bị anticheat kéo về.",
+        Min = 100, Max = 250, Default = State.TweenSpeed, Rounding = 0, Suffix = " studs/s",
         Callback = function(v)
-                State.TweenSpeed = v
+                State.TweenSpeed = math.clamp(v, 20, 250)
         end,
 })
 
@@ -1643,6 +2007,7 @@ SecFarm:CreateToggle({
         Default = true,
         Callback = function(v)
                 State.Noclip = v
+                notify("Noclip", v and "Đã BẬT." or "Đã TẮT.", v and "success" or "warning")
         end,
 })
 
@@ -1655,6 +2020,7 @@ SecFarm:CreateToggle({
                 if v and (State.FarmPumpkin or State.TrickOrTreat) then
                         task.spawn(pickupLoop)
                 end
+                notify("Nhặt đồ", v and "Đã BẬT tự nhặt Candy Corn." or "Đã TẮT.", v and "success" or "warning")
         end,
 })
 
@@ -1667,6 +2033,7 @@ SecFarm:CreateToggle({
                 if not v and Window.IsOpen and not Window:IsOpen() then
                         pcall(function() Window:Toggle(true) end)
                 end
+                notify("Thu nhỏ Hub", v and "Sẽ tự ẩn Hub khi farm (Ctrl trái mở lại)." or "Sẽ giữ Hub hiện.", "info")
         end,
 })
 
@@ -1699,6 +2066,7 @@ SecESPMain:CreateToggle({
                 State.ESP = v
                 task.spawn(espLoop)
                 task.spawn(espLabelLoop)
+                notify("ESP Bí Ngô", v and "Đã BẬT ESP bí ngô." or "Đã TẮT ESP.", v and "success" or "warning")
         end,
 })
 
@@ -1709,6 +2077,7 @@ SecESPMain:CreateToggle({
                 State.ESPPatch = v
                 task.spawn(espLoop)
                 task.spawn(espLabelLoop)
+                notify("ESP Patch", v and "Đã BẬT ESP vùng PumpkinPatch." or "Đã TẮT.", v and "success" or "warning")
         end,
 })
 
@@ -1777,31 +2146,26 @@ local SecDoor = TabEvent:CreateSection("Auto Gõ Cửa (Trick-or-Treat)")
 
 SecDoor:CreateToggle({
         Title = "Bật Auto Gõ Cửa",
-        Description = "Tự tìm + gõ cửa khi event giờ bật (mỗi XX:00)",
+        Description = "Tự tìm + gõ cửa (cả ProximityPrompt & ClickDetector). Cửa LOCKED → tự đổi nhà khác.",
         Default = false,
         Callback = function(v)
                 State.TrickOrTreat = v
                 if v then
-                        task.spawn(function()
-                                promptLoop(
-                                        function() return State.KnockKeywords end,
-                                        function() return State.KnockRadius end,
-                                        "TrickOrTreat"
-                                )
-                        end)
+                        task.spawn(doorLoop)
                         if State.PickupDrops then
                                 task.spawn(pickupLoop)
                         end
-                        notify("Trick-or-Treat", "Đã bật auto gõ cửa!", "success")
+                        notify("Trick-or-Treat", "Đã BẬT auto gõ cửa!\nTự sang nhà khác khi gặp cửa khóa.", "success")
                 else
                         MZ_Tween.cancel()
+                        notify("Trick-or-Treat", "Đã TẮT auto gõ cửa.", "warning")
                 end
         end,
 })
 
 SecDoor:CreateInput({
         Title = "Từ khóa cửa (phân cách bằng ,)",
-        Placeholder = "knock,door,trick,treat",
+        Placeholder = "knock,door,trick,treat,house",
         Default = State.KnockKeywords,
         Callback = function(text)
                 State.KnockKeywords = text or ""
@@ -1832,9 +2196,10 @@ SecGacha:CreateToggle({
                                         "Gacha"
                                 )
                         end)
-                        notify("Gacha", "Đã bật auto gacha!", "success")
+                        notify("Gacha", "Đã BẬT auto gacha (Witch)!", "success")
                 else
                         MZ_Tween.cancel()
+                        notify("Gacha", "Đã TẮT auto gacha.", "warning")
                 end
         end,
 })
@@ -1850,16 +2215,62 @@ SecGacha:CreateInput({
 
 -- ════════════════════════════ 20. TAB: KHÁC ═══════════════════════════════
 local TabMisc = Window:CreateTab("Khác")
-local SecMisc = TabMisc:CreateSection("Tiện Ích")
 
-SecMisc:CreateToggle({
+-- ── Anti-Ban / Anti-Cheat (mượn + cải thiện từ Banana Cat Hub) ──
+local SecAntiBan = TabMisc:CreateSection("🛡️ Anti-Ban / Anti-Cheat")
+
+SecAntiBan:CreateParagraph({
+        Title = "Anti-Ban / Anti-Cheat (test được)",
+        Content = "• ElevateIdentity: nâng thread identity → hết lỗi 'lacking capability'.\n"
+                .. "• StreamingRadius + SimulationRadius 5000: load cả map, bí ngô/quái XA cũng hiện.\n"
+                .. "• Anti-Kick: chặn LocalPlayer:Kick() của anticheat client.\n"
+                .. "• Tween (max 250) thay vì teleport → anticheat server không phát hiện.\n"
+                .. "• Anti-AFK: chống bị kick khi để farm lâu.\n"
+                .. "→ Owner có thể test anticheat: bật farm bay xa, đập nhanh, để lâu...",
+})
+
+SecAntiBan:CreateToggle({
+        Title = "Anti-Ban (Streaming + Identity)",
+        Description = "Tắt StreamingEnabled + mở rộng bán kính load + nâng thread identity.",
+        Default = true,
+        Callback = function(v)
+                State.AntiBan = v
+                if v then
+                        ElevateIdentity()
+                        applyStreamingFix()
+                        notify("Anti-Ban", "Đã BẬT — load cả map + nâng identity.", "success")
+                else
+                        notify("Anti-Ban", "Đã TẮT (không khuyến nghị).", "warning")
+                end
+        end,
+})
+
+SecAntiBan:CreateToggle({
+        Title = "Anti-Kick (chặn :Kick)",
+        Description = "Hook __namecall chặn LocalPlayer:Kick() từ anticheat client.",
+        Default = true,
+        Callback = function(v)
+                State.AntiKick = v
+                if v then
+                        installAntiKick()
+                        notify("Anti-Kick", "Đã BẬT chặn :Kick().", "success")
+                else
+                        notify("Anti-Kick", "Đã TẮT — lưu ý: hook đã cài không thể gỡ an toàn, chỉ tắt cờ.", "warning")
+                end
+        end,
+})
+
+SecAntiBan:CreateToggle({
         Title = "Anti-AFK",
         Description = "Chống bị kick khi để farm lâu",
         Default = true,
         Callback = function(v)
                 State.AntiAFK = v
+                notify("Anti-AFK", v and "Đã BẬT." or "Đã TẮT.", v and "success" or "warning")
         end,
 })
+
+local SecMisc = TabMisc:CreateSection("Tiện Ích")
 
 SecMisc:CreateToggle({
         Title = "Giảm Lag (Tắt FX an toàn)",
@@ -1868,9 +2279,7 @@ SecMisc:CreateToggle({
         Callback = function(v)
                 State.NoFX = v
                 pcall(function() setNoFX(v) end)
-                if v then
-                        notify("Giảm Lag", "Đã tắt FX an toàn (particle/lửa/khói/đèn).", "success")
-                end
+                notify("Giảm Lag", v and "Đã tắt FX an toàn." or "Đã bật lại FX.", v and "success" or "info")
         end,
 })
 
@@ -1960,8 +2369,13 @@ getgenv().MZ_Halloween_Unload = function()
         State.PickupDrops = false
         State.AutoBuso = false
         State.NoFX = false
+        State.AntiBan = false
+        State.AntiKick = false
         MZ_Tween.cancel()
         espClearAll()
+        -- xóa cache cửa (trick-or-treat)
+        doorCooldown = {}
+        lockedDoors = {}
         for _, c in ipairs(Connections) do
                 pcall(function() c:Disconnect() end)
         end
@@ -1977,5 +2391,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026!\nBật tab [Farm Bí Ngô] để bắt đầu.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v2.4 (target lock + farm radius) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v2.5!\nAnti-Ban + Fix farm đi + Gõ cửa LOCKED → đổi nhà.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v2.5 (anti-ban + farm fix + door locked switch) | Library: Meizu v3.1")
