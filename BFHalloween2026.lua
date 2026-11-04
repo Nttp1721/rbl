@@ -159,6 +159,23 @@
       (không tween, nhanh, không kẹt terrain). TẮT = tween (mặc định).
     • FIX "rớt nước khi đứng kế pumpkin": safeStandPos giờ nâng Y khi pumpkin
       ở DƯỚI mặt đất/nước (không chỉ nước) → không rơi nước/chìm nữa.
+
+    ═══ UPDATE v3.4 — FIX TÊ LIỆT SCRIPT (CRITICAL) ═══
+    • FIX "script tê liệt không làm gì được": bản v3.3 autoAttackMobsNearby
+      spawn thread spam fast attack mỗi 0.05s × 6s = 120 lần fire remote →
+      server rate-limit/kick → script tê liệt. + task.wait(6) block doorLoop
+      → không tắt toggle được.
+    • Giờ autoAttackMobsNearby KHÔNG spawn thread, chỉ fire 1 lần. doorLoop
+      vòng lặp nhỏ 4s, yield 0.4s/lần → phản hồi ngay khi tắt toggle.
+    • fireDoor giảm từ 2 lần → 1 lần (không spam server).
+
+    ═══ UPDATE v3.5 — FIX LẠI "TELE LÊN NÓC NHÀ / GÓC CÂY" ═══
+    • FIX regression v3.3: safeStandPos bump Y khi baseY < gY (gY = raycast
+      hit) → pumpkin TRONG nhà (dưới mái nhà) → gY = MÁI NHÀ → bump lên nóc!
+      pumpkin DƯỚI cây → gY = ngọn cây → bump lên ngọn cây!
+    • Giờ safeStandPos CHỈ bump Y khi raycast hit = MẶT NƯỚC (chống chìm).
+      Đất / mái nhà / ngọn cây → KHÔNG bump → noclip xuyên, đứng ngang tầm.
+    • Bump nước chia 2 mức: sâu >5 studs → +2, nông → +0.5 (chống chìm nhẹ).
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -1245,42 +1262,76 @@ local function busoLoop()
 end
 
 -- ════════════════════════════ 11. AUTO FARM BÍ NGÔ ════════════════════════
--- Điểm đứng KẾ BEN bí ngô KHÔNG rơi nước (fix "rớt nước khi đứng kế pumpkin"):
---   • Dùng Y của bí ngô (đứng ngang tầm).
---   • Pumpkin ở DƯỚI mặt đất/nước → nâng lên trên (chống rơi nước/chìm).
---   • Pumpkin TRÊN nóc/cây → KHÔNG bump → noclip xuyên, đứng ngang tầm.
+-- Điểm đứng KẾ BEN bí ngô — KHÔNG đứng trên nóc nhà/góc cây, KHÔNG rơi nước:
+--   • LUÔN dùng Y của bí ngô (đứng ngang tầm, vào trong nhà/dưới cây).
+--   • Chỉ bump Y khi ĐỦ ĐIỀU KIỆN rơi nước: (a) raycast hit = MẶT NƯỚC,
+--     (b) Y bí ngô < mặt nước (>5 studs dưới) → nâng lên trên mặt nước.
+--   • KHÔNG bump cho đất/roof/cây → noclip xuyên, đứng ngang tầm.
+-- ⚠ Bản cũ bump khi baseY < gY (gY = roof/ground hit) → pumpkin TRONG nhà
+--   (dưới mái nhà) → gY = mái nhà → bump lên nóc! Fix: chỉ bump NƯỚC.
 local function safeStandPos(pos)
         local gY, isWater = groundYAt(pos)
         local baseY = pos.Y
-        if gY then
-                -- pumpkin ở dưới mặt đất/nước → nâng lên trên để không rơi nước
-                if isWater then
-                        baseY = math.max(baseY, gY + 2.0)  -- nước: +2 studs
+        if gY and isWater then
+                -- CHỈ bump khi mặt NƯỚC: nếu pumpkin dưới nước sâu >5 studs → nâng lên
+                if baseY < gY - 5 then
+                        baseY = gY + 2.0
                 elseif baseY < gY then
-                        baseY = math.max(baseY, gY + 1.0)  -- dưới đất: +1 stud
+                        baseY = gY + 0.5
                 end
-                -- baseY ĐÃ CAO HƠN mặt đất (pumpkin trên nóc/cây) → KHÔNG bump
-                -- → noclip xuyên vào trong, đứng ngang tầm bí ngô.
         end
+        -- đất / roof / ngọn cây / mặt nước nông → KHÔNG bump → đứng ngang tầm bí ngô
         return Vector3.new(pos.X, baseY, pos.Z)
 end
 
 -- TELEPORT (set CFrame tức thì) — dùng cho farm mode "Tele" (giống BCH):
 -- BCH farm dùng set CFrame chứ không tween → nhanh hơn, không kẹt terrain.
+-- CHỐNG CHÌM NƯỚC: sau khi tele, check lại nếu dưới mặt nước → bump Y lên.
 local function MZ_Teleport(targetPos)
         local root = getRoot()
         if not root then return false end
+        local goalPos = targetPos
         if typeof(targetPos) == "CFrame" then
-                pcall(function() root.CFrame = targetPos end)
-        else
-                pcall(function() root.CFrame = CFrame.new(targetPos) end)
+                goalPos = targetPos.Position
         end
+        -- anti-water: bump Y lên nếu điểm tele dưới mặt nước
+        local gY, isWater = groundYAt(goalPos)
+        local finalY = goalPos.Y
+        if gY and isWater and finalY < gY then
+                finalY = gY + 2.0 -- trên mặt nước 2 studs
+        end
+        pcall(function()
+                root.CFrame = CFrame.new(goalPos.X, finalY, goalPos.Z)
+        end)
         pcall(function()
                 root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                 root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
         end)
         return true
 end
+
+-- ANTI-WATER SAFETY NET (chạy mỗi Heartbeat): nếu nhân vật DƯỚI mặt nước
+→
+-- bump Y lên trên. Chống chìm nước trong MỌI trường hợp: tele, tween, game
+-- physics rớt xuống, bị đẩy xuống... Chỉ bump khi isWater=true (không bump
+-- đất/roof → noclip vẫn xuyên nhà/cây được).
+local _antiWaterClock = 0
+table.insert(Connections, RunService.Heartbeat:Connect(function()
+        local root = getRoot()
+        if not root then return end
+        local now = os.clock()
+        if now - _antiWaterClock < 0.2 then return end -- check 5 lần/giây (giảm lag)
+        _antiWaterClock = now
+        local pos = root.Position
+        local gY, isWater = groundYAt(pos)
+        if gY and isWater and pos.Y < gY - 0.5 then
+                -- nhân vật đang dưới mặt nước → bump lên trên
+                pcall(function()
+                        root.CFrame = CFrame.new(pos.X, gY + 2.0, pos.Z)
+                        root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                end)
+        end
+end))
 
 -- Chọn mục tiêu sau khi cache được cập nhật. Không dùng fallback toàn map:
 -- mục tiêu phải có marker rõ ràng hoặc nằm trong bounds của PumpkinPatch.
@@ -1886,19 +1937,15 @@ local function fireDoor(inst)
 end
 
 -- AUTO ATTACK MOBS SPAWN: khi gõ cửa Trick-or-Treat, game spawn quái nhỏ.
--- Hàm này đánh TẤT CẢ quái trong range (fast attack AOE) trong khoảng thời gian.
-local function autoAttackMobsNearby(durationSec)
+-- Hàm này đánh quái trong range (fast attack AOE) — KHÔNG block, chỉ fire 1 lần.
+-- Gọi từ doorLoop mỗi ~0.4s (không spam server).
+local function autoAttackMobsNearby()
         if not State.AutoAttackMobs then return end
-        local startClock = os.clock()
-        task.spawn(function()
-                while State.TrickOrTreat and os.clock() - startClock < durationSec do
-                        local root = getRoot()
-                        if root and hitEnemiesFastAttack() then
-                                State.StatusText = "Đang đánh quái spawn từ cửa..."
-                        end
-                        task.wait(0.05) -- fast attack delay (BCH style)
-                end
-        end)
+        local root = getRoot()
+        if not root then return end
+        if hitEnemiesFastAttack() then
+                State.StatusText = "Đang đánh quái spawn từ cửa..."
+        end
 end
 
 local DoorGen = 0
@@ -1996,15 +2043,18 @@ local function doorLoop()
                         faceTarget(bestPart.Position)
                         local candyBefore = candyNow()
                         State.StatusText = "Đang gõ cửa... (chờ Candy)"
-                        -- fire nhiều lần (một số prompt cần fire sau khi đứng gần)
-                        pcall(fireDoor, best)
-                        task.wait(0.4)
+                        -- fire 1 lần (pcall) — fire nhiều lần spam server → tê liệt
                         pcall(fireDoor, best)
                         doorCooldown[best] = os.clock() + 30 -- sang nhà khác trong 30s
 
-                        -- AUTO ATTACK quái spawn: trong 6s sau khi gõ cửa, đánh quái liên tục
-                        autoAttackMobsNearby(6)
-                        task.wait(6) -- chờ game phản hồi + đánh quái
+                        -- CHỜ game phản hồi + AUTO ATTACK quái spawn:
+                        -- Vòng lặp NHỎ (4 giây, yield 0.4s/lần) → KHÔNG block script.
+                        -- Mỗi 0.4s: check trick-or-treat ON, đánh quái 1 lần, chờ ngắn.
+                        local waitStart = os.clock()
+                        while State.TrickOrTreat and os.clock() - waitStart < 4 do
+                                autoAttackMobsNearby() -- fire fast attack 1 lần (nếu có quái)
+                                task.wait(0.4)
+                        end
 
                         -- KIỂM TRA kết quả → LOCKED hay thành công
                         if not State.TrickOrTreat then return end
@@ -2835,5 +2885,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.3!\nFix gõ cửa + Auto đánh quái spawn + Tele mode.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.3 (fix trick-or-treat + auto attack mobs + tele mode + stand water fix) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.5!\nFix lại tele lên nóc nhà/góc cây.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.5 (fix roof/tree teleport regression) | Library: Meizu v3.1")
