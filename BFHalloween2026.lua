@@ -185,6 +185,18 @@
       tele, tween, game physics rớt xuống, bị quái đẩy xuống...
     • Chỉ bump khi isWater=true → đất/roof/cây KHÔNG bump (noclip vẫn xuyên).
     • Chỉ chạy khi Farm/Trick BẬT → không annoy người chơi bơi tự do.
+
+    ═══ UPDATE v3.7 — CHỐNG CHẠM NƯỚC (DEVIL FRUIT USER) ═══
+    • FIX "ăn Devil Fruit xuống nước mất máu chết": Devil Fruit user chạm
+      nước = mất máu liên tục → chết. Phải KHÔNG cho chạm nước LUÔN (không
+      phải bump lên sau khi chạm → PREVENT chặn trước).
+    • NoWater Heartbeat: mỗi frame, raycast xuống 10 studs → nếu thấy mặt
+      nước gần (<4 studs dưới chân) → KHOÁ Y giữ trên mặt nước +4 studs +
+      reset velocity Y = 0 → KHÔNG BAO GIỜ chạm nước.
+    • MZ_Teleport + safeStandPos + tween: tất cả bump Y +4 trên mặt nước
+      (trước +2 studs, giờ +4 cho an toàn tuyệt đối).
+    • Toggle "Chống chạm nước (NoWater)" ở tab Farm (mặc định BẬT).
+    • Chỉ chạy khi Farm/Trick BẬT → người chơi bơi tự do (farm tắt) OK.
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -249,6 +261,7 @@ local State = {
         AntiAFK     = true,
         NoFX        = false,
         HideUIFarm  = true, -- thu nhỏ Hub khi farm (chống click ảo bấm nhầm nút)
+        NoWater     = true, -- CHỐNG CHẠM NƯỚC (Devil Fruit user chết khi xuống nước)
 
         -- Anti-Ban / Anti-Cheat (mượn + cải thiện từ Banana Cat Hub)
         AntiBan     = true,  -- nâng thread identity + mở rộng StreamingRadius (load cả map)
@@ -501,7 +514,7 @@ function MZ_Tween.to(targetCFrame, speed, stopDist, groundSafe)
                 if groundSafe ~= false then
                         local gY, isWater = groundYAt(newPos)
                         if gY and isWater then
-                                local minY = gY + 2.5
+                                local minY = gY + 4 -- +4 studs (NoWater an toàn tuyệt đối)
                                 if newPos.Y < minY then
                                         local yLift = minY - newPos.Y
                                         if yLift >= step then
@@ -1282,20 +1295,20 @@ local function safeStandPos(pos)
         local gY, isWater = groundYAt(pos)
         local baseY = pos.Y
         if gY and isWater then
-                -- CHỈ bump khi mặt NƯỚC: nếu pumpkin dưới nước sâu >5 studs → nâng lên
-                if baseY < gY - 5 then
-                        baseY = gY + 2.0
-                elseif baseY < gY then
-                        baseY = gY + 0.5
+                -- CHỈ bump khi mặt NƯỚC: Devil Fruit user chạm nước = chết!
+                -- luôn giữ +4 studs trên mặt nước (NoWater an toàn tuyệt đối)
+                if baseY < gY + 4 then
+                        baseY = gY + 4
                 end
         end
-        -- đất / roof / ngọn cây / mặt nước nông → KHÔNG bump → đứng ngang tầm bí ngô
+        -- đất / roof / ngọn cây → KHÔNG bump → đứng ngang tầm bí ngô
         return Vector3.new(pos.X, baseY, pos.Z)
 end
 
 -- TELEPORT (set CFrame tức thì) — dùng cho farm mode "Tele" (giống BCH):
 -- BCH farm dùng set CFrame chứ không tween → nhanh hơn, không kẹt terrain.
--- CHỐNG CHÌM NƯỚC: sau khi tele, check lại nếu dưới mặt nước → bump Y lên.
+-- CHỐNG CHẠM NƯỚC: Devil Fruit user chạm nước = chết! Tele đến điểm nước
+-- → bump Y lên mặt nước +4 studs TRƯỚC khi set CFrame → không bao giờ chạm.
 local function MZ_Teleport(targetPos)
         local root = getRoot()
         if not root then return false end
@@ -1303,11 +1316,11 @@ local function MZ_Teleport(targetPos)
         if typeof(targetPos) == "CFrame" then
                 goalPos = targetPos.Position
         end
-        -- anti-water: bump Y lên nếu điểm tele dưới mặt nước
+        -- anti-water: bump Y lên nếu điểm tele ở/dưới mặt nước
         local gY, isWater = groundYAt(goalPos)
         local finalY = goalPos.Y
-        if gY and isWater and finalY < gY then
-                finalY = gY + 2.0 -- trên mặt nước 2 studs
+        if gY and isWater and finalY < gY + 4 then
+                finalY = gY + 4 -- trên mặt nước 4 studs (NoWater an toàn)
         end
         pcall(function()
                 root.CFrame = CFrame.new(goalPos.X, finalY, goalPos.Z)
@@ -1319,26 +1332,40 @@ local function MZ_Teleport(targetPos)
         return true
 end
 
--- ANTI-WATER SAFETY NET (chạy mỗi Heartbeat khi farm/trick BẬT): nếu nhân vật
--- DƯỚI mặt nước → bump Y lên trên. Chống chìm nước khi tele/tween/game physics.
--- Chỉ bump khi isWater=true (không bump đất/roof → noclip vẫn xuyên nhà/cây).
--- Chỉ chạy khi FarmPumpkin hoặc TrickOrTreat BẬT (không annoy người chơi bơi).
-local _antiWaterClock = 0
+-- CHỐNG CHẠM NƯỚC (NoWater) — Devil Fruit user chạm nước = mất máu chết!
+-- ⚠ KHÔNG PHẢI "bump lên sau khi chạm" → phải PREVENT (chặn trước).
+-- Heartbeat mỗi frame: nếu raycast xuống thấy mặt nước gần (<4 studs dưới
+-- chân) → KHOÁ Y giữ trên mặt nước +4 studs → KHÔNG BAO GIỜ chạm nước.
+-- - Chỉ block khi State.NoWater BẬT (mặc định BẬT).
+-- - Chỉ check khi farm/trick BẬT (để người chơi bơi tự do khi farm tắt).
+-- - isWater=true mới block (đất/roof/cây KHÔNG block → noclip vẫn xuyên).
+-- - Đồng thời reset velocity Y = 0 (chống rơi tiếp).
+local _noWaterClock = 0
 table.insert(Connections, RunService.Heartbeat:Connect(function()
+        if not State.NoWater then return end
         if not (State.FarmPumpkin or State.TrickOrTreat) then return end
         local root = getRoot()
         if not root then return end
-        local now = os.clock()
-        if now - _antiWaterClock < 0.2 then return end -- check 5 lần/giây (giảm lag)
-        _antiWaterClock = now
         local pos = root.Position
-        local gY, isWater = groundYAt(pos)
-        if gY and isWater and pos.Y < gY - 0.5 then
-                -- nhân vật đang dưới mặt nước → bump lên trên
-                pcall(function()
-                        root.CFrame = CFrame.new(pos.X, gY + 2.0, pos.Z)
-                        root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                end)
+        -- raycast từ vị trí hiện tại XUỐNG 8 studs → check có nước gần không
+        local rp = RaycastParams.new()
+        rp.FilterType = Enum.RaycastFilterType.Exclude
+        rp.IgnoreWater = false
+        rp.FilterDescendantsInstances = { LocalPlayer.Character }
+        local hit = workspace:Raycast(
+                Vector3.new(pos.X, pos.Y + 2, pos.Z),
+                Vector3.new(0, -10, 0), rp)
+        if hit and hit.Material == Enum.Material.Water then
+                local waterY = hit.Position.Y
+                -- nếu nhân vật đang GẦN/chạm mặt nước (Y < waterY + 4) → khóa lên trên
+                if pos.Y < waterY + 4 then
+                        pcall(function()
+                                root.CFrame = CFrame.new(pos.X, waterY + 4, pos.Z)
+                                -- dập velocity Y (chống rơi tiếp) + giữ XZ
+                                local vel = root.AssemblyLinearVelocity
+                                root.AssemblyLinearVelocity = Vector3.new(vel.X, 0, vel.Z)
+                        end)
+                end
         end
 end))
 
@@ -2501,6 +2528,16 @@ SecFarm:CreateToggle({
 })
 
 SecFarm:CreateToggle({
+        Title = "Chống chạm nước (NoWater) — Devil Fruit",
+        Description = "KHÔNG cho nhân vật chạm mặt nước khi farm/trick (Devil Fruit user chạm nước = mất máu chết). Giữ Y luôn +4 studs trên mặt nước.",
+        Default = true,
+        Callback = function(v)
+                State.NoWater = v
+                notify("NoWater", v and "Đã BẬT — không cho chạm nước." or "Đã TẮT.", v and "success" or "warning")
+        end,
+})
+
+SecFarm:CreateToggle({
         Title = "Tự nhặt đồ rơi",
         Description = "Candy Corn / Pumpkin Bits trong bán kính bên dưới",
         Default = true,
@@ -2894,5 +2931,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.6!\nAnti-water safety net — tele không chìm nước.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.6 (anti-water safety net + tele water check) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.7!\nChống chạm nước (Devil Fruit user) — PREVENT không cho chạm.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.7 (NoWater PREVENT + Devil Fruit safe) | Library: Meizu v3.1")
