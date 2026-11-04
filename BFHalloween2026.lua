@@ -197,6 +197,16 @@
       (trước +2 studs, giờ +4 cho an toàn tuyệt đối).
     • Toggle "Chống chạm nước (NoWater)" ở tab Farm (mặc định BẬT).
     • Chỉ chạy khi Farm/Trick BẬT → người chơi bơi tự do (farm tắt) OK.
+
+    ═══ UPDATE v3.8 — FLOAT HOÀI (GIỐNG BCH AUTO FARM) ═══
+    • YÊU CẦU: "cho nó bay hoài luôn, không bao giờ rớt, đứng yên trên không
+      kiểu BCH auto farm tween". → Đã thêm FLOAT KEEP-ALIVE.
+    • Heartbeat mỗi 0.5s: khi Farm/Trick BẬT → giữ FloatForce (BodyVelocity
+      Velocity=0, MaxForce=1e6) LUÔN → nhân vật ĐỨNG YÊN TRÊN KHÔNG mãi,
+      gravity bị dập hoàn toàn → KHÔNG BAO GIỜ rơi.
+    • Khi Farm/Trick TẮT → dọn FloatForce → rơi/bơi bình thường.
+    • Tween mode: float giữa các cú tween (đứng yên trên không).
+    • Tele mode: không cần float (set CFrame trực tiếp).
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -405,7 +415,7 @@ local function setFloatForce(root, on)
                         local fv = Instance.new("BodyVelocity")
                         fv.Name = "MZ_FloatForce"
                         fv.Velocity = Vector3.new(0, 0, 0)
-                        fv.MaxForce = Vector3.new(1e6, 1e6, 1e6) -- mạnh → dập hoàn toàn
+                        fv.MaxForce = Vector3.new(1e6, 1e6, 1e6) -- mạnh → dập hoàn toàn (như BCH)
                         fv.P = 1e5
                         fv.Parent = root
                         MZ_Tween._fv = fv
@@ -414,6 +424,44 @@ local function setFloatForce(root, on)
                 old:Destroy()
         end
 end
+
+-- ═══ FLOAT HOÀI (giống Banana Cat Hub auto farm) ═══
+-- BCH giữ FloatForce (BodyVelocity Velocity=0, MaxForce=1e5) LUÔN BẬT khi farm
+-- → nhân vật ĐỨNG YÊN TRÊN KHÔNG mãi, KHÔNG bao giờ rơi (gravity bị dập).
+-- Khi farm/trick BẬT: giữ FloatForce. Khi tắt: dọn FloatForce (rơi bình thường).
+-- Chạy mỗi 0.5s (đủ, không lag) → re-apply nếu character reset / force bị xóa.
+local _floatKeepClock = 0
+table.insert(Connections, RunService.Heartbeat:Connect(function()
+        local now = os.clock()
+        if now - _floatKeepClock < 0.5 then return end
+        _floatKeepClock = now
+        -- Chỉ giữ float khi Farm/Trick BẬT (giống BCH: chỉ float khi auto farm)
+        if not (State.FarmPumpkin or State.TrickOrTreat) then
+                -- farm tắt → dọn float (nếu còn) để rơi bình thường
+                local root = getRoot()
+                if root then
+                        local ff = root:FindFirstChild("MZ_FloatForce")
+                        if ff then pcall(function() ff:Destroy() end) end
+                end
+                return
+        end
+        -- farm/trick BẬT → giữ FloatForce luôn (không rơi)
+        if not State.FarmTeleMode then
+                -- tele mode KHÔNG cần float (set CFrame trực tiếp)
+                -- tween mode → giữ float để đứng yên trên không giữa các cú tween
+                local root = getRoot()
+                if root and not root:FindFirstChild("MZ_FloatForce") and not MZ_Tween.running then
+                        pcall(function()
+                                local fv = Instance.new("BodyVelocity")
+                                fv.Name = "MZ_FloatForce"
+                                fv.Velocity = Vector3.new(0, 0, 0)
+                                fv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+                                fv.P = 1e5
+                                fv.Parent = root
+                        end)
+                end
+        end
+end))
 
 function MZ_Tween.cancel()
         MZ_Tween.token = MZ_Tween.token + 1
@@ -2931,5 +2979,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.7!\nChống chạm nước (Devil Fruit user) — PREVENT không cho chạm.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.7 (NoWater PREVENT + Devil Fruit safe) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.8!\nFloat hoài — bay trên không không rơi (giống BCH).", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.8 (float keep-alive like BCH + NoWater + fast attack) | Library: Meizu v3.1")
