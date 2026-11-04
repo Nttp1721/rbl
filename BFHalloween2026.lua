@@ -148,6 +148,17 @@
     • Shadow variable fix: local radius = radius or 80 → đổi tên thành `rad`.
     • TOÀN BỘ fast attack pcall → lỗi bất kỳ chỉ return false → fallback M1,
       KHÔNG bao giờ crash script.
+
+    ═══ UPDATE v3.3 — FIX TRICK-OR-TREAT + TELE MODE + STAND WATER FIX ═══
+    • FIX "gõ cửa không tương tác event": doorLoop giờ dùng
+      MaxActivationDistance của prompt để bay ĐỦ GẦN rồi fire 2 lần (pcall).
+      fireDoor thử fireproximityprompt + fallback InputHoldBegin/End (E hold).
+    • AUTO ATTACK MOBS: khi gõ cửa spawn quái nhỏ → tự fast attack AOE 6s
+      (đánh TẤT CẢ quái trong range). Toggle "Tự đánh quái spawn" (mặc định BẬT).
+    • TELE MODE (BCH style): toggle "Tele mode" — BẬT = set CFrame tức thì
+      (không tween, nhanh, không kẹt terrain). TẮT = tween (mặc định).
+    • FIX "rớt nước khi đứng kế pumpkin": safeStandPos giờ nâng Y khi pumpkin
+      ở DƯỚI mặt đất/nước (không chỉ nước) → không rơi nước/chìm nữa.
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -177,12 +188,14 @@ local State = {
         -- Farm bí ngô
         FarmPumpkin   = false,
         FarmMode      = "Tới gần từng bí ngô",
+        FarmTeleMode  = false, -- true = TELE (set CFrame tức thì, BCH style), false = tween
         FilterMode    = "Tất cả bí ngô",
         TweenSpeed    = 230, -- giới hạn MAX 230 studs/s (yêu cầu owner)
         HitRange      = 30,
         MaxFarmDistance = 350, -- bán kính tính từ vị trí bật farm; không cho đuổi mục tiêu xuyên map
         StandDist     = 3,    -- đứng kế bên bí ngô (3 studs) — không chỉnh được
         AutoBuso      = true, -- tự bật Buso Haki (Aura) khi đánh
+        AutoAttackMobs = true, -- auto đánh quái spawn khi gõ cửa (trick-or-treat)
         HitDelay      = 0.12,
         FastAttack    = false, -- remote thường bị server chặn → mặc định M1 người thật
         Noclip        = true,
@@ -1232,19 +1245,41 @@ local function busoLoop()
 end
 
 -- ════════════════════════════ 11. AUTO FARM BÍ NGÔ ════════════════════════
--- Điểm đứng NGANG TẦM bí ngô (fix "đứng trên nóc nhà / ngọn cây"):
---   • Chỉ nâng Y nếu DƯỚI MẶT NƯỚC (chống chìm).
---   • Đất / nóc nhà / ngọn cây → KHÔNG nâng → noclip xuyên qua, đứng ngang tầm.
---   → Nhân vật đứng kế bên bí ngô (1 stud), DÍNH 100%.
+-- Điểm đứng KẾ BEN bí ngô KHÔNG rơi nước (fix "rớt nước khi đứng kế pumpkin"):
+--   • Dùng Y của bí ngô (đứng ngang tầm).
+--   • Pumpkin ở DƯỚI mặt đất/nước → nâng lên trên (chống rơi nước/chìm).
+--   • Pumpkin TRÊN nóc/cây → KHÔNG bump → noclip xuyên, đứng ngang tầm.
 local function safeStandPos(pos)
         local gY, isWater = groundYAt(pos)
         local baseY = pos.Y
-        if gY and isWater then
-                -- nước → nâng lên trên mặt nước (chống chìm)
-                baseY = math.max(baseY, gY + 2.0)
+        if gY then
+                -- pumpkin ở dưới mặt đất/nước → nâng lên trên để không rơi nước
+                if isWater then
+                        baseY = math.max(baseY, gY + 2.0)  -- nước: +2 studs
+                elseif baseY < gY then
+                        baseY = math.max(baseY, gY + 1.0)  -- dưới đất: +1 stud
+                end
+                -- baseY ĐÃ CAO HƠN mặt đất (pumpkin trên nóc/cây) → KHÔNG bump
+                -- → noclip xuyên vào trong, đứng ngang tầm bí ngô.
         end
-        -- đất / nóc nhà / ngọn cây → KHÔNG nâng (noclip xuyên, đứng ngang tầm bí ngô)
         return Vector3.new(pos.X, baseY, pos.Z)
+end
+
+-- TELEPORT (set CFrame tức thì) — dùng cho farm mode "Tele" (giống BCH):
+-- BCH farm dùng set CFrame chứ không tween → nhanh hơn, không kẹt terrain.
+local function MZ_Teleport(targetPos)
+        local root = getRoot()
+        if not root then return false end
+        if typeof(targetPos) == "CFrame" then
+                pcall(function() root.CFrame = targetPos end)
+        else
+                pcall(function() root.CFrame = CFrame.new(targetPos) end)
+        end
+        pcall(function()
+                root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end)
+        return true
 end
 
 -- Chọn mục tiêu sau khi cache được cập nhật. Không dùng fallback toàn map:
@@ -1462,10 +1497,18 @@ local function farmLoop()
                                         if flat.Magnitude < 0.1 then
                                                 flat = Vector3.new(1, 0, 0)
                                         end
-                                        local goal = CFrame.new(safeStandPos(rp.Position + flat.Unit * standDist))
-                                        State.StatusText = string.format("Đang bay tới bí ngô (%.0fm)", dist)
+                                        local goalPos = safeStandPos(rp.Position + flat.Unit * standDist)
                                         equipFightingStyle()
-                                        reached = MZ_Tween.to(goal, State.TweenSpeed, 2, true)
+                                        if State.FarmTeleMode then
+                                                -- TELE (BCH style): set CFrame tức thì → nhanh, không kẹt terrain
+                                                State.StatusText = string.format("Tele tới bí ngô (%.0fm)", dist)
+                                                MZ_Teleport(CFrame.new(goalPos))
+                                                reached = true
+                                        else
+                                                -- TWEEN: bay từng bước (mặc định)
+                                                State.StatusText = string.format("Đang bay tới bí ngô (%.0fm)", dist)
+                                                reached = MZ_Tween.to(CFrame.new(goalPos), State.TweenSpeed, 2, true)
+                                        end
                                 end
                                 if not State.FarmPumpkin then return end
                                 if reached then
@@ -1825,7 +1868,37 @@ local function fireDoor(inst)
                 end
                 return false
         end
-        return pcall(firePrompt, inst)
+        -- ProximityPrompt: thử fireproximityprompt trước, rồi thử :InputHoldBegin/End
+        -- (một số prompt "Trick or Treat" cần E hold mới ăn)
+        local fired = false
+        if type(fireproximityprompt) == "function" then
+                fired = pcall(fireproximityprompt, inst)
+        end
+        if not fired then
+                pcall(function()
+                        inst:InputHoldBegin()
+                        task.wait((inst.HoldDuration or 0) + 0.2)
+                        inst:InputHoldEnd()
+                end)
+                fired = true
+        end
+        return fired
+end
+
+-- AUTO ATTACK MOBS SPAWN: khi gõ cửa Trick-or-Treat, game spawn quái nhỏ.
+-- Hàm này đánh TẤT CẢ quái trong range (fast attack AOE) trong khoảng thời gian.
+local function autoAttackMobsNearby(durationSec)
+        if not State.AutoAttackMobs then return end
+        local startClock = os.clock()
+        task.spawn(function()
+                while State.TrickOrTreat and os.clock() - startClock < durationSec do
+                        local root = getRoot()
+                        if root and hitEnemiesFastAttack() then
+                                State.StatusText = "Đang đánh quái spawn từ cửa..."
+                        end
+                        task.wait(0.05) -- fast attack delay (BCH style)
+                end
+        end)
 end
 
 local DoorGen = 0
@@ -1896,25 +1969,42 @@ local function doorLoop()
                         end
                         noneNotified = false
 
-                        -- bay tới cửa (nếu xa & farm đang tắt)
-                        if bestD > 8 and not farmOn then
+                        -- bay tới cửa: dùng MaxActivationDistance của prompt (thường 5-10 studs)
+                        -- để đảm bảo ĐỦ GẦN để fire. Dùng tele nếu farm tele mode, else tween.
+                        local activationDist = 10
+                        if not bestIsClick and best.MaxActivationDistance then
+                                activationDist = math.min(activationDist, best.MaxActivationDistance - 1)
+                        end
+                        activationDist = math.max(activationDist, 3)
+                        if bestD > activationDist then
                                 local away = (root.Position - bestPart.Position)
                                 if away.Magnitude > 0.1 then
-                                        local goalPos = bestPart.Position + away.Unit * 6
+                                        local goalPos = safeStandPos(bestPart.Position + away.Unit * activationDist)
                                         State.StatusText = string.format("Đang bay tới cửa (%.0fm)", bestD)
-                                        MZ_Tween.to(CFrame.new(safeStandPos(goalPos)),
-                                                State.TweenSpeed, 5, true)
+                                        if State.FarmTeleMode then
+                                                MZ_Teleport(CFrame.new(goalPos))
+                                        else
+                                                MZ_Tween.to(CFrame.new(goalPos),
+                                                        State.TweenSpeed, 4, true)
+                                        end
+                                        task.wait(0.3) -- chờ đứng ổn định
                                 end
                         end
                         if not State.TrickOrTreat then return end
 
-                        -- GÕ CỬA
+                        -- GÕ CỬA: fire prompt + face + đứng gần
                         faceTarget(bestPart.Position)
                         local candyBefore = candyNow()
+                        State.StatusText = "Đang gõ cửa... (chờ Candy)"
+                        -- fire nhiều lần (một số prompt cần fire sau khi đứng gần)
+                        pcall(fireDoor, best)
+                        task.wait(0.4)
                         pcall(fireDoor, best)
                         doorCooldown[best] = os.clock() + 30 -- sang nhà khác trong 30s
-                        State.StatusText = "Đang gõ cửa... (chờ Candy)"
-                        task.wait(3) -- chờ game phản hồi
+
+                        -- AUTO ATTACK quái spawn: trong 6s sau khi gõ cửa, đánh quái liên tục
+                        autoAttackMobsNearby(6)
+                        task.wait(6) -- chờ game phản hồi + đánh quái
 
                         -- KIỂM TRA kết quả → LOCKED hay thành công
                         if not State.TrickOrTreat then return end
@@ -2276,6 +2366,16 @@ SecFarm:CreateDropdown({
         end,
 })
 
+SecFarm:CreateToggle({
+        Title = "Tele mode (BCH style, không tween)",
+        Description = "BẬT = set CFrame tức thì (tele, giống Banana Cat Hub farm). TẮT = tween bay từng bước. Tele nhanh hơn, không kẹt terrain.",
+        Default = false,
+        Callback = function(v)
+                State.FarmTeleMode = v
+                notify("Farm Tele", v and "Đã BẬT tele mode (BCH style)." or "Đã TẮT — dùng tween.", v and "success" or "info")
+        end,
+})
+
 SecFarm:CreateDropdown({
         Title = "Lọc bí ngô",
         Options = { "Tất cả bí ngô", "Bỏ qua bí ngô sống/boss" },
@@ -2476,7 +2576,7 @@ local SecDoor = TabEvent:CreateSection("Auto Gõ Cửa (Trick-or-Treat)")
 
 SecDoor:CreateToggle({
         Title = "Bật Auto Gõ Cửa",
-        Description = "Tự tìm + gõ cửa (cả ProximityPrompt & ClickDetector). Cửa LOCKED → tự đổi nhà khác.",
+        Description = "Tự tìm + gõ cửa (cả ProximityPrompt & ClickDetector). Cửa LOCKED → tự đổi nhà khác. Tự đánh quái spawn.",
         Default = false,
         Callback = function(v)
                 State.TrickOrTreat = v
@@ -2485,11 +2585,21 @@ SecDoor:CreateToggle({
                         if State.PickupDrops then
                                 task.spawn(pickupLoop)
                         end
-                        notify("Trick-or-Treat", "Đã BẬT auto gõ cửa!\nTự sang nhà khác khi gặp cửa khóa.", "success")
+                        notify("Trick-or-Treat", "Đã BẬT auto gõ cửa!\nTự đánh quái spawn + đổi nhà khi khóa.", "success")
                 else
                         MZ_Tween.cancel()
                         notify("Trick-or-Treat", "Đã TẮT auto gõ cửa.", "warning")
                 end
+        end,
+})
+
+SecDoor:CreateToggle({
+        Title = "Tự đánh quái spawn khi gõ cửa",
+        Description = "Khi gõ cửa Trick-or-Treat spawn quái nhỏ → tự động fast attack AOE đánh tất cả. (Mặc định BẬT)",
+        Default = true,
+        Callback = function(v)
+                State.AutoAttackMobs = v
+                notify("Auto Attack Mobs", v and "Đã BẬT tự đánh quái spawn." or "Đã TẮT.", v and "success" or "warning")
         end,
 })
 
@@ -2725,5 +2835,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.2!\nFix lỗi full script (remote setup) + Fast attack BCH.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.2 (fix remote setup + BCH fast attack AOE + stand=3 + speed 230) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.3!\nFix gõ cửa + Auto đánh quái spawn + Tele mode.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.3 (fix trick-or-treat + auto attack mobs + tele mode + stand water fix) | Library: Meizu v3.1")
