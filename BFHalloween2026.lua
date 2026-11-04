@@ -228,6 +228,17 @@
       DƯỚI mặt nước → bump lên waterY + 2 studs. KHÔNG scale XZ phức tạp.
     • → KHÔNG chạm nước (Devil Fruit an toàn) + KHÔNG lên nóc nhà/cây
       (chỉ bump NƯỚC, KHÔNG bump đất/roof).
+
+    ═══ UPDATE v4.1 — BAY CAO TRÊN ĐẦU QUÁI (BCH FARM STYLE) ═══
+    • YÊU CẦU: "bay cao cao lên kiểu BCH auto farm, thấy bay cao trên đầu
+      con quái để đánh; còn pumpkin thì đứng gần hợp lí rồi".
+    • DISPATCH theo loại mục tiêu:
+        + QUÁI Jack o' Lantern → bay CAO trên đầu (Y + 25 studs, lệch XZ 15)
+          giống BCH farm style → đánh từ trên cao xuống.
+        + PUMPKIN → đứng kế ben (3 studs, ngang tầm) — giữ nguyên.
+    • State.EnemyStandDist = 15 (XZ), State.EnemyStandY = 25 (độ cao).
+    • safeStandPosEnemy(): tính điểm đứng trên đầu quái.
+    • farmLoop dispatch: isWorkspaceEnemy → enemy pos; else → pumpkin pos.
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -262,7 +273,9 @@ local State = {
         TweenSpeed    = 230, -- giới hạn MAX 230 studs/s (yêu cầu owner)
         HitRange      = 30,
         MaxFarmDistance = 350, -- bán kính tính từ vị trí bật farm; không cho đuổi mục tiêu xuyên map
-        StandDist     = 3,    -- đứng kế bên bí ngô (3 studs) — không chỉnh được
+        StandDist     = 3,    -- PUMPKIN: đứng kế ben bí ngô (3 studs) — không chỉnh được
+        EnemyStandDist = 15,  -- QUÁI: khoảng cách XZ (bay cao trên đầu)
+        EnemyStandY   = 25,   -- QUÁI: độ cao Y trên đầu quái (BCH farm style)
         AutoBuso      = true, -- tự bật Buso Haki (Aura) khi đánh
         AutoAttackMobs = true, -- auto đánh quái spawn khi gõ cửa (trick-or-treat)
         HitDelay      = 0.12,
@@ -1348,6 +1361,16 @@ local function safeStandPos(pos)
         return Vector3.new(pos.X, baseY, pos.Z)
 end
 
+-- Điểm đứng CHO QUÁI (BCH farm style): bay CAO trên đầu quái để đánh.
+--   • Vị trí = trên đầu quái (quái.Y + EnemyStandY, lệch XZ EnemyStandDist).
+--   • KHÔNG bump nước ở đây (đã cao rồi, không chạm nước).
+local function safeStandPosEnemy(enemyPos)
+        local x = enemyPos.X
+        local y = enemyPos.Y + (State.EnemyStandY or 25) -- bay cao trên đầu
+        local z = enemyPos.Z
+        return Vector3.new(x, y, z)
+end
+
 -- TELEPORT (set CFrame tức thì) — giống BCH farm. CHỐNG CHẠM NƯỚC:
 -- nếu điểm tele DƯỚI mặt nước → bump Y lên mặt nước + 2 studs.
 local function MZ_Teleport(targetPos)
@@ -1576,33 +1599,50 @@ local function farmLoop()
                                 noneCount = 0
                                 local rp = modelRoot(target)
                                 if not rp then return end
-                                -- ĐỨNG SÁT CẠNH bí ngô (mặc định 3.5–5 studs) để M1
-                                -- không trượt; nâng trên mặt đất/nước khỏi chìm xuống biển
-                                local offsetDir = (root.Position - rp.Position)
-                                local standDist = State.StandDist + math.random() * 0.5
-                                local reached = true
-                                if offsetDir.Magnitude < 0.1 then
-                                        -- đang đứng đè lên bí ngô → lùi nhẹ ra rồi đập luôn
-                                        pcall(function()
-                                                getRoot().CFrame = CFrame.new(safeStandPos(
-                                                        rp.Position + Vector3.new(standDist, 0, 0)))
-                                        end)
-                                else
+                                -- DISPATCH: QUÁI → bay CAO trên đầu (BCH style); PUMPKIN → đứng kế ben
+                                local isEnemy = isWorkspaceEnemy(target)
+                                local goalPos
+                                if isEnemy then
+                                        -- QUÁI: bay cao trên đầu (EnemyStandY studs lên, lệch EnemyStandDist XZ)
+                                        local offsetDir = (root.Position - rp.Position)
                                         local flat = Vector3.new(offsetDir.X, 0, offsetDir.Z)
-                                        if flat.Magnitude < 0.1 then
-                                                flat = Vector3.new(1, 0, 0)
+                                        if flat.Magnitude < 0.1 then flat = Vector3.new(1, 0, 0) end
+                                        local enemyStand = (State.EnemyStandDist or 15) + math.random() * 2
+                                        goalPos = safeStandPosEnemy(rp.Position + flat.Unit * enemyStand)
+                                        State.StatusText = string.format("Bay trên đầu quái (%.0fm)", dist)
+                                else
+                                        -- PUMPKIN: đứng kế ben (StandDist studs, ngang tầm)
+                                        local offsetDir = (root.Position - rp.Position)
+                                        local standDist = State.StandDist + math.random() * 0.5
+                                        if offsetDir.Magnitude < 0.1 then
+                                                -- đang đứng đè lên bí ngô → lùi nhẹ ra rồi đập luôn
+                                                pcall(function()
+                                                        getRoot().CFrame = CFrame.new(safeStandPos(
+                                                                rp.Position + Vector3.new(standDist, 0, 0)))
+                                                end)
+                                                goalPos = nil -- đã set CFrame trực tiếp
+                                        else
+                                                local flat = Vector3.new(offsetDir.X, 0, offsetDir.Z)
+                                                if flat.Magnitude < 0.1 then
+                                                        flat = Vector3.new(1, 0, 0)
+                                                end
+                                                goalPos = safeStandPos(rp.Position + flat.Unit * standDist)
+                                                State.StatusText = string.format("Đang bay tới bí ngô (%.0fm)", dist)
                                         end
-                                        local goalPos = safeStandPos(rp.Position + flat.Unit * standDist)
+                                end
+                                local reached = true
+                                if goalPos then
                                         equipFightingStyle()
                                         if State.FarmTeleMode then
-                                                -- TELE (BCH style): set CFrame tức thì → nhanh, không kẹt terrain
-                                                State.StatusText = string.format("Tele tới bí ngô (%.0fm)", dist)
-                                                MZ_Teleport(CFrame.new(goalPos))
+                                                if isEnemy then
+                                                        MZ_Teleport(CFrame.new(goalPos))
+                                                else
+                                                        MZ_Teleport(CFrame.new(goalPos))
+                                                end
                                                 reached = true
                                         else
-                                                -- TWEEN: bay từng bước (mặc định)
-                                                State.StatusText = string.format("Đang bay tới bí ngô (%.0fm)", dist)
-                                                reached = MZ_Tween.to(CFrame.new(goalPos), State.TweenSpeed, 2, true)
+                                                reached = MZ_Tween.to(CFrame.new(goalPos), State.TweenSpeed,
+                                                        isEnemy and 5 or 2, true)
                                         end
                                 end
                                 if not State.FarmPumpkin then return end
@@ -2932,5 +2972,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v4.0!\nRewrite sạch — không chạm nước + không lên nóc.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v4.0 (clean rewrite: FloatForce + water bump only) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v4.1!\nBay cao trên đầu quái (BCH style) + pumpkin đứng gần.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v4.1 (enemy fly high + pumpkin close + clean water) | Library: Meizu v3.1")
