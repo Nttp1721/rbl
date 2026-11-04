@@ -207,6 +207,27 @@
     • Khi Farm/Trick TẮT → dọn FloatForce → rơi/bơi bình thường.
     • Tween mode: float giữa các cú tween (đứng yên trên không).
     • Tele mode: không cần float (set CFrame trực tiếp).
+
+    ═══ UPDATE v3.9 — FIX RỚT NƯỚC TRIỆT ĐỂ (FLOAT LUÔN BẬT) ═══
+    • FIX "rớt toàn dưới nước": bản v3.8 tween TẮT FloatForce ở cuối →
+      khoảng trống 0.5s (heartbeat mới re-apply) → nhân vật rơi xuống nước!
+    • Giờ: FloatForce BẬT LUÔN khi farm on, KHÔNG bao giờ tắt (kể cả khi
+      tween đang chạy). Float (Velocity=0) KHÔNG cản trở tween (BodyVelocity
+      chỉ dập velocity, KHÔNG chống set CFrame) → tween vẫn chạy bình thường.
+    • Heartbeat MỖI FRAME re-apply float nếu bị xóa → không khoảng trống.
+    • Xóa setFloatForce khỏi tween (đầu + cuối) → heartbeat quản lý toàn bộ.
+
+    ═══ UPDATE v4.0 — REWRITE SẠCH (KHÔNG CHAP VÁ) ═══
+    • User feedback: "bạn toàn chắp vá, gắn cái này vào cái khác". → Đã
+      rewrite sạch, giống BCH: chỉ FloatForce + bump nước trực tiếp.
+    • XÓA NoWater heartbeat (redundant — gây xung đột, bump +4 quá cao).
+    • XÓA toggle NoWater (tự động, không cần).
+    • groundwaterY() — hàm MỚI: chỉ trả về Y mặt NƯỚC (bỏ qua đất/roof/cây).
+      groundYAt() wrapper lại → KHÔNG bao giờ trả về đất/roof Y.
+    • safeStandPos/tween/MZ_Teleport: bump nước ĐƠN GIẢN — nếu điểm đến
+      DƯỚI mặt nước → bump lên waterY + 2 studs. KHÔNG scale XZ phức tạp.
+    • → KHÔNG chạm nước (Devil Fruit an toàn) + KHÔNG lên nóc nhà/cây
+      (chỉ bump NƯỚC, KHÔNG bump đất/roof).
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -428,16 +449,12 @@ end
 -- ═══ FLOAT HOÀI (giống Banana Cat Hub auto farm) ═══
 -- BCH giữ FloatForce (BodyVelocity Velocity=0, MaxForce=1e5) LUÔN BẬT khi farm
 -- → nhân vật ĐỨNG YÊN TRÊN KHÔNG mãi, KHÔNG bao giờ rơi (gravity bị dập).
--- Khi farm/trick BẬT: giữ FloatForce. Khi tắt: dọn FloatForce (rơi bình thường).
--- Chạy mỗi 0.5s (đủ, không lag) → re-apply nếu character reset / force bị xóa.
-local _floatKeepClock = 0
+-- ⚠ Quan trọng: Float KHÔNG cản trở tween (BodyVelocity chỉ dập velocity, KHÔNG
+-- chống set CFrame). Vậy float BẬT LUÔN khi farm on, kể cả khi tween đang chạy.
+-- MỖI FRAME re-apply nếu bị xóa (character reset / game xóa) → không khoảng trống.
 table.insert(Connections, RunService.Heartbeat:Connect(function()
-        local now = os.clock()
-        if now - _floatKeepClock < 0.5 then return end
-        _floatKeepClock = now
-        -- Chỉ giữ float khi Farm/Trick BẬT (giống BCH: chỉ float khi auto farm)
         if not (State.FarmPumpkin or State.TrickOrTreat) then
-                -- farm tắt → dọn float (nếu còn) để rơi bình thường
+                -- farm tắt → dọn float (nếu còn) để rơi/bơi bình thường
                 local root = getRoot()
                 if root then
                         local ff = root:FindFirstChild("MZ_FloatForce")
@@ -445,21 +462,17 @@ table.insert(Connections, RunService.Heartbeat:Connect(function()
                 end
                 return
         end
-        -- farm/trick BẬT → giữ FloatForce luôn (không rơi)
-        if not State.FarmTeleMode then
-                -- tele mode KHÔNG cần float (set CFrame trực tiếp)
-                -- tween mode → giữ float để đứng yên trên không giữa các cú tween
-                local root = getRoot()
-                if root and not root:FindFirstChild("MZ_FloatForce") and not MZ_Tween.running then
-                        pcall(function()
-                                local fv = Instance.new("BodyVelocity")
-                                fv.Name = "MZ_FloatForce"
-                                fv.Velocity = Vector3.new(0, 0, 0)
-                                fv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-                                fv.P = 1e5
-                                fv.Parent = root
-                        end)
-                end
+        -- farm/trick BẬT → giữ FloatForce LUÔN (mỗi frame, không throttle)
+        local root = getRoot()
+        if root and not root:FindFirstChild("MZ_FloatForce") then
+                pcall(function()
+                        local fv = Instance.new("BodyVelocity")
+                        fv.Name = "MZ_FloatForce"
+                        fv.Velocity = Vector3.new(0, 0, 0)
+                        fv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+                        fv.P = 1e5
+                        fv.Parent = root
+                end)
         end
 end))
 
@@ -468,13 +481,15 @@ function MZ_Tween.cancel()
         MZ_Tween.running = false
 end
 
--- Raycast tìm mặt đất / MẶT NƯỚC dưới 1 điểm (fix lỗi bay chui xuống nước)
+-- Raycast tìm MẶT NƯỚC dưới 1 điểm (chỉ nước, bỏ qua đất/roof/cây).
+-- Trả về waterY (Y mặt nước) hoặc nil. Dùng cho safeStandPos/tween/tele.
+-- ⚠ KHÔNG trả về đất/roof Y → tránh bump lên nóc nhà/ngọn cây.
 local RayParams = RaycastParams.new()
 RayParams.FilterType = Enum.RaycastFilterType.Exclude
-RayParams.IgnoreWater = false -- bắt buộc false để dò được mặt nước
+RayParams.IgnoreWater = false -- false để dò được mặt nước
 local rayBuildClock = 0
 
-local function groundYAt(pos)
+local function groundwaterY(pos)
         local now = os.clock()
         if now - rayBuildClock > 2 then
                 rayBuildClock = now
@@ -485,12 +500,21 @@ local function groundYAt(pos)
                 if folder then table.insert(list, folder) end
                 RayParams.FilterDescendantsInstances = list
         end
+        -- raycast từ trên xuống, dò điểm ĐẦU TIÊN chạm
         local hit = workspace:Raycast(
-                Vector3.new(pos.X, pos.Y + 60, pos.Z),
-                Vector3.new(0, -500, 0), RayParams)
-        if hit then
-                return hit.Position.Y, (hit.Material == Enum.Material.Water)
+                Vector3.new(pos.X, pos.Y + 80, pos.Z),
+                Vector3.new(0, -600, 0), RayParams)
+        if hit and hit.Material == Enum.Material.Water then
+                return hit.Position.Y
         end
+        return nil
+end
+
+-- GIỮ lại tên cũ cho code khác dùng (không xóa để không break) — nhưng giờ
+-- chỉ trả về (waterY, isWater), KHÔNG trả về đất/roof Y.
+local function groundYAt(pos)
+        local wY = groundwaterY(pos)
+        if wY then return wY, true end
         return nil, false
 end
 
@@ -508,7 +532,8 @@ function MZ_Tween.to(targetCFrame, speed, stopDist, groundSafe)
         MZ_Tween.cancel()
         MZ_Tween.running = true
         local myToken = MZ_Tween.token
-        setFloatForce(root, true)
+        -- FloatForce do heartbeat quản lý (giữ LUÔN khi farm on) → KHÔNG tắt ở cuối tween
+        -- (bản cũ tắt ở cuối → khoảng trống 0.5s → rơi xuống nước!)
 
         -- GIỚI HẠN tốc độ bay MAX 230 studs/s (yêu cầu owner) — vượt sẽ bị anticheat
         -- server kéo về + gây "tele chỗ không có bí ngô". Luôn kẹp trong [20, 230].
@@ -554,35 +579,13 @@ function MZ_Tween.to(targetCFrame, speed, stopDist, groundSafe)
                 local step = math.min(speed * dt, dist)
                 local newPos = cur + delta.Unit * step
 
-                -- FIX "bay dưới nước": CHỈ bump Y cho MẶT NƯỚC (chống chìm).
-                -- KHÔNG bump cho đất / nóc nhà / ngọn cây → nhân vật bay XUYÊN
-                -- (noclip) để vào trong nhà / dưới cây đứng kế bên bí ngô.
-                -- FIX "bay nhanh quá": Y bump có thể làm tổng vận tốc > step →
-                -- scale XZ lại để tổng 3D KHÔNG vượt quá `step` (=> ≤ 230 studs/s).
+                -- CHỐNG CHẠM NƯỚC (Devil Fruit): nếu điểm mới DƯỚI mặt nước
+                -- → bump Y lên mặt nước + 2 studs. Đơn giản, KHÔNG scale XZ.
+                -- FloatForce (heartbeat) đã dập velocity → không rơi → đủ rồi.
                 if groundSafe ~= false then
-                        local gY, isWater = groundYAt(newPos)
-                        if gY and isWater then
-                                local minY = gY + 4 -- +4 studs (NoWater an toàn tuyệt đối)
-                                if newPos.Y < minY then
-                                        local yLift = minY - newPos.Y
-                                        if yLift >= step then
-                                                -- bay thẳng lên (gần như đứng im XZ)
-                                                newPos = Vector3.new(cur.X, cur.Y + step, cur.Z)
-                                        else
-                                                -- phần budget còn lại cho XZ (giữ tổng ≤ step)
-                                                local xzBudget = step - yLift
-                                                local xzDelta = Vector3.new(delta.X, 0, delta.Z)
-                                                local xzMag = xzDelta.Magnitude
-                                                if xzMag > 0.001 then
-                                                        local xzStep = math.min(xzBudget, xzMag)
-                                                        xzDelta = (xzDelta / xzMag) * xzStep
-                                                else
-                                                        xzDelta = Vector3.new(0, 0, 0)
-                                                end
-                                                newPos = Vector3.new(cur.X + xzDelta.X,
-                                                        cur.Y + yLift, cur.Z + xzDelta.Z)
-                                        end
-                                end
+                        local wY = groundwaterY(newPos)
+                        if wY and newPos.Y < wY + 2 then
+                                newPos = Vector3.new(newPos.X, wY + 2, newPos.Z)
                         end
                 end
 
@@ -591,7 +594,7 @@ function MZ_Tween.to(targetCFrame, speed, stopDist, groundSafe)
                 r.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
         end
 
-        setFloatForce(getRoot(), false)
+        -- KHÔNG tắt FloatForce ở cuối tween — heartbeat giữ LUÔN khi farm on
         if myToken == MZ_Tween.token then
                 MZ_Tween.running = false
         end
@@ -1332,31 +1335,21 @@ local function busoLoop()
 end
 
 -- ════════════════════════════ 11. AUTO FARM BÍ NGÔ ════════════════════════
--- Điểm đứng KẾ BEN bí ngô — KHÔNG đứng trên nóc nhà/góc cây, KHÔNG rơi nước:
---   • LUÔN dùng Y của bí ngô (đứng ngang tầm, vào trong nhà/dưới cây).
---   • Chỉ bump Y khi ĐỦ ĐIỀU KIỆN rơi nước: (a) raycast hit = MẶT NƯỚC,
---     (b) Y bí ngô < mặt nước (>5 studs dưới) → nâng lên trên mặt nước.
---   • KHÔNG bump cho đất/roof/cây → noclip xuyên, đứng ngang tầm.
--- ⚠ Bản cũ bump khi baseY < gY (gY = roof/ground hit) → pumpkin TRONG nhà
---   (dưới mái nhà) → gY = mái nhà → bump lên nóc! Fix: chỉ bump NƯỚC.
+-- Điểm đứng KẾ BEN bí ngô (clean, giống BCH):
+--   • Dùng Y của bí ngô (đứng ngang tầm — vào trong nhà, dưới cây).
+--   • CHỈ bump Y khi điểm đứng DƯỚI mặt nước (Devil Fruit chạm nước = chết).
+--   • KHÔNG bump cho đất/roof/cây → noclip xuyên, KHÔNG lên nóc.
 local function safeStandPos(pos)
-        local gY, isWater = groundYAt(pos)
+        local wY = groundwaterY(pos)
         local baseY = pos.Y
-        if gY and isWater then
-                -- CHỈ bump khi mặt NƯỚC: Devil Fruit user chạm nước = chết!
-                -- luôn giữ +4 studs trên mặt nước (NoWater an toàn tuyệt đối)
-                if baseY < gY + 4 then
-                        baseY = gY + 4
-                end
+        if wY and baseY < wY + 2 then
+                baseY = wY + 2 -- trên mặt nước 2 studs (an toàn Devil Fruit)
         end
-        -- đất / roof / ngọn cây → KHÔNG bump → đứng ngang tầm bí ngô
         return Vector3.new(pos.X, baseY, pos.Z)
 end
 
--- TELEPORT (set CFrame tức thì) — dùng cho farm mode "Tele" (giống BCH):
--- BCH farm dùng set CFrame chứ không tween → nhanh hơn, không kẹt terrain.
--- CHỐNG CHẠM NƯỚC: Devil Fruit user chạm nước = chết! Tele đến điểm nước
--- → bump Y lên mặt nước +4 studs TRƯỚC khi set CFrame → không bao giờ chạm.
+-- TELEPORT (set CFrame tức thì) — giống BCH farm. CHỐNG CHẠM NƯỚC:
+-- nếu điểm tele DƯỚI mặt nước → bump Y lên mặt nước + 2 studs.
 local function MZ_Teleport(targetPos)
         local root = getRoot()
         if not root then return false end
@@ -1364,11 +1357,10 @@ local function MZ_Teleport(targetPos)
         if typeof(targetPos) == "CFrame" then
                 goalPos = targetPos.Position
         end
-        -- anti-water: bump Y lên nếu điểm tele ở/dưới mặt nước
-        local gY, isWater = groundYAt(goalPos)
         local finalY = goalPos.Y
-        if gY and isWater and finalY < gY + 4 then
-                finalY = gY + 4 -- trên mặt nước 4 studs (NoWater an toàn)
+        local wY = groundwaterY(goalPos)
+        if wY and finalY < wY + 2 then
+                finalY = wY + 2
         end
         pcall(function()
                 root.CFrame = CFrame.new(goalPos.X, finalY, goalPos.Z)
@@ -1380,42 +1372,10 @@ local function MZ_Teleport(targetPos)
         return true
 end
 
--- CHỐNG CHẠM NƯỚC (NoWater) — Devil Fruit user chạm nước = mất máu chết!
--- ⚠ KHÔNG PHẢI "bump lên sau khi chạm" → phải PREVENT (chặn trước).
--- Heartbeat mỗi frame: nếu raycast xuống thấy mặt nước gần (<4 studs dưới
--- chân) → KHOÁ Y giữ trên mặt nước +4 studs → KHÔNG BAO GIỜ chạm nước.
--- - Chỉ block khi State.NoWater BẬT (mặc định BẬT).
--- - Chỉ check khi farm/trick BẬT (để người chơi bơi tự do khi farm tắt).
--- - isWater=true mới block (đất/roof/cây KHÔNG block → noclip vẫn xuyên).
--- - Đồng thời reset velocity Y = 0 (chống rơi tiếp).
-local _noWaterClock = 0
-table.insert(Connections, RunService.Heartbeat:Connect(function()
-        if not State.NoWater then return end
-        if not (State.FarmPumpkin or State.TrickOrTreat) then return end
-        local root = getRoot()
-        if not root then return end
-        local pos = root.Position
-        -- raycast từ vị trí hiện tại XUỐNG 8 studs → check có nước gần không
-        local rp = RaycastParams.new()
-        rp.FilterType = Enum.RaycastFilterType.Exclude
-        rp.IgnoreWater = false
-        rp.FilterDescendantsInstances = { LocalPlayer.Character }
-        local hit = workspace:Raycast(
-                Vector3.new(pos.X, pos.Y + 2, pos.Z),
-                Vector3.new(0, -10, 0), rp)
-        if hit and hit.Material == Enum.Material.Water then
-                local waterY = hit.Position.Y
-                -- nếu nhân vật đang GẦN/chạm mặt nước (Y < waterY + 4) → khóa lên trên
-                if pos.Y < waterY + 4 then
-                        pcall(function()
-                                root.CFrame = CFrame.new(pos.X, waterY + 4, pos.Z)
-                                -- dập velocity Y (chống rơi tiếp) + giữ XZ
-                                local vel = root.AssemblyLinearVelocity
-                                root.AssemblyLinearVelocity = Vector3.new(vel.X, 0, vel.Z)
-                        end)
-                end
-        end
-end))
+-- CHỐNG CHẠM NƯỚC: đã xử lý TRỰC TIẾP trong safeStandPos + tween + tele
+-- (bump Y lên mặt nước + 2 khi điểm đến dưới nước). KHÔNG cần heartbeat riêng
+-- → FloatForce (dập velocity → không rơi) + bump trong tween/tele là ĐỦ.
+-- (Bản cũ có NoWater heartbeat 4 studs → xung đột + bump quá cao → bay lung tung.)
 
 -- Chọn mục tiêu sau khi cache được cập nhật. Không dùng fallback toàn map:
 -- mục tiêu phải có marker rõ ràng hoặc nằm trong bounds của PumpkinPatch.
@@ -2575,15 +2535,8 @@ SecFarm:CreateToggle({
         end,
 })
 
-SecFarm:CreateToggle({
-        Title = "Chống chạm nước (NoWater) — Devil Fruit",
-        Description = "KHÔNG cho nhân vật chạm mặt nước khi farm/trick (Devil Fruit user chạm nước = mất máu chết). Giữ Y luôn +4 studs trên mặt nước.",
-        Default = true,
-        Callback = function(v)
-                State.NoWater = v
-                notify("NoWater", v and "Đã BẬT — không cho chạm nước." or "Đã TẮT.", v and "success" or "warning")
-        end,
-})
+-- Chống chạm nước: tự động ( KHÔNG cần toggle) — FloatForce + bump trong
+-- tween/tele xử lý trực tiếp. Devil Fruit user an toàn.
 
 SecFarm:CreateToggle({
         Title = "Tự nhặt đồ rơi",
@@ -2979,5 +2932,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.8!\nFloat hoài — bay trên không không rơi (giống BCH).", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.8 (float keep-alive like BCH + NoWater + fast attack) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v4.0!\nRewrite sạch — không chạm nước + không lên nóc.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v4.0 (clean rewrite: FloatForce + water bump only) | Library: Meizu v3.1")
