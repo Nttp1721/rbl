@@ -137,6 +137,17 @@
     • Hit delay quái: 0.05-0.08s (BCH fast attack, cực nhanh) — pumpkin vẫn
       M1 nhịp người thật 0.30-0.42s.
     • StandDist = 3 (đổi từ 1 → 3 theo yêu cầu owner).
+
+    ═══ UPDATE v3.2 — FIX LỖI FULL SCRIPT (REMOTE SETUP) ═══
+    • FIX "fast attack làm lỗi full script": bản v3.1 gọi Net:RemoteEvent()
+      trên ModuleScript INSTANCE → lỗi (ModuleScript không có method :RemoteEvent).
+      Giờ require() ra TABLE trước (giống BCH: local m = require(Net)) rồi mới
+      gọi m:RemoteEvent("RegisterHit", true) → đúng pattern BCH.
+    • Bỏ table.clear (Lua 5.1 thuần không có) → cleanup thủ công.
+    • Bỏ getPartsInRange thừa → gộp vào getBladeHits (giống BCH function m).
+    • Shadow variable fix: local radius = radius or 80 → đổi tên thành `rad`.
+    • TOÀN BỘ fast attack pcall → lỗi bất kỳ chỉ return false → fallback M1,
+      KHÔNG bao giờ crash script.
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -516,22 +527,36 @@ table.insert(Connections, LocalPlayer.Idled:Connect(function()
 end))
 
 -- ════════════════════════════ 8. REMOTE FAST ATTACK ═══════════════════════
--- Flow người chơi thật (theo Banana Cat Hub):
---   1) Mouse module:FireServer(0.35) → đăng ký cú vung, mở "cửa sổ đánh" server
---   2) RegisterHit:FireServer(partĐầu, list cặp {rig, part})
--- Bí ngô KHÔNG nằm trong Workspace.Enemies nên AttackAOE gốc không trúng
--- → mình tự gom part của bí ngô và gửi đúng format trên.
-local RegisterAttack, RegisterHit, CombatUtil, MouseSwing
+-- Copy ĐÚNG pattern Banana Cat Hub (meizublf.lua):
+--   local Net   = require(RS.Modules.Net)
+--   local Mouse = require(RS.Mouse)
+--   local CombatUtil = require(RS.Modules.CombatUtil)
+--   local RegisterAttack = RS.Modules.Net:WaitForChild("RE/RegisterAttack")
+--   local RegisterHit    = Net:RemoteEvent("RegisterHit", true)
+-- ⚠ Bản cũ gọi Net:RemoteEvent() trên ModuleScript INSTANCE → lỗi (ModuleScript
+--   không có method :RemoteEvent). Phải require() ra TABLE trước rồi mới gọi.
+local RegisterAttack, RegisterHit, CombatUtil, MouseSwing, NetModule
 do
         pcall(function()
-                local Net = game:GetService("ReplicatedStorage")
-                        :WaitForChild("Modules", 9):WaitForChild("Net", 9)
-                RegisterAttack = Net:WaitForChild("RE/RegisterAttack", 9)
-                local okNet = pcall(function()
-                        RegisterHit = Net:RemoteEvent("RegisterHit", true)
+                local RS = game:GetService("ReplicatedStorage")
+                local netModule = RS:WaitForChild("Modules", 9):WaitForChild("Net", 9)
+                -- require ra TABLE (giống BCH: local m = require(...Modules.Net))
+                pcall(function()
+                        NetModule = require(netModule)
                 end)
-                if not okNet or not RegisterHit then
-                        RegisterHit = Net:WaitForChild("RE/RegisterHit", 9)
+                -- RegisterAttack: lấy từ instance (giống BCH: Net:WaitForChild("RE/RegisterAttack"))
+                RegisterAttack = netModule:WaitForChild("RE/RegisterAttack", 9)
+                -- RegisterHit: qua NetModule:RemoteEvent() (giống BCH: m:RemoteEvent("RegisterHit", true))
+                if NetModule and type(NetModule.RemoteEvent) == "function" then
+                        local ok = pcall(function()
+                                RegisterHit = NetModule:RemoteEvent("RegisterHit", true)
+                        end)
+                        if not ok or not RegisterHit then
+                                RegisterHit = netModule:WaitForChild("RE/RegisterHit", 9)
+                        end
+                else
+                        -- fallback: lấy trực tiếp instance
+                        RegisterHit = netModule:WaitForChild("RE/RegisterHit", 9)
                 end
         end)
         pcall(function()
@@ -920,6 +945,8 @@ end
 --   2) AttackAOE: lọc part theo BODY_PARTS + GetRigOfHitPart + IsVulnerable.
 --   3) RegisterAttack:FireServer(0) + RegisterHit:FireServer(firstPart, hitList)
 --      → no-animation, đánh NHANH.
+-- ⚠ TOÀN BỘ pcall → bất kỳ lỗi nào (CombatUtil thay đổi / remote thiếu) cũng
+--   chỉ return false → fallback M1, KHÔNG bao giờ crash script.
 local BODY_PARTS = {
         -- R6
         Head = true, Torso = true, LeftArm = true, RightArm = true,
@@ -934,22 +961,11 @@ local BODY_PARTS = {
         HumanoidRootPart = true,
 }
 
--- Lấy TẤT CẢ BasePart con của 1 model trong range (giống BCH function m)
-local function getPartsInRange(model, centerPos, radius)
-        local list = {}
-        for _, p in ipairs(model:GetChildren()) do
-                if p:IsA("BasePart") and (p.Position - centerPos).Magnitude <= radius then
-                        table.insert(list, p)
-                end
-        end
-        return list
-end
-
 -- getBladeHits: quét TẤT CẢ quái trong workspace.Enemies (+ Characters nếu includeChars)
 -- có HRP trong range → thu thập BasePart. (Copy y hệt BCH getgenv().getBladeHits)
 local function getBladeHits(myChar, myHRP, radius, includeChars)
         local results = {}
-        local radius = radius or 80
+        local rad = radius or 80
         local enemies = workspace:FindFirstChild("Enemies")
         local targets = {}
         if enemies then
@@ -969,12 +985,15 @@ local function getBladeHits(myChar, myHRP, radius, includeChars)
                 if model ~= myChar and model:IsDescendantOf(workspace)
                         and model:FindFirstChild("HumanoidRootPart") then
                         local eHRP = model.HumanoidRootPart
-                        local r = radius + (eHRP.Size.X / 2)
-                        -- check HRP trong range
+                        local r = rad + (eHRP.Size.X / 2)
+                        -- check HRP trong range (giống BCH: 10 + d + Size.X/2)
                         if (eHRP.Position - myHRP.Position).Magnitude <= 10 + r then
-                                local parts = getPartsInRange(model, myHRP.Position, r)
-                                for _, p in ipairs(parts) do
-                                        table.insert(results, p)
+                                -- thu thập BasePart con trong range (giống BCH function m)
+                                for _, p in ipairs(model:GetChildren()) do
+                                        if p:IsA("BasePart")
+                                                and (p.Position - myHRP.Position).Magnitude <= r then
+                                                table.insert(results, p)
+                                        end
                                 end
                         end
                 end
@@ -1012,19 +1031,21 @@ end
 -- AttackFunction (Attack No Animation): copy y hệt BCH
 -- RegisterAttack:FireServer(0) + RegisterHit:FireServer(firstPart, hitList)
 local function hitEnemiesFastAttack()
-        if not (RegisterHit and RegisterAttack) then return false end
+        -- GUARD: thiếu remote → return false (fallback M1)
+        if not RegisterHit or not RegisterAttack then return false end
         local hitList = attackAOE(State.HitRange or 80, false)
-        if not hitList then return false end
+        if not hitList or #hitList == 0 then return false end
         local first = table.remove(hitList, 1)
         local ok = pcall(function()
                 RegisterAttack:FireServer(0)
                 RegisterHit:FireServer(first[2], hitList)
         end)
-        table.clear(hitList)
+        -- cleanup thủ công (table.clear không có ở Lua 5.1 thuần)
+        for i = 1, #hitList do hitList[i] = nil end
         return ok
 end
 
--- Giữ lại tên cũ cho doHit gọi (1 target → vẫn AOE tất cả quái quanh đó)
+-- Wrapper cho doHit gọi (1 target → vẫn AOE tất cả quái quanh đó)
 local function hitEnemyFastAttack()
         return hitEnemiesFastAttack()
 end
@@ -2704,5 +2725,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.1!\nCopy nguyên cơ chế farm BCH + Stand=3.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.1 (BCH farm attack AOE + stand=3 + speed 230) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.2!\nFix lỗi full script (remote setup) + Fast attack BCH.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.2 (fix remote setup + BCH fast attack AOE + stand=3 + speed 230) | Library: Meizu v3.1")
