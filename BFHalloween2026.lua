@@ -99,7 +99,33 @@
       client cố load cả map → tràn RAM → crash).
     • Anti-Kick: MẶC ĐỊNH TẮT (hook __namecall có thể bị anticheat phát
       hiện → chỉ bật khi owner test thấy bị kick).
-    • Tốc độ bay 250 + đứng ngang bí ngô (giữ từ v2.6).
+    • Tốc độ bay 230 + đứng ngang bí ngô (giữ từ v2.6).
+
+    ═══ UPDATE v2.9 — FIX ĐỨNG TRÊN NÓC + STAND=1 + NOCLIP MẠNH ═══
+    • FIX "đứng trên nóc nhà / ngọn cây": safeStandPos + tween ground-safe
+      CHỈ bump Y cho MẶT NƯỚC (chống chìm). Đất / nóc nhà / ngọn cây →
+      KHÔNG bump → nhân vật bay XUYÊN (noclip) vào trong nhà / dưới cây,
+      đứng NGANG TẦM bí ngô (không trên nóc nữa).
+    • StandDist = 1 (CỐ ĐỊNH, không cho chỉnh): luôn đứng kế bên bí ngô.
+      Đã xóa slider "Khoảng cách đứng khi đập".
+    • NOCLIP viết lại: bỏ cache 1s (bản cũ → part mới không được disable →
+      kẹt tường). Bản mới quét GetDescendants MỖI FRAME → CanCollide=false
+      trên TẤT CẢ BasePart → chắc chắn xuyên tường/nóc/cây.
+    • Tween stopDist giảm 3.5→2: đến sát hơn, đập DÍNH hơn.
+    • Tốc độ bay 230 studs/s (theo yêu cầu owner trước đó).
+
+    ═══ UPDATE v3.0 — FAST ATTACK CHO QUÁI JACK O' LANTERN ═══
+    • TỰ ĐỘNG chọn cách đánh theo loại mục tiêu:
+        + Pumpkin (bí ngô sự kiện) → M1 giả lập người thật (ổn định, server
+          không chặn). Remote toggle giờ CHỈ cho pumpkin (mặc định TẮT).
+        + Quái Jack o' Lantern (workspace.Enemies) → FAST ATTACK kiểu Banana
+          Cat Hub: AttackAOE pattern — lọc body part (Head/Torso/Arms/Legs),
+          GetRigOfHitPart, IsVulnerable, RegisterAttack+RegisterHit (no-anim).
+          → Đánh NHANH + DÍNH, không cần bật toggle.
+    • isEventPumpkinTarget: chấp nhận quái workspace.Enemies làm mục tiêu farm
+      (không cần nằm trong PumpkinPatch).
+    • Toggle "Remote" đổi tên → "Remote cho Pumpkin" (Jack o' Lantern luôn
+      fast attack, không cần toggle).
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -130,10 +156,10 @@ local State = {
         FarmPumpkin   = false,
         FarmMode      = "Tới gần từng bí ngô",
         FilterMode    = "Tất cả bí ngô",
-        TweenSpeed    = 250, -- giới hạn MAX 250 studs/s (yêu cầu owner)
+        TweenSpeed    = 230, -- giới hạn MAX 230 studs/s (yêu cầu owner)
         HitRange      = 30,
         MaxFarmDistance = 350, -- bán kính tính từ vị trí bật farm; không cho đuổi mục tiêu xuyên map
-        StandDist     = 4,    -- đứng SÁT CẠNH bí ngô khi đập (bản cũ đứng 10+ studs → M1 trượt)
+        StandDist     = 1,    -- LUÔN đứng kế bên bí ngô (1 stud) — không chỉnh được
         AutoBuso      = true, -- tự bật Buso Haki (Aura) khi đánh
         HitDelay      = 0.12,
         FastAttack    = false, -- remote thường bị server chặn → mặc định M1 người thật
@@ -362,9 +388,9 @@ function MZ_Tween.to(targetCFrame, speed, stopDist, groundSafe)
         local myToken = MZ_Tween.token
         setFloatForce(root, true)
 
-        -- GIỚI HẠN tốc độ bay MAX 250 studs/s (yêu cầu owner) — vượt sẽ bị anticheat
-        -- server kéo về + gây "tele chỗ không có bí ngô". Luôn kẹp trong [20, 250].
-        speed = math.clamp(tonumber(speed) or 250, 20, 250)
+        -- GIỚI HẠN tốc độ bay MAX 230 studs/s (yêu cầu owner) — vượt sẽ bị anticheat
+        -- server kéo về + gây "tele chỗ không có bí ngô". Luôn kẹp trong [20, 230].
+        speed = math.clamp(tonumber(speed) or 230, 20, 230)
         stopDist = tonumber(stopDist) or 4
         local goalPos = targetCFrame.Position
         local startTime = os.clock()
@@ -406,13 +432,15 @@ function MZ_Tween.to(targetCFrame, speed, stopDist, groundSafe)
                 local step = math.min(speed * dt, dist)
                 local newPos = cur + delta.Unit * step
 
-                -- FIX "bay dưới nước": giữ độ cao an toàn so với đất/nước dọc đường.
-                -- FIX "bay nhanh quá 250": Y bump có thể làm tổng vận tốc > step →
-                -- scale XZ lại để tổng 3D KHÔNG vượt quá `step` (=> ≤ 250 studs/s).
+                -- FIX "bay dưới nước": CHỈ bump Y cho MẶT NƯỚC (chống chìm).
+                -- KHÔNG bump cho đất / nóc nhà / ngọn cây → nhân vật bay XUYÊN
+                -- (noclip) để vào trong nhà / dưới cây đứng kế bên bí ngô.
+                -- FIX "bay nhanh quá": Y bump có thể làm tổng vận tốc > step →
+                -- scale XZ lại để tổng 3D KHÔNG vượt quá `step` (=> ≤ 230 studs/s).
                 if groundSafe ~= false then
                         local gY, isWater = groundYAt(newPos)
-                        if gY then
-                                local minY = gY + (isWater and 2.5 or 2)
+                        if gY and isWater then
+                                local minY = gY + 2.5
                                 if newPos.Y < minY then
                                         local yLift = minY - newPos.Y
                                         if yLift >= step then
@@ -449,25 +477,17 @@ function MZ_Tween.to(targetCFrame, speed, stopDist, groundSafe)
 end
 
 -- ════════════════════════════ 6. NOCLIP (bản nhẹ — giảm lag) ══════════════
--- Dùng lại danh sách part đã cache (làm mới 1s/lần) thay vì GetDescendants
--- 60 lần/giây như bản cũ.
-local noclipParts, noclipChar, noclipClock = {}, nil, 0
+-- Bản cũ cache parts 1s/lần → phần mới (Accessory, Tool) không được disable
+-- → kẹt trong tường. Bản mới: quét GetDescendants MỖI FRAME trên Stepped
+-- (trước physics) → CanCollide = false trên TẤT CẢ BasePart.
+-- KHÔNG cache → không stale, chắc chắn xuyên được tường/nóc/cây.
+-- Tối ưu: character chỉ ~30 part → GetDescendants rất rẻ (<0.05ms).
 table.insert(Connections, RunService.Stepped:Connect(function()
         if not State.Noclip then return end
         local c = LocalPlayer.Character
         if not c then return end
-        if c ~= noclipChar or os.clock() - noclipClock > 1 then
-                noclipChar = c
-                noclipClock = os.clock()
-                noclipParts = {}
-                for _, p in ipairs(c:GetDescendants()) do
-                        if p:IsA("BasePart") then
-                                table.insert(noclipParts, p)
-                        end
-                end
-        end
-        for _, p in ipairs(noclipParts) do
-                if p.Parent and p.CanCollide then
+        for _, p in ipairs(c:GetDescendants()) do
+                if p:IsA("BasePart") and p.CanCollide then
                         p.CanCollide = false
                 end
         end
@@ -704,8 +724,23 @@ local function patchHasAny(patches)
         return _patchHasAnyCache
 end
 
+-- Kiểm tra model có nằm trong workspace.Enemies không ( = quái thật, có Humanoid).
+-- Quái Jack o' Lantern ở đây → dùng FAST ATTACK (remote) kiểu Banana Cat Hub.
+local function isWorkspaceEnemy(model)
+        if not model or not model.Parent then return false end
+        local anc = model
+        while anc and anc ~= workspace do
+                if anc.Name == "Enemies" and anc.Parent == workspace then return true end
+                anc = anc.Parent
+        end
+        return false
+end
+
 local function isEventPumpkinTarget(model, rootPart, patches)
         if hasEventMarker(model, EVENT_PUMPKIN_TAG) then return true end
+        -- Quái Jack o' Lantern trong workspace.Enemies → LUÔN là mục tiêu hợp lệ
+        -- (dùng fast attack, không cần nằm trong PumpkinPatch)
+        if isWorkspaceEnemy(model) then return true end
         -- KHÔNG có patch nào, hoặc patch có nhưng KHÔNG chứa bí ngô nào
         -- → FALLBACK: chấp nhận mọi bí ngô (fix "bật farm không đi")
         if not patches or #patches == 0 or not patchHasAny(patches) then
@@ -867,6 +902,53 @@ local function hitPumpkinRemote(model, myPos)
         end)
 end
 
+-- ═══ FAST ATTACK CHO QUÁI JACK O' LANTERN (kiểu Banana Cat Hub) ═══
+-- Quái Jack o' Lantern nằm trong workspace.Enemies → CÓ rig thật (Humanoid).
+-- Dùng AttackAOE pattern của BCH: lọc part theo tên body part, GetRigOfHitPart,
+-- IsVulnerable, rồi RegisterAttack + RegisterHit (no-animation, nhanh hơn).
+local BODY_PARTS = {
+        -- R6
+        Head = true, Torso = true, LeftArm = true, RightArm = true,
+        LeftLeg = true, RightLeg = true,
+        -- R15
+        UpperTorso = true, LowerTorso = true,
+        LeftUpperArm = true, LeftLowerArm = true, LeftHand = true,
+        RightUpperArm = true, RightLowerArm = true, RightHand = true,
+        LeftUpperLeg = true, LeftLowerLeg = true, LeftFoot = true,
+        RightUpperLeg = true, RightLowerLeg = true, RightFoot = true,
+        -- chung
+        HumanoidRootPart = true,
+}
+
+local function hitEnemyFastAttack(model, myPos)
+        if not (RegisterHit and RegisterAttack and CombatUtil) then return false end
+        local hitList = {}
+        local seenRig = {}
+        for _, p in ipairs(model:GetDescendants()) do
+                if p:IsA("BasePart") and BODY_PARTS[p.Name]
+                        and (p.Position - myPos).Magnitude <= (State.HitRange or 30) + 15 then
+                        local rig = nil
+                        pcall(function() rig = CombatUtil:GetRigOfHitPart(p) end)
+                        local vuln = true
+                        if rig and CombatUtil.IsVulnerable then
+                                pcall(function() vuln = CombatUtil:IsVulnerable(rig) end)
+                        end
+                        if rig and not seenRig[rig] and vuln then
+                                table.insert(hitList, { rig, p })
+                                seenRig[rig] = true
+                        end
+                end
+        end
+        if #hitList == 0 then return false end
+        local first = table.remove(hitList, 1)
+        -- No-animation fast attack (giống BCH AttackFunction "Attack No Animation"):
+        -- RegisterAttack:FireServer(0) + RegisterHit:FireServer(firstPart, hitList)
+        return pcall(function()
+                RegisterAttack:FireServer(0)
+                RegisterHit:FireServer(first[2], hitList)
+        end)
+end
+
 -- Kiểm tra 1 điểm màn hình có nằm TRONG cửa sổ Hub không (Hub nằm trong
 -- CoreGui nên GetGuiObjectsAtPosition không thấy → phải tự soi bounds)
 local function pointInHub(x, y)
@@ -960,8 +1042,21 @@ local function hitPumpkinM1(aimPos)
         end
 end
 
--- Điểm vào duy nhất: chọn cách đánh theo AtkMethod
+-- Điểm vào duy nhất: TỰ ĐỘNG chọn cách đánh theo loại mục tiêu:
+--   • Quái Jack o' Lantern (workspace.Enemies) → FAST ATTACK kiểu Banana Cat Hub
+--   • Pumpkin (bí ngô sự kiện) → M1 giả lập người thật (luôn M1, ổn định)
 local function doHit(model, aimPos, myPos)
+        -- Quái Jack o' Lantern → fast attack (remote, BCH style) — LUÔN dùng
+        if isWorkspaceEnemy(model) then
+                if hitEnemyFastAttack(model, myPos or aimPos) then
+                        return "remote"
+                end
+                -- fast attack fail (server chặn / chưa load remote) → fallback M1
+                hitPumpkinM1(aimPos)
+                return "m1"
+        end
+        -- Pumpkin (sự kiện) → M1 giả lập người thật (mặc định).
+        -- Chỉ dùng remote cho pumpkin nếu owner bật toggle (thường server chặn).
         if AtkMethod == "remote" and hitPumpkinRemote(model, myPos or aimPos) then
                 return "remote"
         end
@@ -1035,17 +1130,18 @@ local function busoLoop()
 end
 
 -- ════════════════════════════ 11. AUTO FARM BÍ NGÔ ════════════════════════
--- Điểm đứng NGANG TẦM bí ngô (fix "đứng cao hơn không đánh tới"):
---   • Dùng trực tiếp Y của bí ngô (không +3.5 như bản cũ).
---   • Chỉ nâng lên nếu Y dưới mặt đất/nước (chống chìm/bay ngập nước).
---   → M1 và camera nhìn thẳng vào bí ngô, đánh DÍNH 100%.
+-- Điểm đứng NGANG TẦM bí ngô (fix "đứng trên nóc nhà / ngọn cây"):
+--   • Chỉ nâng Y nếu DƯỚI MẶT NƯỚC (chống chìm).
+--   • Đất / nóc nhà / ngọn cây → KHÔNG nâng → noclip xuyên qua, đứng ngang tầm.
+--   → Nhân vật đứng kế bên bí ngô (1 stud), DÍNH 100%.
 local function safeStandPos(pos)
         local gY, isWater = groundYAt(pos)
         local baseY = pos.Y
-        if gY then
-                local floorY = gY + (isWater and 2.0 or 1.0)
-                baseY = math.max(baseY, floorY)
+        if gY and isWater then
+                -- nước → nâng lên trên mặt nước (chống chìm)
+                baseY = math.max(baseY, gY + 2.0)
         end
+        -- đất / nóc nhà / ngọn cây → KHÔNG nâng (noclip xuyên, đứng ngang tầm bí ngô)
         return Vector3.new(pos.X, baseY, pos.Z)
 end
 
@@ -1108,7 +1204,7 @@ local function smashUntilDead(target, myGen, farmOrigin)
                         return false
                 end
                 local distNow = (rp.Position - root.Position).Magnitude
-                if distNow > math.max(State.StandDist or 4, 3) + 9 then
+                if distNow > 10 then
                         -- Bị văng / bí ngô dịch xa → thử bay lại (có giới hạn)
                         if reapproachAttempts >= MAX_REAPPROACH then
                                 -- Đã thử đủ lần mà vẫn không giữ được vị trí
@@ -1131,9 +1227,8 @@ local function smashUntilDead(target, myGen, farmOrigin)
                                 State.StatusText = string.format(
                                         "Bị văng → bay lại (lần %d/%d)...", reapproachAttempts, MAX_REAPPROACH)
                                 MZ_Tween.to(CFrame.new(safeStandPos(
-                                        rp.Position + flat.Unit
-                                                * math.clamp(State.StandDist or 4, 3, 12))),
-                                        State.TweenSpeed, 3, true)
+                                        rp.Position + flat.Unit * State.StandDist)),
+                                        State.TweenSpeed, 2, true)
                                 if not State.FarmPumpkin or (myGen and myGen ~= FarmGen) then
                                         return false
                                 end
@@ -1246,8 +1341,7 @@ local function farmLoop()
                                 -- ĐỨNG SÁT CẠNH bí ngô (mặc định 3.5–5 studs) để M1
                                 -- không trượt; nâng trên mặt đất/nước khỏi chìm xuống biển
                                 local offsetDir = (root.Position - rp.Position)
-                                local standDist = math.clamp(State.StandDist or 4, 3, 12)
-                                        + math.random() * 0.8
+                                local standDist = State.StandDist + math.random() * 0.5
                                 local reached = true
                                 if offsetDir.Magnitude < 0.1 then
                                         -- đang đứng đè lên bí ngô → lùi nhẹ ra rồi đập luôn
@@ -1263,7 +1357,7 @@ local function farmLoop()
                                         local goal = CFrame.new(safeStandPos(rp.Position + flat.Unit * standDist))
                                         State.StatusText = string.format("Đang bay tới bí ngô (%.0fm)", dist)
                                         equipFightingStyle()
-                                        reached = MZ_Tween.to(goal, State.TweenSpeed, 3.5, true)
+                                        reached = MZ_Tween.to(goal, State.TweenSpeed, 2, true)
                                 end
                                 if not State.FarmPumpkin then return end
                                 if reached then
@@ -1339,9 +1433,8 @@ local function farmLoop()
                                                         "Trong tầm không có → bay tới (%.0fm)", dist or 0)
                                                 equipFightingStyle()
                                                 MZ_Tween.to(CFrame.new(safeStandPos(
-                                                        rp.Position + flat.Unit * math.clamp(
-                                                                State.StandDist or 4, 3, 12))),
-                                                        State.TweenSpeed, 3, true)
+                                                        rp.Position + flat.Unit * State.StandDist)),
+                                                        State.TweenSpeed, 2, true)
                                         else
                                                 -- map trống thật sự → dò lại + thả ban sắp hết hạn
                                                 refreshPumpkins(true)
@@ -2064,14 +2157,7 @@ SecFarm:CreateToggle({
         end,
 })
 
-SecFarm:CreateSlider({
-        Title = "Khoảng cách đứng khi đập",
-        Description = "Đứng SÁT CẠNH bí ngô để M1 không trượt (3–5 là sát nhất)",
-        Min = 3, Max = 12, Default = State.StandDist, Rounding = 1, Suffix = " studs",
-        Callback = function(v)
-                State.StandDist = v
-        end,
-})
+-- StandDist cố định = 1 (kế bên bí ngô) — KHÔNG cho chỉnh nữa (yêu cầu owner)
 
 SecFarm:CreateDropdown({
         Title = "Chế độ farm",
@@ -2092,11 +2178,11 @@ SecFarm:CreateDropdown({
 })
 
 SecFarm:CreateSlider({
-        Title = "Tốc độ di chuyển (MAX 250)",
-        Description = "Giới hạn 250 studs/s theo yêu cầu — vượt sẽ bị anticheat kéo về.",
-        Min = 100, Max = 250, Default = State.TweenSpeed, Rounding = 0, Suffix = " studs/s",
+        Title = "Tốc độ di chuyển (MAX 230)",
+        Description = "Giới hạn 230 studs/s theo yêu cầu — vượt sẽ bị anticheat kéo về.",
+        Min = 100, Max = 230, Default = State.TweenSpeed, Rounding = 0, Suffix = " studs/s",
         Callback = function(v)
-                State.TweenSpeed = math.clamp(v, 20, 250)
+                State.TweenSpeed = math.clamp(v, 20, 230)
         end,
 })
 
@@ -2126,14 +2212,14 @@ SecFarm:CreateSlider({
 })
 
 SecFarm:CreateToggle({
-        Title = "Chế độ Remote (RegisterHit)",
-        Description = "MẶC ĐỊNH TẮT — server đa số CHẶN remote với bí ngô (lỗi CChain: out of radius). Để TẮT = đánh M1 giả lập người thật, ăn damage ổn định.",
+        Title = "Remote cho Pumpkin (RegisterHit)",
+        Description = "MẶC ĐỊNH TẮT — server đa số CHẶN remote với bí ngô. Để TẮT = pumpkin đánh M1 người thật. (Quái Jack o' Lantern LUÔN dùng fast attack remote kiểu BCH — không cần toggle này.)",
         Default = false,
         Callback = function(v)
                 State.FastAttack = v
                 AtkMethod = v and "remote" or "m1"
                 if v then
-                        notify("Fast Attack", "Đang dùng remote — nếu bí ngô không mất máu thì hãy TẮT để quay về M1 người thật.", "warning")
+                        notify("Fast Attack", "Đang dùng remote cho PUMPKIN — nếu bí ngô không mất máu thì TẮT. (Jack o' Lantern vẫn dùng fast attack.)", "warning")
                 end
         end,
 })
@@ -2531,5 +2617,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v2.7!\nFix văng game + Tốc 250 + Đứng ngang bí ngô.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v2.7 (fix crash + speed 250 + stand level) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.0!\nFast Attack cho quái Jack o' Lantern + Fix đứng trên nóc.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.0 (fast attack Jack o' Lantern + fix roof + stand=1 + noclip + speed 230) | Library: Meizu v3.1")
