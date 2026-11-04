@@ -1053,15 +1053,20 @@ end
 -- mục tiêu phải có marker rõ ràng hoặc nằm trong bounds của PumpkinPatch.
 local function pickNearest(rootPos, farmOrigin)
         local pumpkins = refreshPumpkins()
-        local patches = MZ_World.patches -- lấy sau refresh để tránh dùng danh sách patch cũ
+        local patches = MZ_World.patches
         local best, bestD = nil, math.huge
         for _, m in ipairs(pumpkins) do
                 if pumpkinValid(m, rootPos) then
                         local r = modelRoot(m)
-                        if r and withinFarmRadius(r.Position, farmOrigin)
-                                and isEventPumpkinTarget(m, r, patches) then
+                        if r then
+                                -- FIX "farm stall khi bay xa": bản cũ so CÙNG LÚC với farmOrigin
+                                -- VÀ currentPos → vùng valid co dần khi bay → nil sớm → nhảy loạn.
+                                -- Giờ chỉ check farmOrigin (bán kính cứng quanh điểm bật farm).
+                                -- farmOrigin tự cập nhật trong farmLoop khi hết target → tự mở rộng.
                                 local d = (r.Position - rootPos).Magnitude
-                                if d <= State.MaxFarmDistance and d < bestD then
+                                if withinFarmRadius(r.Position, farmOrigin)
+                                        and isEventPumpkinTarget(m, r, patches)
+                                        and d < bestD then
                                         best, bestD = m, d
                                 end
                         end
@@ -1079,10 +1084,14 @@ local function smashUntilDead(target, myGen, farmOrigin)
         local hits = 0
         local noProgress = 0
         local lastSnap = pumpkinSnapshot(target)
-        -- bí ngô CÓ Humanoid → đo được máu (ngưỡng ngắn).
-        -- KHÔNG có → chỉ đợi part mất dần (nhiều loại nổ 1 phát sau N hit,
-        -- không có tín hiệu gì cho tới lúc nổ) → phải cho ngân sách hit rộng hơn.
         local hasHum = (target:FindFirstChildOfClass("Humanoid") ~= nil)
+
+        -- FIX "tele khùng khùng": giới hạn số lần và tần suất bay lại sát bí ngô.
+        -- Trước đây không có cooldown → tween fail → distNow vẫn > ngưỡng → tween
+        -- ngay → loop liên tục CFrame set → nhìn như tele loạn.
+        local reapproachAttempts = 0     -- số lần đã bay lại sát bí ngô
+        local MAX_REAPPROACH = 3         -- tối đa 3 lần; quá → blacklist bí ngô này
+        local lastReapproachClock = 0    -- cooldown tối thiểu 1.5s giữa các lần
 
         while State.FarmPumpkin and (not myGen or myGen == FarmGen) do
                 local char = getChar()
@@ -1100,20 +1109,39 @@ local function smashUntilDead(target, myGen, farmOrigin)
                 end
                 local distNow = (rp.Position - root.Position).Magnitude
                 if distNow > math.max(State.StandDist or 4, 3) + 9 then
-                        -- bị đẩy văng / bí ngô lăn xa → BAY LẠI đứng kế bên (không bỏ quả)
-                        local flat = Vector3.new(root.Position.X - rp.Position.X,
-                                0, root.Position.Z - rp.Position.Z)
-                        if flat.Magnitude < 0.1 then flat = Vector3.new(1, 0, 0) end
-                        State.StatusText = "Bị văng ra → bay lại sát bí ngô..."
-                        MZ_Tween.to(CFrame.new(safeStandPos(
-                                rp.Position + flat.Unit
-                                        * math.clamp(State.StandDist or 4, 3, 12))),
-                                State.TweenSpeed, 3, true)
-                        if not State.FarmPumpkin or (myGen and myGen ~= FarmGen) then
+                        -- Bị văng / bí ngô dịch xa → thử bay lại (có giới hạn)
+                        if reapproachAttempts >= MAX_REAPPROACH then
+                                -- Đã thử đủ lần mà vẫn không giữ được vị trí
+                                -- → khả năng terrain chặn / bí ngô không có collision thật
+                                -- → blacklist ngắn rồi chọn quả khác, dừng "tele lòng vòng".
+                                blacklist[target] = os.clock() + 30
+                                State.StatusText = "Không giữ được vị trí bí ngô → đổi quả..."
                                 return false
                         end
+                        local now = os.clock()
+                        if now - lastReapproachClock < 1.5 then
+                                -- Cooldown chưa hết → đứng im đánh một nhịp rồi thử lại
+                                task.wait(math.max(State.HitDelay, 0.3))
+                        else
+                                reapproachAttempts = reapproachAttempts + 1
+                                lastReapproachClock = now
+                                local flat = Vector3.new(root.Position.X - rp.Position.X,
+                                        0, root.Position.Z - rp.Position.Z)
+                                if flat.Magnitude < 0.1 then flat = Vector3.new(1, 0, 0) end
+                                State.StatusText = string.format(
+                                        "Bị văng → bay lại (lần %d/%d)...", reapproachAttempts, MAX_REAPPROACH)
+                                MZ_Tween.to(CFrame.new(safeStandPos(
+                                        rp.Position + flat.Unit
+                                                * math.clamp(State.StandDist or 4, 3, 12))),
+                                        State.TweenSpeed, 3, true)
+                                if not State.FarmPumpkin or (myGen and myGen ~= FarmGen) then
+                                        return false
+                                end
+                        end
                 elseif distNow > State.HitRange + 10 then
-                        return false -- quá xa hẳn so với tầm đập → chọn quả khác
+                        return false
+                else
+                        reapproachAttempts = 0 -- đang trong tầm → reset counter
                 end
                 if os.clock() - startClock > 35 then
                         -- quá lâu không chết → khả năng là pumpkin giả → ban 120s
@@ -1190,8 +1218,6 @@ local function farmLoop()
                                 if not target then
                                         noneCount = noneCount + 1
                                         State.StatusText = "Không thấy mục tiêu event trong bán kính farm..."
-                                        -- dò lại map NGAY; chỉ thả ban SẮP HẾT HẠN (<8s),
-                                        -- GIỮ ban dài (quả giả/trang trí) để không bay lại
                                         refreshPumpkins(true)
                                         local now = os.clock()
                                         for m, t in pairs(blacklist) do
@@ -1199,8 +1225,17 @@ local function farmLoop()
                                                         blacklist[m] = nil
                                                 end
                                         end
-                                        if noneCount >= 5 then
-                                                State.StatusText = "Không thấy bí ngô event — đứng gần PumpkinPatch hoặc gắn marker..."
+                                        -- FIX "farm kẹt khi bay xa": sau 3 lần liên tiếp không tìm được
+                                        -- mục tiêu, reset farmOrigin = vị trí hiện tại để mở lại vùng farm
+                                        -- quanh chỗ player đang đứng (thay vì cứ bó buộc vào điểm bật ban đầu).
+                                        if noneCount >= 3 then
+                                                local curRoot = getRoot()
+                                                if curRoot then
+                                                        farmOrigin = curRoot.Position
+                                                        _patchHasAnyCache = nil -- invalidate patch cache
+                                                end
+                                                noneCount = 0
+                                                State.StatusText = "Mở rộng vùng farm từ vị trí hiện tại..."
                                         end
                                         task.wait(0.6)
                                         return
@@ -1403,12 +1438,14 @@ local function promptLoop(keywordsGetter, radiusGetter, statusKey)
                 local root = getRoot()
                 if not root then
                         task.wait(1)
-                elseif State.FarmPumpkin and MZ_Tween.running then
-                        -- FIX "tự tele chỗ không có bí ngô": farm đang BAY → prompt
-                        -- (gõ cửa / gacha) KHÔNG được tranh quyền điều khiển nhân vật
-                        task.wait(1)
-                else
-                        local farmOn = State.FarmPumpkin
+                elseif State.FarmPumpkin then
+                        -- FIX "tele khùng": khi farm bật, promptLoop KHÔNG BAO GIỜ tween
+                        -- dù MZ_Tween.running là true hay false (smashUntilDead không tween
+                        -- → running = false → bản cũ cho promptLoop qua → chen tween → chaos).
+                        -- Vẫn cho fire prompt TRONG TẦM (xử lý ở farmOn check bên dưới).
+                        local root2 = getRoot()
+                        if not root2 then task.wait(1) else
+                        local farmOn = State.FarmPumpkin  -- true
                         refreshPumpkins() -- cache chung — không quét lại map (giảm lag)
                         local maxD = radiusGetter()
                         if farmOn then
@@ -1451,6 +1488,51 @@ local function promptLoop(keywordsGetter, radiusGetter, statusKey)
                                                 promptLastFired[best] = os.clock()
                                                 faceTarget(bestPart.Position)
                                                 pcall(firePrompt, best)
+                                        end
+                                end
+                                task.wait(1)
+                        else
+                                task.wait(1.2)
+                        end
+                        end -- đóng block "if not root2 then ... else"
+                else
+                        local farmOn = State.FarmPumpkin  -- false (nhánh farm OFF)
+                        refreshPumpkins()
+                        local maxD = radiusGetter()
+                        local best2, bestD2, bestPart2 = nil, math.huge, nil
+                        for _, pr in ipairs(MZ_World.prompts) do
+                                if not State[statusKey] then break end
+                                if pr.Enabled and pr.Parent
+                                        and matchKeyword(table.concat({
+                                                pr.Name, pr.ActionText or "", pr.ObjectText or "",
+                                                pr.Parent and pr.Parent.Name or "",
+                                        }, " "), keywordsGetter())
+                                then
+                                        local part = promptPart(pr)
+                                        if part then
+                                                local d = (part.Position - root.Position).Magnitude
+                                                if d <= maxD and d < bestD2 then
+                                                        best2, bestD2, bestPart2 = pr, d, part
+                                                end
+                                        end
+                                end
+                        end
+                        if best2 then
+                                if bestD2 > 10 then
+                                        local away = (root.Position - bestPart2.Position)
+                                        if away.Magnitude > 0.1 then
+                                                local goal = bestPart2.CFrame + away.Unit * 6
+                                                pcall(function()
+                                                        MZ_Tween.to(CFrame.new(goal.Position), State.TweenSpeed, 5)
+                                                end)
+                                        end
+                                end
+                                if State[statusKey] and bestPart2 then
+                                        local last2 = promptLastFired[best2]
+                                        if not last2 or os.clock() - last2 > 6 then
+                                                promptLastFired[best2] = os.clock()
+                                                faceTarget(bestPart2.Position)
+                                                pcall(firePrompt, best2)
                                         end
                                 end
                                 task.wait(1)
