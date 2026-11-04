@@ -176,6 +176,15 @@
     • Giờ safeStandPos CHỈ bump Y khi raycast hit = MẶT NƯỚC (chống chìm).
       Đất / mái nhà / ngọn cây → KHÔNG bump → noclip xuyên, đứng ngang tầm.
     • Bump nước chia 2 mức: sâu >5 studs → +2, nông → +0.5 (chống chìm nhẹ).
+
+    ═══ UPDATE v3.6 — ANTI-WATER SAFETY NET (TE MODE KHÔNG CHÌM NƯỚC) ═══
+    • FIX "tele xuống dưới nước": MZ_Teleport giờ check mặt nước tại điểm tele
+      → nếu dưới nước, bump Y lên mặt nước + 2 studs TRƯỚC khi set CFrame.
+    • ANTI-WATER HEARTBEAT: mỗi 0.2s (khi farm/trick BẬT), nếu nhân vật dưới
+      mặt nước → bump Y lên trên. Chống chìm nước trong MỌI trường hợp:
+      tele, tween, game physics rớt xuống, bị quái đẩy xuống...
+    • Chỉ bump khi isWater=true → đất/roof/cây KHÔNG bump (noclip vẫn xuyên).
+    • Chỉ chạy khi Farm/Trick BẬT → không annoy người chơi bơi tự do.
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -1310,13 +1319,13 @@ local function MZ_Teleport(targetPos)
         return true
 end
 
--- ANTI-WATER SAFETY NET (chạy mỗi Heartbeat): nếu nhân vật DƯỚI mặt nước
-→
--- bump Y lên trên. Chống chìm nước trong MỌI trường hợp: tele, tween, game
--- physics rớt xuống, bị đẩy xuống... Chỉ bump khi isWater=true (không bump
--- đất/roof → noclip vẫn xuyên nhà/cây được).
+-- ANTI-WATER SAFETY NET (chạy mỗi Heartbeat khi farm/trick BẬT): nếu nhân vật
+-- DƯỚI mặt nước → bump Y lên trên. Chống chìm nước khi tele/tween/game physics.
+-- Chỉ bump khi isWater=true (không bump đất/roof → noclip vẫn xuyên nhà/cây).
+-- Chỉ chạy khi FarmPumpkin hoặc TrickOrTreat BẬT (không annoy người chơi bơi).
 local _antiWaterClock = 0
 table.insert(Connections, RunService.Heartbeat:Connect(function()
+        if not (State.FarmPumpkin or State.TrickOrTreat) then return end
         local root = getRoot()
         if not root then return end
         local now = os.clock()
@@ -2885,5 +2894,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.5!\nFix lại tele lên nóc nhà/góc cây.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.5 (fix roof/tree teleport regression) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.6!\nAnti-water safety net — tele không chìm nước.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.6 (anti-water safety net + tele water check) | Library: Meizu v3.1")
