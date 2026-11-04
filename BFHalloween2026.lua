@@ -126,6 +126,17 @@
       (không cần nằm trong PumpkinPatch).
     • Toggle "Remote" đổi tên → "Remote cho Pumpkin" (Jack o' Lantern luôn
       fast attack, không cần toggle).
+
+    ═══ UPDATE v3.1 — COPY NGUYÊN CƠ CHẾ FARM BCH + STAND=3 ═══
+    • FIX "fast attack không hoạt động": bản v3.0 chỉ quét 1 model → sai.
+      Giờ copy NGUYÊN cơ chế farm Banana Cat Hub (Attack No Animation):
+        + getBladeHits: quét TẤT CẢ quái trong workspace.Enemies (trong range),
+          thu thập BasePart của mỗi con → AOE đánh NHIỀU quái 1 phát.
+        + AttackAOE: lọc BODY_PARTS + GetRigOfHitPart + IsVulnerable.
+        + RegisterAttack:FireServer(0) + RegisterHit:FireServer(firstPart, hitList).
+    • Hit delay quái: 0.05-0.08s (BCH fast attack, cực nhanh) — pumpkin vẫn
+      M1 nhịp người thật 0.30-0.42s.
+    • StandDist = 3 (đổi từ 1 → 3 theo yêu cầu owner).
 ════════════════════════════════════════════════════════════════════════]]
 
 -- ════════════════════════════ 0. CẤU HÌNH URL ════════════════════════════
@@ -159,7 +170,7 @@ local State = {
         TweenSpeed    = 230, -- giới hạn MAX 230 studs/s (yêu cầu owner)
         HitRange      = 30,
         MaxFarmDistance = 350, -- bán kính tính từ vị trí bật farm; không cho đuổi mục tiêu xuyên map
-        StandDist     = 1,    -- LUÔN đứng kế bên bí ngô (1 stud) — không chỉnh được
+        StandDist     = 3,    -- đứng kế bên bí ngô (3 studs) — không chỉnh được
         AutoBuso      = true, -- tự bật Buso Haki (Aura) khi đánh
         HitDelay      = 0.12,
         FastAttack    = false, -- remote thường bị server chặn → mặc định M1 người thật
@@ -902,10 +913,13 @@ local function hitPumpkinRemote(model, myPos)
         end)
 end
 
--- ═══ FAST ATTACK CHO QUÁI JACK O' LANTERN (kiểu Banana Cat Hub) ═══
--- Quái Jack o' Lantern nằm trong workspace.Enemies → CÓ rig thật (Humanoid).
--- Dùng AttackAOE pattern của BCH: lọc part theo tên body part, GetRigOfHitPart,
--- IsVulnerable, rồi RegisterAttack + RegisterHit (no-animation, nhanh hơn).
+-- ═══ FAST ATTACK CHO QUÁI JACK O' LANTERN (COPY ĐÚNG BCH Attack No Anim) ═══
+-- Copy NGUYÊN cơ chế farm của Banana Cat Hub:
+--   1) getBladeHits: quét TẤT CẢ quái trong workspace.Enemies (trong range),
+--      thu thập BasePart của mỗi con → AOE đánh NHIỀU quái 1 phát.
+--   2) AttackAOE: lọc part theo BODY_PARTS + GetRigOfHitPart + IsVulnerable.
+--   3) RegisterAttack:FireServer(0) + RegisterHit:FireServer(firstPart, hitList)
+--      → no-animation, đánh NHANH.
 local BODY_PARTS = {
         -- R6
         Head = true, Torso = true, LeftArm = true, RightArm = true,
@@ -920,13 +934,66 @@ local BODY_PARTS = {
         HumanoidRootPart = true,
 }
 
-local function hitEnemyFastAttack(model, myPos)
-        if not (RegisterHit and RegisterAttack and CombatUtil) then return false end
+-- Lấy TẤT CẢ BasePart con của 1 model trong range (giống BCH function m)
+local function getPartsInRange(model, centerPos, radius)
+        local list = {}
+        for _, p in ipairs(model:GetChildren()) do
+                if p:IsA("BasePart") and (p.Position - centerPos).Magnitude <= radius then
+                        table.insert(list, p)
+                end
+        end
+        return list
+end
+
+-- getBladeHits: quét TẤT CẢ quái trong workspace.Enemies (+ Characters nếu includeChars)
+-- có HRP trong range → thu thập BasePart. (Copy y hệt BCH getgenv().getBladeHits)
+local function getBladeHits(myChar, myHRP, radius, includeChars)
+        local results = {}
+        local radius = radius or 80
+        local enemies = workspace:FindFirstChild("Enemies")
+        local targets = {}
+        if enemies then
+                for _, e in ipairs(enemies:GetChildren()) do
+                        table.insert(targets, e)
+                end
+        end
+        if includeChars then
+                local chars = workspace:FindFirstChild("Characters")
+                if chars then
+                        for _, c in ipairs(chars:GetChildren()) do
+                                table.insert(targets, c)
+                        end
+                end
+        end
+        for _, model in ipairs(targets) do
+                if model ~= myChar and model:IsDescendantOf(workspace)
+                        and model:FindFirstChild("HumanoidRootPart") then
+                        local eHRP = model.HumanoidRootPart
+                        local r = radius + (eHRP.Size.X / 2)
+                        -- check HRP trong range
+                        if (eHRP.Position - myHRP.Position).Magnitude <= 10 + r then
+                                local parts = getPartsInRange(model, myHRP.Position, r)
+                                for _, p in ipairs(parts) do
+                                        table.insert(results, p)
+                                end
+                        end
+                end
+        end
+        return results
+end
+
+-- AttackAOE: lọc parts theo BODY_PARTS + GetRigOfHitPart + IsVulnerable
+-- Trả về list { rig, part } — 1 rig/quái (giống BCH AttackAOE)
+local function attackAOE(radius, includeChars)
+        if not CombatUtil then return nil end
+        local myChar = LocalPlayer.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not myHRP then return nil end
+        local allParts = getBladeHits(myChar, myHRP, radius, includeChars)
         local hitList = {}
         local seenRig = {}
-        for _, p in ipairs(model:GetDescendants()) do
-                if p:IsA("BasePart") and BODY_PARTS[p.Name]
-                        and (p.Position - myPos).Magnitude <= (State.HitRange or 30) + 15 then
+        for _, p in ipairs(allParts) do
+                if BODY_PARTS[p.Name] then
                         local rig = nil
                         pcall(function() rig = CombatUtil:GetRigOfHitPart(p) end)
                         local vuln = true
@@ -939,14 +1006,27 @@ local function hitEnemyFastAttack(model, myPos)
                         end
                 end
         end
-        if #hitList == 0 then return false end
+        return #hitList > 0 and hitList or nil
+end
+
+-- AttackFunction (Attack No Animation): copy y hệt BCH
+-- RegisterAttack:FireServer(0) + RegisterHit:FireServer(firstPart, hitList)
+local function hitEnemiesFastAttack()
+        if not (RegisterHit and RegisterAttack) then return false end
+        local hitList = attackAOE(State.HitRange or 80, false)
+        if not hitList then return false end
         local first = table.remove(hitList, 1)
-        -- No-animation fast attack (giống BCH AttackFunction "Attack No Animation"):
-        -- RegisterAttack:FireServer(0) + RegisterHit:FireServer(firstPart, hitList)
-        return pcall(function()
+        local ok = pcall(function()
                 RegisterAttack:FireServer(0)
                 RegisterHit:FireServer(first[2], hitList)
         end)
+        table.clear(hitList)
+        return ok
+end
+
+-- Giữ lại tên cũ cho doHit gọi (1 target → vẫn AOE tất cả quái quanh đó)
+local function hitEnemyFastAttack()
+        return hitEnemiesFastAttack()
 end
 
 -- Kiểm tra 1 điểm màn hình có nằm TRONG cửa sổ Hub không (Hub nằm trong
@@ -1043,12 +1123,13 @@ local function hitPumpkinM1(aimPos)
 end
 
 -- Điểm vào duy nhất: TỰ ĐỘNG chọn cách đánh theo loại mục tiêu:
---   • Quái Jack o' Lantern (workspace.Enemies) → FAST ATTACK kiểu Banana Cat Hub
+--   • Quái Jack o' Lantern (workspace.Enemies) → FAST ATTACK AOE kiểu BCH
+--     (đánh TẤT CẢ quái trong range cùng lúc — Attack No Animation)
 --   • Pumpkin (bí ngô sự kiện) → M1 giả lập người thật (luôn M1, ổn định)
 local function doHit(model, aimPos, myPos)
-        -- Quái Jack o' Lantern → fast attack (remote, BCH style) — LUÔN dùng
+        -- Quái Jack o' Lantern → fast attack AOE (BCH style) — LUÔN dùng
         if isWorkspaceEnemy(model) then
-                if hitEnemyFastAttack(model, myPos or aimPos) then
+                if hitEnemyFastAttack() then
                         return "remote"
                 end
                 -- fast attack fail (server chặn / chưa load remote) → fallback M1
@@ -1246,12 +1327,18 @@ local function smashUntilDead(target, myGen, farmOrigin)
 
                 equipFightingStyle()
                 faceTarget(rp.Position)
-                doHit(target, rp.Position, root.Position)
+                local hitType = doHit(target, rp.Position, root.Position)
                 hits = hits + 1
 
-                task.wait(AtkMethod == "m1"
-                        and (math.max(State.HitDelay, 0.30) + math.random() * 0.12) -- nhịp người thật 0.30–0.42s
-                        or math.max(State.HitDelay, 0.06))
+                -- Hit delay: quái (fast attack) → RẤT NHANH (0.05-0.08s, BCH style).
+                --              pumpkin M1 → nhịp người thật 0.30-0.42s.
+                if isWorkspaceEnemy(target) then
+                        task.wait(math.max(State.HitDelay, 0.05) + math.random() * 0.03)
+                else
+                        task.wait(hitType == "remote"
+                                and math.max(State.HitDelay, 0.06)
+                                or (math.max(State.HitDelay, 0.30) + math.random() * 0.12))
+                end
 
                 -- mỗi 4 hit kiểm tra 1 lần xem có ăn máu không
                 if hits % 4 == 0 then
@@ -2617,5 +2704,5 @@ refreshPumpkins(true)
 if State.AutoBuso then
         task.spawn(busoLoop) -- Buso mặc định BẬT → tự kích hoạt ngay từ khi nạp
 end
-notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.0!\nFast Attack cho quái Jack o' Lantern + Fix đứng trên nóc.", "success")
-print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.0 (fast attack Jack o' Lantern + fix roof + stand=1 + noclip + speed 230) | Library: Meizu v3.1")
+notify("Meizu Hub 🎃", "Đã nạp Halloween Event 2026 v3.1!\nCopy nguyên cơ chế farm BCH + Stand=3.", "success")
+print("[MZ Halloween] Loaded — Meizu Hub Halloween 2026 v3.1 (BCH farm attack AOE + stand=3 + speed 230) | Library: Meizu v3.1")
