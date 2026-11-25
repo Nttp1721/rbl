@@ -1,6 +1,6 @@
 -- Demo cho Meizu Library v4.0. Chay file nay de thu moi phan tu.
--- Cach tai: dat lib_v4.lua len repo roi doi URL ben duoi, hoac: loadstring(readfile("lib_v4.lua"))()
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/lib_v4.lua"))()
+-- Cach tai: dat lib_v4.lua len repo roi doi URL ben duoi, hoac: loadstring(readfile("lib.lua"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Nttp1721/rbl/refs/heads/main/lib.lua"))()
 
 Library:AddTranslation({ vi = { ["Auto Farm"] = "Tự động farm", ["Combat"] = "Chiến đấu", ["Walk speed"] = "Tốc độ chạy" } })
 
